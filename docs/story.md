@@ -12,4 +12,4 @@ Issue outputs freezes the chosen document, segment revisions, claim revisions, e
 
 The fictional demo has 24 series episodes over two seasons, a flashback, relationship changes between episodes, separate co-presence and interactions, and an intentional reviewed continuity conflict. The factual demo has 24 outlines within 60–100 minutes and a shared claim in two pre-issued episodes. The commercial example links a branded brief to the retained sixty-second AV cut.
 
-The application computes source and spoiler scoping from structured local records. It does not infer appearances from manuscript prose, verify external claim evidence automatically, or apply permissions to free-form text inside an already accessible authoring workspace.
+The application computes source and spoiler scoping from structured local records. Writers enter appearances directly and verify external claim evidence. People with access to a record can read its free-form text.

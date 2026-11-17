@@ -148,9 +148,14 @@ function RelationshipWeb({ project, person, characters, edges, interactions, sel
     });
   return <div className="swdr-story-web-layout">
     <section className="swdr-story-card">
-      <div className="swdr-story-card-head"><h2>Relationship web</h2><select aria-label="Relationship type" value={category} onChange={event => setCategory(event.currentTarget.value as RelationshipState | '')}>
-        <option value="">All relationships</option>{RELATIONSHIPS.map(state => <option key={state}>{state}</option>)}
-      </select></div>
+      <div className="swdr-story-card-head"><h2>Relationship web</h2><div className="actions">
+        {person && characters.length > 1 && <select aria-label="Selected character" value={person.id} onChange={event => select(event.currentTarget.value)}>
+          {characters.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>}
+        <select aria-label="Relationship type" value={category} onChange={event => setCategory(event.currentTarget.value as RelationshipState | '')}>
+          <option value="">All relationships</option>{RELATIONSHIPS.map(state => <option key={state}>{state}</option>)}
+        </select>
+      </div></div>
       {person ? <>
         <div className="swdr-story-graph" aria-label={`Relationship web for ${person.name}`}>
           {nearby.slice(0, neighborSpots.length).map(({ edge, other }, index) => {
@@ -180,9 +185,6 @@ function RelationshipWeb({ project, person, characters, edges, interactions, sel
       <h2>{person?.name ?? 'Characters'}</h2>
       <p className="swdr-story-muted">{person?.role || 'No character selected'}</p>
       {person && <>
-        {characters.length > 1 && <label>Selected character<select value={person.id} onChange={event => select(event.currentTarget.value)}>
-          {characters.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select></label>}
         {person.motivation && <section><h3>Current motivation</h3><p>{person.motivation}</p></section>}
         <section><h3>Recent interactions</h3><PointRows rows={interactions.slice(0, 2)} project={project} onOpen={onOpen} empty="No recorded interactions in this view." /></section>
         <button className="primary" onClick={dossier}>Open character dossier</button>
@@ -303,24 +305,26 @@ export function SeriesView({ project, document, onProjectChange, onOpenSource, o
         {displayDossier && <button onClick={() => { setDossier(false); setView('Relationship web'); }}>Relationship web</button>}
       </div>
     </header>
-    {!displayDossier && <nav className="swdr-story-tabs" aria-label="Series workspaces">{panes.map(pane =>
-      <button key={pane} className={view === pane ? 'selected' : 'quiet'} aria-pressed={view === pane} onClick={() => setView(pane)}>{pane}</button>)}</nav>}
-    <div className="swdr-story-secondary actions">
-      <select aria-label="Episode filter" value={exact} onChange={event => setExact(event.currentTarget.value)}>
-        <option value="">All visible episodes</option>{episodes.filter((item, index) => (!season || item.season === season) && (!asOf || index <= episodes.findIndex(episode => episode.id === asOf)))
-          .map(item => <option key={item.id} value={item.id}>{episodeCode(item)} · {item.title}</option>)}
-      </select>
-      <select aria-label="Canon or draft" value={canon?.id ?? 'draft'} onChange={event => { setVersion(event.currentTarget.value); setForm(undefined); }}>
-        <option value="draft">Working draft</option>{store.canon.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
-      </select>
-      <button onClick={exportVisible}><Download size={15} /> Export visible story</button>
-      {editable && <>
-        <button onClick={() => setForm({ kind: 'character', item: displayDossier ? person : undefined })}><Plus size={15} />{displayDossier ? 'Edit character' : 'Add character'}</button>
-        <button onClick={() => setForm({ kind: 'point' })}><Plus size={15} /> Add record</button>
-        <button className="primary" disabled={!store.draft.points.length && !store.draft.characters.length} onClick={() => {
-          if (change(approveCanon, 'Approved canon snapshot saved.')) setVersion('');
-        }}>Approve canon</button>
-      </>}
+    <div className="swdr-story-navigation">
+      {!displayDossier && <nav className="swdr-story-tabs" aria-label="Series workspaces">{panes.map(pane =>
+        <button key={pane} className={view === pane ? 'selected' : 'quiet'} aria-pressed={view === pane} onClick={() => setView(pane)}>{pane}</button>)}</nav>}
+      <div className="swdr-story-secondary actions">
+        <select aria-label="Episode filter" value={exact} onChange={event => setExact(event.currentTarget.value)}>
+          <option value="">All visible episodes</option>{episodes.filter((item, index) => (!season || item.season === season) && (!asOf || index <= episodes.findIndex(episode => episode.id === asOf)))
+            .map(item => <option key={item.id} value={item.id}>{episodeCode(item)} · {item.title}</option>)}
+        </select>
+        <select aria-label="Canon or draft" value={canon?.id ?? 'draft'} onChange={event => { setVersion(event.currentTarget.value); setForm(undefined); }}>
+          <option value="draft">Working draft</option>{store.canon.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
+        <button onClick={exportVisible}><Download size={15} /> Export visible story</button>
+        {editable && <>
+          <button onClick={() => setForm({ kind: 'character', item: displayDossier ? person : undefined })}><Plus size={15} />{displayDossier ? 'Edit character' : 'Add character'}</button>
+          <button onClick={() => setForm({ kind: 'point' })}><Plus size={15} /> Add record</button>
+          <button className="primary" disabled={!store.draft.points.length && !store.draft.characters.length} onClick={() => {
+            if (change(approveCanon, 'Approved canon snapshot saved.')) setVersion('');
+          }}>Approve canon</button>
+        </>}
+      </div>
     </div>
     {error && <p className="swdr-story-error" role="alert">{error}</p>}
     {form?.kind === 'character' && <CharacterForm key={form.item?.id ?? 'new-character'} project={project} document={document} character={form.item}
