@@ -2,6 +2,7 @@ import { newBlock, newDocument, newId } from './model';
 import type { DocumentModel, Episode, Project } from './model';
 import { createProject } from './workspace';
 import { seedProduction } from './production';
+import { seedEditorial, seedSeries } from './story';
 
 const episodeNames = [
   'The Last Boat', 'Crossing', 'The Original', 'Doubt', 'The Service Road', 'First Light',
@@ -80,7 +81,7 @@ export function createDemoProjects(): Project[] {
     id: newId(), durationSeconds: 60, video: `Camera cue ${index + 1}`, audio: `Minute ${index + 1}`
   }));
   commercial.documents.push(long);
-  return [commercial, factual, seedProduction(series, selected.id)];
+  return [seedEditorial(commercial), seedEditorial(factual), seedSeries(seedProduction(series, selected.id))];
 }
 
 export function episodeLabel(episode: Episode | undefined): string {

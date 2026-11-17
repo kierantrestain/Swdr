@@ -8,8 +8,10 @@ import type { Asset, DocumentModel, Project, ProjectKind, SourceRef, WorkspaceVi
 import { createProject, resolveSource, snapshotDocument, useWorkspace } from './workspace';
 import { AVView, OutlineView, WritingView } from './writing';
 import { ReviewWorkspace, TeamWorkspace } from './workspace/team-ui';
+import type { TeamRenderProps } from './workspace/team-ui';
 import { ScriptTools } from './ScriptTools';
 import { ProductionView } from './production';
+import { EditorialView, SeriesView } from './story';
 import { ExportActions, ImportView } from './interchange';
 
 type Destination = 'home' | 'project' | 'team' | 'review' | ProjectDestination;
@@ -223,12 +225,7 @@ export function App() {
     </header>}
     {route.view === 'review' ? <ReviewWorkspace reviewKey={route.reviewKey ?? ''} onHome={goHome} />
       : route.view === 'team' ? <TeamWorkspace localProjects={projects.filter(project => !project.archivedAt)} onHome={goHome}
-        renderWorkspace={view => {
-          const canExport = view.grant.role === 'owner' || view.grant.role === 'editor';
-          const exporter = canExport ? <ExportActions {...view} includeProject={view.grant.episodeIds === null} /> : <></>;
-          return view.document.kind === 'av' ? <AVView key={view.document.id} {...view} target={view.selectedSource} toolbarEnd={exporter} />
-            : <div className="team-script-stage" id="main-content"><WritingView key={view.document.id} {...view} target={view.selectedSource} toolbarEnd={exporter} /></div>;
-        }} />
+        renderWorkspace={view => <TeamDocument view={view} key={view.project.id} />} />
       : !ready ? <main className="swdr-page" id="main-content">
       <div className="empty-block">{error ? <><h1>Workspace unavailable</h1><p>{error}</p><button onClick={() => location.reload()}>Try again</button></>
         : <p><LoaderCircle size={15} className="spinner" /> Opening local workspace</p>}</div>
@@ -250,6 +247,8 @@ export function App() {
         toolbarEnd={<button onClick={() => resume(shared.project, shared.document)}>Open script</button>} />
       : route.view === 'av' && shared && hasRequestedRevision ? <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} toolbarEnd={<ExportActions {...shared} />} />
       : route.view === 'production' && shared ? <ProductionView key={shared.document.id} {...shared} />
+      : route.view === 'story' && shared ? <SeriesView key={shared.project.id} {...shared} />
+      : route.view === 'editorial' && shared ? <EditorialView key={shared.document.id} {...shared} />
       : <main className="swdr-page" id="main-content"><div className="empty-block">
         <p>{!hasRequestedRevision ? 'This exact source revision is unavailable.' : route.projectId && !active ? 'The project is unavailable on this device.' : 'Open a manuscript from your projects.'}</p>
       </div></main>}
@@ -258,3 +257,34 @@ export function App() {
   </div>;
 }
 
+
+type TeamView = 'write' | 'outline' | 'story' | 'editorial' | 'production';
+const teamDestinations: { id: TeamView; label: string }[] = [
+  { id: 'write', label: 'Write' }, { id: 'outline', label: 'Outline' }, { id: 'story', label: 'Series Intelligence' },
+  { id: 'editorial', label: 'Editorial' }, { id: 'production', label: 'Production' }
+];
+
+function TeamDocument({ view }: { view: TeamRenderProps }) {
+  const [mode, setMode] = useState<TeamView>('write');
+  const fullScope = view.grant.episodeIds === null;
+  const currentMode = fullScope || mode === 'outline' ? mode : 'write';
+  const props = { ...view, onOpenSource: (source: SourceRef) => { setMode('write'); view.onOpenSource(source); } };
+  const canExport = view.grant.role === 'owner' || view.grant.role === 'editor';
+  const exporter = canExport ? <ExportActions {...view} includeProject={fullScope} /> : <></>;
+
+  return <>
+    <nav className="team-workspaces-nav" aria-label="Project workspaces">
+      {teamDestinations.slice(0, fullScope ? teamDestinations.length : 2).map(destination =>
+        <button key={destination.id} type="button" aria-pressed={destination.id === currentMode} className="selectable"
+          onClick={() => setMode(destination.id)}>{destination.label}</button>)}
+    </nav>
+    {currentMode === 'outline' ? <OutlineView key={view.document.id} {...props}
+      toolbarEnd={<button onClick={() => setMode('write')}>Open script</button>} />
+      : currentMode === 'story' ? <SeriesView {...props} />
+      : currentMode === 'editorial' ? <EditorialView key={view.document.id} {...props} />
+      : currentMode === 'production' ? <ProductionView key={view.document.id} {...props} />
+      : view.document.kind === 'av' ? <AVView key={view.document.id} {...props} target={view.selectedSource} toolbarEnd={exporter} />
+      : <div className="team-script-stage" id="main-content"><WritingView key={view.document.id} {...props}
+        target={view.selectedSource} toolbarEnd={exporter} onOpenOutline={() => setMode('outline')} /></div>}
+  </>;
+}

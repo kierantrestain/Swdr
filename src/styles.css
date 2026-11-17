@@ -226,3 +226,5 @@ button.workspace-card {
   .top-bar, .skip-link, .status-toast, .save-error, .archive-button { display: none !important; }
   body { background: #fff; }
 }
+
+.team-workspaces-nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
