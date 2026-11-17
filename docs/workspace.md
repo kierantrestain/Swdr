@@ -36,6 +36,16 @@ Project updates have retry IDs and database transaction locks. A rebase can merg
 
 ## Verification and current bounds
 
-Run the workspace service tests with `node --import tsx --test server/team-model.test.ts`. This covers snapshot restore, episode and asset projection, five writers' line merges, overlapping edits, access key handling, idempotent retries, scope changes, and HTTP origin enforcement. The service tests use an in-process query double. A real PostgreSQL instance is required for transaction, migration and hosted smoke testing. Chromium verification with a synthetic JSON endpoint covered offline saving, process restart in the same profile, stashing a conflict on reconnect, and removing the cached draft after revocation.
+Run the service tests with `node --import tsx --test server/team-model.test.ts`. They cover snapshot restore, scoped documents and assets, five writers' line merges, overlapping edits, access keys, idempotent retries, grant changes, and HTTP origin enforcement with an in-process query double.
+
+For an integration run, set `SWDR_TEST_DATABASE_URL` to a fresh loopback PostgreSQL database with a name beginning with `swdr_test_`. The fixture applies the migration and starts the HTTP handler locally. It generates synthetic account keys and fixtures itself.
+
+```bash
+node --import tsx --test server/team-model.test.ts server/team-postgres.test.ts
+```
+
+The 13 checks passed on Ubuntu x86-64 with Node 24.22.3 and PostgreSQL 18.6. The live suite applied the schema twice, signed in five separate accounts, rebased three concurrent writers, checked role and episode access, and verified overlap conflicts, retries, suggestions, line history, immutable draft restore, and review expiry and revocation. The fixture denied a queued write after membership removal.
+
+Chromium verification with a synthetic JSON endpoint covered offline saving, process restart in the same profile, stashing a conflict on reconnect, and removing the cached draft after revocation. Deployment to the live Vercel project still requires environment provisioning and a hosted smoke test.
 
 The hosted service uses short polling and retains 100 recent merge bases. After the merge window, reopen the current draft and stash any conflicting script before editing. The IndexedDB team cache resumes the active draft for up to 12 hours from its last confirmed online access. A disconnected machine cannot check revocation until it reconnects. The browser clears a cached draft when the server reports that access was withdrawn. The hosted request size is 4 MB including embedded assets and drafts. Use local archive storage for larger projects.
