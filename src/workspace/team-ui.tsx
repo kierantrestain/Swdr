@@ -284,6 +284,7 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
   }, [panel, refreshNotes]);
 
   const editor = grant?.role === 'owner' || grant?.role === 'editor';
+  const canEditDocument = editor && !state?.conflict && document?.revisionId === current?.revisionId;
   const connected = draft.serverStatus === 'synced';
   const showPanel = (next: Panel) => {
     setPanel(panel === next ? undefined : next);
@@ -411,16 +412,22 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
           onRevoke={async key => { await handle(async () => { await teamRequest('revoke-review', { projectId, key }); }); }}
         />}
         {document && renderWorkspace({
-          project, document, grant, readOnly: !editor || !!state?.conflict || document.revisionId !== current?.revisionId,
+          project, document, grant, readOnly: !canEditDocument,
           localStatus: draft.localStatus, serverStatus: draft.serverStatus,
           selectedSource: source, openDocument: selectDocument, onOpenSource: openSource,
-          onStatus: setMessage, onProjectChange: draft.edit,
-          onDocumentChange: mutation => draft.edit(value => ({
-            ...value,
-            documents: value.documents.map(item => item.id === document.id
-              ? typeof mutation === 'function' ? mutation(item) : mutation
-              : item)
-          }))
+          onStatus: setMessage,
+          onProjectChange: mutation => {
+            if (canEditDocument) draft.edit(mutation);
+          },
+          onDocumentChange: mutation => {
+            if (!canEditDocument) return;
+            draft.edit(value => ({
+              ...value,
+              documents: value.documents.map(item => item.id === document.id
+                ? typeof mutation === 'function' ? mutation(item) : mutation
+                : item)
+            }));
+          }
         })}
         {!document && <p>No documents are available in your episode scope.</p>}
       </section>}
