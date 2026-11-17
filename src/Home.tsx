@@ -1,5 +1,5 @@
 import { ArrowDownToLine, ArrowRight, ArrowUpRight, ChevronRight, FileText, FolderOpen, Search, ShieldCheck, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { PROJECT_KINDS } from './model';
 import type { DocumentModel, Project, ProjectKind } from './model';
@@ -64,6 +64,11 @@ export function Home({ projects, recent, open, resume, create, importScript, loa
   const [tab, setTab] = useState<'recent' | 'all' | 'templates' | 'archive'>('recent');
   const [query, setQuery] = useState('');
   const [newKind, setNewKind] = useState<ProjectKind>();
+  const projectDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = projectDialog.current;
+    if (newKind && dialog && !dialog.open) dialog.showModal();
+  }, [newKind]);
   const live = projects.filter(project => !project.archivedAt);
   const visible = (tab === 'archive' ? projects.filter(project => project.archivedAt) : tab === 'recent' ? live.slice(0, 6) : live)
     .filter(project => `${project.title} ${project.synopsis} ${PROJECT_LABELS[project.kind]}`.toLowerCase().includes(query.trim().toLowerCase()));
@@ -85,8 +90,8 @@ export function Home({ projects, recent, open, resume, create, importScript, loa
         <button type="button" className="primary" onClick={() => setNewKind('film')}>New project</button>
       </div>
     </div>
-    {newKind && <div className="form-overlay" onClick={event => { if (event.target === event.currentTarget) setNewKind(undefined); }}>
-      <form className="dialog" aria-labelledby="new-project-title" onSubmit={submitProject} onKeyDown={event => { if (event.key === 'Escape') setNewKind(undefined); }}>
+    {newKind && <dialog ref={projectDialog} className="project-dialog" aria-labelledby="new-project-title" onCancel={() => setNewKind(undefined)}>
+      <form className="dialog" onSubmit={submitProject}>
         <h2 id="new-project-title">New project</h2>
         <label>Title<input name="title" required autoFocus maxLength={180} placeholder="Project title" /></label>
         <label>Format<select name="kind" value={newKind} onChange={event => setNewKind(event.currentTarget.value as ProjectKind)}>
@@ -95,7 +100,7 @@ export function Home({ projects, recent, open, resume, create, importScript, loa
         <label>Synopsis <small>Optional</small><textarea name="synopsis" rows={3} maxLength={2000} /></label>
         <div className="actions"><button type="button" onClick={() => setNewKind(undefined)}>Cancel</button><button className="primary">Create project</button></div>
       </form>
-    </div>}
+    </dialog>}
     {recent && <section className="continue-panel" aria-labelledby="continue-title">
       <div className="continue-main">
         <p className="continue-label">Continue writing</p>

@@ -1,5 +1,5 @@
 import { Home as HomeIcon, LoaderCircle } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Home } from './Home';
 import { ProjectView } from './ProjectView';
 import type { ProjectDestination } from './ProjectView';
@@ -157,10 +157,10 @@ export function App() {
     readOnly: historical
   } satisfies WorkspaceViewProps : undefined;
 
-  const target = shared && route.revisionId ? {
-    projectId: shared.project.id, documentId: shared.document.id, episodeId: shared.document.episodeId,
+  const target = useMemo(() => active?.id && document?.id && route.revisionId ? {
+    projectId: active.id, documentId: document.id, episodeId: document.episodeId,
     revisionId: route.revisionId, sceneId: route.sceneId, blockId: route.blockId
-  } : undefined;
+  } : undefined, [active?.id, document?.episodeId, document?.id, route]);
   const hasRequestedRevision = !target || (active && Boolean(resolveSource(active, target)));
   const goHome = () => go({ view: 'home' });
 

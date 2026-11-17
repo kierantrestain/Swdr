@@ -154,7 +154,8 @@ button.workspace-card {
 .inline-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 20px; padding: 13px; border: 1px solid var(--line); background: var(--paper); border-radius: 8px; }
 .inline-form label, .dialog label { display: grid; gap: 5px; font-size: 13px; font-weight: 650; }
 .inline-form input[type=number] { width: 78px; }
-.form-overlay { position: fixed; z-index: 12; inset: 0; display: grid; place-items: start center; padding: min(14vh, 140px) 16px 20px; background: #18232a55; overflow: auto; }
+.project-dialog { width: min(450px, calc(100% - 32px)); padding: 0; border: 0; border-radius: 11px; background: transparent; color: var(--ink); }
+.project-dialog::backdrop { background: #18232a55; }
 .dialog { width: min(100%, 450px); display: grid; gap: 15px; padding: 23px; background: var(--paper); border: 1px solid var(--line); border-radius: 11px; box-shadow: 0 14px 36px #18232a2b; }
 .dialog h2 { margin: 0; }
 .dialog small { color: var(--muted); font-weight: 400; }

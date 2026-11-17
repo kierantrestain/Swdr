@@ -4,11 +4,20 @@ import { sceneList, sourceFor } from './model';
 import type { WorkspaceViewProps } from './model';
 
 export function ScriptTools({ project, document, onOpenSource, onStatus }: Pick<WorkspaceViewProps, 'project' | 'document' | 'onOpenSource' | 'onStatus'>) {
+  const [open, setOpen] = useState(false);
+  return <details className="script-tools" onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary><BookOpenCheck size={15} /> Script tools</summary>
+    {open && <ScriptToolsPanel project={project} document={document} onOpenSource={onOpenSource} onStatus={onStatus} />}
+  </details>;
+}
+
+function ScriptToolsPanel({ project, document, onOpenSource, onStatus }: Pick<WorkspaceViewProps, 'project' | 'document' | 'onOpenSource' | 'onStatus'>) {
   const activeSpeech = useRef(false);
   const [reading, setReading] = useState(false);
-  const issues = sceneList(document).filter(scene => !scene.heading.trim());
+  const scenes = sceneList(document);
+  const issues = scenes.filter(scene => !scene.heading.trim());
   const duplicateNumbers = new Map<string, number>();
-  for (const scene of sceneList(document)) duplicateNumbers.set(scene.number, (duplicateNumbers.get(scene.number) ?? 0) + 1);
+  for (const scene of scenes) duplicateNumbers.set(scene.number, (duplicateNumbers.get(scene.number) ?? 0) + 1);
   const duplicates = [...duplicateNumbers].filter(([, count]) => count > 1).map(([number]) => number);
   const missingDialogues = document.blocks.filter((block, index) => {
     if (block.kind !== 'character') return false;
@@ -53,9 +62,7 @@ export function ScriptTools({ project, document, onOpenSource, onStatus }: Pick<
     advance(0);
   }
 
-  return <details className="script-tools">
-    <summary><BookOpenCheck size={15} /> Script tools</summary>
-    <div className="script-tools-panel">
+  return <div className="script-tools-panel">
       <h3>Script health</h3>
       {!(issues.length || duplicates.length || missingDialogues.length) && <p>Scene headings and dialogue cues are complete.</p>}
       {duplicates.length > 0 && <p>Repeated scene numbers {duplicates.join(', ')}</p>}
@@ -63,6 +70,5 @@ export function ScriptTools({ project, document, onOpenSource, onStatus }: Pick<
       {missingDialogues.slice(0, 8).map(block => <button className="quiet" key={block.id} onClick={() => onOpenSource(sourceFor(project, document, { blockId: block.id }))}>Incomplete dialogue for {block.text || 'an unnamed character'}</button>)}
       <h3>Table read</h3>
       {reading ? <button onClick={stopRead}><Square size={14} /> Stop reading</button> : <button onClick={readAloud}><Play size={14} /> Read this draft</button>}
-    </div>
-  </details>;
+  </div>;
 }
