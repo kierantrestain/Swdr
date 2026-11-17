@@ -4,12 +4,13 @@ import { Home } from './Home';
 import { ProjectView } from './ProjectView';
 import type { ProjectDestination } from './ProjectView';
 import { createDemoProjects, episodeLabel } from './demo';
-import type { DocumentModel, Project, ProjectKind, SourceRef, WorkspaceViewProps } from './model';
-import { createProject, resolveSource, useWorkspace } from './workspace';
+import type { Asset, DocumentModel, Project, ProjectKind, SourceRef, WorkspaceViewProps } from './model';
+import { createProject, resolveSource, snapshotDocument, useWorkspace } from './workspace';
 import { AVView, OutlineView, WritingView } from './writing';
 import { ReviewWorkspace, TeamWorkspace } from './workspace/team-ui';
 import { ScriptTools } from './ScriptTools';
 import { ProductionView } from './production';
+import { ExportActions, ImportView } from './interchange';
 
 type Destination = 'home' | 'project' | 'team' | 'review' | ProjectDestination;
 interface Route {
@@ -19,6 +20,7 @@ interface Route {
   revisionId?: string;
   sceneId?: string;
   blockId?: string;
+  shotId?: string;
   reviewKey?: string;
 }
 const recentKey = 'swdr.recent.v1';
@@ -34,7 +36,7 @@ function parseRoute(): Route {
   if (prefix !== 'p' || !projectId || !projectViews.has(view as Destination)) return { view: 'home' };
   const params = new URLSearchParams(query);
   return { projectId, documentId, view: view as Destination, revisionId: params.get('rev') ?? undefined,
-    sceneId: params.get('scene') ?? undefined, blockId: params.get('block') ?? undefined };
+    sceneId: params.get('scene') ?? undefined, blockId: params.get('block') ?? undefined, shotId: params.get('shot') ?? undefined };
 }
 
 function encodeRoute(route: Route): string {
@@ -44,6 +46,7 @@ function encodeRoute(route: Route): string {
   if (route.revisionId) params.set('rev', route.revisionId);
   if (route.sceneId) params.set('scene', route.sceneId);
   if (route.blockId) params.set('block', route.blockId);
+  if (route.shotId) params.set('shot', route.shotId);
   const query = params.size ? `?${params}` : '';
   return `#p/${route.projectId}/${route.view}${route.documentId ? `/${route.documentId}` : ''}${query}`;
 }
@@ -126,7 +129,44 @@ export function App() {
     const document = project && resolveSource(project, source);
     if (!project || !document) { setMessage('That source is unavailable in this workspace.'); return; }
     go({ view: document.kind === 'av' ? 'av' : 'write', projectId: project.id, documentId: document.id,
-      revisionId: document.revisionId, sceneId: source.sceneId, blockId: source.blockId });
+      revisionId: document.revisionId, sceneId: source.sceneId, blockId: source.blockId, shotId: source.shotId });
+  }
+
+  function commitIntake(imported: DocumentModel, file: Asset, previous?: DocumentModel, related: Asset[] = [], batch?: { remaining: number }) {
+    const track = (project: Project, replace: boolean): Project => {
+      const priorSources = Array.isArray(project.modules.imports) ? project.modules.imports : [];
+      const assets = new Map(project.assets.map(asset => [asset.id, asset]));
+      for (const asset of [file, ...related]) assets.set(asset.id, asset);
+      const previousRevision = previous?.revisionId;
+      return { ...project, assets: [...assets.values()],
+        documents: replace ? project.documents.map(item => item.id === imported.id ? imported : item) : [...project.documents, imported],
+        modules: { ...project.modules, imports: [...priorSources, { documentId: imported.id, revisionId: imported.revisionId,
+          assetId: file.id, previousRevision, receivedAt: new Date().toISOString() }] }
+      };
+    };
+    let updated: Project | undefined;
+    if (active) {
+      updated = updateProject(active.id, current => {
+        if (!previous) return track(current, false);
+        const working = current.documents.find(item => item.id === previous.id);
+        if (working?.revisionId !== previous.revisionId || imported.id !== working.id || imported.episodeId !== working.episodeId) {
+          throw new Error('The active draft changed after import review. Reopen the source and review the match again.');
+        }
+        return track(snapshotDocument(current, working.id, 'Before import', 'stash'), true);
+      });
+    } else {
+      if (previous) throw new Error('Choose the source project before replacing its draft.');
+      const base = createProject(imported.title, imported.kind === 'av' ? 'commercial' : imported.kind === 'stageplay' ? 'stage' : 'film');
+      updated = saveProject(track({ ...base, documents: [] }, false));
+    }
+    if (!updated) throw new Error('The destination project is unavailable.');
+    if (!batch?.remaining) resume(updated, imported);
+  }
+
+  function restoreArchive(project: Project, batch?: { remaining: number }) {
+    if (projects.some(item => item.id === project.id)) throw new Error('This archive is already present in this workspace. Open it in a fresh browser profile to verify a separate restore.');
+    const updated = saveProject(project);
+    if (!batch?.remaining && !updated.archivedAt) openProject(updated);
   }
 
   function loadDemo() {
@@ -160,7 +200,7 @@ export function App() {
 
   const target = useMemo(() => active?.id && document?.id && route.revisionId ? {
     projectId: active.id, documentId: document.id, episodeId: document.episodeId,
-    revisionId: route.revisionId, sceneId: route.sceneId, blockId: route.blockId
+    revisionId: route.revisionId, sceneId: route.sceneId, blockId: route.blockId, shotId: route.shotId
   } : undefined, [active?.id, document?.episodeId, document?.id, route]);
   const hasRequestedRevision = !target || (active && Boolean(resolveSource(active, target)));
   const goHome = () => go({ view: 'home' });
@@ -184,8 +224,12 @@ export function App() {
     </header>}
     {route.view === 'review' ? <ReviewWorkspace reviewKey={route.reviewKey ?? ''} onHome={goHome} />
       : route.view === 'team' ? <TeamWorkspace localProjects={projects.filter(project => !project.archivedAt)} onHome={goHome}
-        renderWorkspace={view => view.document.kind === 'av' ? <AVView key={view.document.id} {...view} />
-          : <div className="team-script-stage" id="main-content"><WritingView key={view.document.id} {...view} target={view.selectedSource} /></div>} />
+        renderWorkspace={view => {
+          const canExport = view.grant.role === 'owner' || view.grant.role === 'editor';
+          const exporter = canExport ? <ExportActions {...view} includeProject={view.grant.episodeIds === null} /> : undefined;
+          return view.document.kind === 'av' ? <AVView key={view.document.id} {...view} target={view.selectedSource} toolbarEnd={exporter} />
+            : <div className="team-script-stage" id="main-content"><WritingView key={view.document.id} {...view} target={view.selectedSource} toolbarEnd={exporter} /></div>;
+        }} />
       : !ready ? <main className="swdr-page" id="main-content">
       <div className="empty-block">{error ? <><h1>Workspace unavailable</h1><p>{error}</p><button onClick={() => location.reload()}>Try again</button></>
         : <p><LoaderCircle size={15} className="spinner" /> Opening local workspace</p>}</div>
@@ -196,14 +240,16 @@ export function App() {
       : route.view === 'project' && active ? <ProjectView key={active.id} project={active} open={(view, doc) => openProject(active, view, doc ?? head)}
         update={update => { updateProject(active.id, update); }}
         archive={() => { updateProject(active.id, project => ({ ...project, archivedAt: new Date().toISOString() })); go({ view: 'home' }); setMessage('Project moved to the archive.'); }} />
+      : route.view === 'import' ? <ImportView project={active} document={head} onImportDocument={commitIntake} onRestoreProject={restoreArchive}
+        onStatus={setMessage} onCancel={() => active ? openProject(active, 'project', head) : goHome()} />
       : route.view === 'write' && shared && hasRequestedRevision ? <div className="script-stage" id="main-content">
         <WritingView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} onFocusChange={setFocus}
           onOpenOutline={() => openProject(shared.project, 'outline', shared.document)}
-          toolbarEnd={<ScriptTools {...shared} />} />
+          toolbarEnd={<><ScriptTools {...shared} /><ExportActions {...shared} /></>} />
       </div>
       : route.view === 'outline' && shared ? <OutlineView key={shared.document.id} {...shared}
         toolbarEnd={<button onClick={() => resume(shared.project, shared.document)}>Open script</button>} />
-      : route.view === 'av' && shared && hasRequestedRevision ? <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} />
+      : route.view === 'av' && shared && hasRequestedRevision ? <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} toolbarEnd={<ExportActions {...shared} />} />
       : route.view === 'production' && shared ? <ProductionView key={shared.document.id} {...shared} />
       : <main className="swdr-page" id="main-content"><div className="empty-block">
         <p>{!hasRequestedRevision ? 'This exact source revision is unavailable.' : route.projectId && !active ? 'The project is unavailable on this device.' : 'Open a manuscript from your projects.'}</p>

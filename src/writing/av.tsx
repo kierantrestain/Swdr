@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ChevronDown, Clock3, Image, Plus, Printer, Trash2 } from 'lucide-react';
 import { newId } from '../model';
-import type { Asset, AVRow, WorkspaceViewProps } from '../model';
+import type { Asset, AVRow, SourceRef, WorkspaceViewProps } from '../model';
 import { timedRows, timingLabel } from './av-timing';
 import { useScriptPrint } from './print';
 
 interface AVProps extends WorkspaceViewProps {
+  target?: SourceRef;
   toolbarEnd?: ReactNode;
   saveLabel?: string;
 }
@@ -27,7 +28,7 @@ function readImage(file: File): Promise<string> {
   });
 }
 
-export function AVView({ document, project, onStatus, onDocumentChange, onProjectChange, readOnly, toolbarEnd, saveLabel }: AVProps) {
+export function AVView({ document, project, onStatus, onDocumentChange, onProjectChange, readOnly, toolbarEnd, saveLabel, target }: AVProps) {
   const [storyboard, setStoryboard] = useState(false);
   const [rowActions, setRowActions] = useState('');
   const timing = timedRows(document.avRows);
@@ -82,7 +83,14 @@ export function AVView({ document, project, onStatus, onDocumentChange, onProjec
     }
   }
 
-  return <section className="swdr-w-page swdr-av" aria-label="AV script editor">
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!target?.shotId || target.revisionId !== document.revisionId) return;
+    const cue = section.current?.querySelector<HTMLElement>(`[data-cue-id="${CSS.escape(target.shotId)}"]`);
+    cue?.scrollIntoView({ block: 'center' });
+  }, [target, document.revisionId]);
+
+  return <section ref={section} className="swdr-w-page swdr-av" aria-label="AV script editor">
     <header className="swdr-w-pagehead">
       <div><h1>AV script</h1><p>{document.title}{document.revisionLabel && ` · ${document.revisionLabel}`}</p></div>
       <div className="swdr-w-tools">
@@ -98,7 +106,7 @@ export function AVView({ document, project, onStatus, onDocumentChange, onProjec
       {timing.rows.map((row, index) => {
         const image = inlineImage(project.assets.find(asset => asset.id === row.storyboardAssetId));
         const open = rowActions === row.id;
-        return <div className="swdr-av-cue" key={row.id} data-cue-id={row.id}>
+        return <div className="swdr-av-cue" key={row.id} data-cue-id={row.id} data-source-active={target?.shotId === row.id || undefined}>
           <div className="swdr-av-row" role="row">
             <div role="cell" className="swdr-av-time">
               {readOnly ? <span>{timingLabel(row.startSeconds)}–{timingLabel(row.endSeconds)}</span> : <button type="button" className="swdr-av-timebutton"

@@ -35,7 +35,8 @@ interface ExportFile {
   project?: boolean;
 }
 
-export function ExportActions({ project, document, onStatus }: Pick<WorkspaceViewProps, 'project' | 'document' | 'onStatus'>) {
+export function ExportActions({ project, document, onStatus, includeProject = true }:
+  Pick<WorkspaceViewProps, 'project' | 'document' | 'onStatus'> & { includeProject?: boolean }) {
   const pdf: ExportFile = { label: 'PDF', extension: 'pdf', type: 'application/pdf', content: () => exportPdf(document) };
   const docxType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   const formats: ExportFile[] = document.kind === 'av' ? [
@@ -51,7 +52,7 @@ export function ExportActions({ project, document, onStatus }: Pick<WorkspaceVie
     { label: 'Word', extension: 'docx', type: docxType, content: () => exportDocx(document) },
     { label: 'Plain text', extension: 'txt', type: 'text/plain;charset=utf-8', content: () => document.blocks.map(block => block.text).join('\n') + '\n' }
   ];
-  formats.push({ label: 'Project archive', extension: 'swdr', type: 'application/zip', project: true, content: () => exportArchive(project) });
+  if (includeProject) formats.push({ label: 'Project archive', extension: 'swdr', type: 'application/zip', project: true, content: () => exportArchive(project) });
 
   function save(format: ExportFile) {
     try {

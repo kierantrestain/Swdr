@@ -17,7 +17,7 @@ Device work lives in IndexedDB for this browser profile and origin. The status c
 
 ## Backup and restore
 
-1. Open a document and choose **Export** → **SWDR project archive**.
+1. Open a document and choose **Export** → **Project archive**.
 2. Keep the downloaded `.swdr` with your project backups.
 3. To verify a backup, open SWDR in a fresh browser profile. On Home, choose **Import script** and select the archive. Review the project title and contents, then restore it.
 4. Open the restored project and check its issued drafts, attachments and source links. A writing snapshot can also be restored into the current draft as a separate head.
