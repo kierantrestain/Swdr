@@ -226,7 +226,7 @@ export function App() {
       : route.view === 'team' ? <TeamWorkspace localProjects={projects.filter(project => !project.archivedAt)} onHome={goHome}
         renderWorkspace={view => {
           const canExport = view.grant.role === 'owner' || view.grant.role === 'editor';
-          const exporter = canExport ? <ExportActions {...view} includeProject={view.grant.episodeIds === null} /> : undefined;
+          const exporter = canExport ? <ExportActions {...view} includeProject={view.grant.episodeIds === null} /> : <></>;
           return view.document.kind === 'av' ? <AVView key={view.document.id} {...view} target={view.selectedSource} toolbarEnd={exporter} />
             : <div className="team-script-stage" id="main-content"><WritingView key={view.document.id} {...view} target={view.selectedSource} toolbarEnd={exporter} /></div>;
         }} />

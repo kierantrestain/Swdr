@@ -14,7 +14,7 @@ function offlineShell(): Plugin {
         fileName: 'sw.js',
         source: `const CURRENT = 'swdr-app-${version}';
 const SHELL = new URL('index.html', self.registration.scope).href;
-const FILES = new Set(${JSON.stringify(['index.html', ...assets])}.map(path => new URL(path, self.registration.scope).href));
+const FILES = new Set(${JSON.stringify(['index.html', 'manifest.webmanifest', 'swdr-192.png', 'swdr-512.png', ...assets])}.map(path => new URL(path, self.registration.scope).href));
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CURRENT).then(cache => cache.addAll([...FILES])).then(() => self.skipWaiting()));
