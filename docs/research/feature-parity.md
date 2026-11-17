@@ -16,7 +16,7 @@ The lead independently verified OpenDraft's tag to commit mapping and root MIT l
 
 ## Visual references
 
-All ten images in `SWDR_10_Visual_References.zip` were opened before UI implementation. The archive is a design input.
+All ten images in `SWDR_10_Visual_References.zip` were opened before UI implementation. The archive is a design input. SHA-256 `4cf0a94515b70bcd9e5ad63e04096ba7bdb2f1a22001551093cc9b5e444edb9f`.
 
 | Image | Decision | Acceptance |
 | --- | --- | --- |

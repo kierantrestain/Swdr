@@ -175,7 +175,6 @@ export function App() {
     const series = examples[examples.length - 1];
     setRecent({ projectId: series.id, documentId: series.documents[0].id });
     writeRecent(series.id, series.documents[0].id);
-    setMessage('Demo projects opened in your local workspace.');
   }
 
   const recentProject = projects.find(project => project.id === recent?.projectId && !project.archivedAt)
