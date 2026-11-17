@@ -243,8 +243,7 @@ export function App() {
           onOpenOutline={() => openProject(shared.project, 'outline', shared.document)}
           toolbarEnd={<><ScriptTools {...shared} /><ExportActions {...shared} /></>} />
       </div>
-      : route.view === 'outline' && shared ? <OutlineView key={shared.document.id} {...shared}
-        toolbarEnd={<button onClick={() => resume(shared.project, shared.document)}>Open script</button>} />
+      : route.view === 'outline' && shared ? <OutlineView key={shared.document.id} {...shared} />
       : route.view === 'av' && shared && hasRequestedRevision ? <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} toolbarEnd={<ExportActions {...shared} />} />
       : route.view === 'production' && shared ? <ProductionView key={shared.document.id} {...shared} />
       : route.view === 'story' && shared ? <SeriesView key={shared.project.id} {...shared} />
@@ -278,8 +277,7 @@ function TeamDocument({ view }: { view: TeamRenderProps }) {
         <button key={destination.id} type="button" aria-pressed={destination.id === currentMode} className="selectable"
           onClick={() => setMode(destination.id)}>{destination.label}</button>)}
     </nav>
-    {currentMode === 'outline' ? <OutlineView key={view.document.id} {...props}
-      toolbarEnd={<button onClick={() => setMode('write')}>Open script</button>} />
+    {currentMode === 'outline' ? <OutlineView key={view.document.id} {...props} />
       : currentMode === 'story' ? <SeriesView {...props} />
       : currentMode === 'editorial' ? <EditorialView key={view.document.id} {...props} />
       : currentMode === 'production' ? <ProductionView key={view.document.id} {...props} />

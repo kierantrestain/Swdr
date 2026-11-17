@@ -43,4 +43,17 @@ self.addEventListener('fetch', event => {
   };
 }
 
-export default defineConfig({ plugins: [offlineShell()], build: { target: 'es2022' } });
+export default defineConfig({
+  plugins: [offlineShell()],
+  build: {
+    target: 'es2022',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/[/]node_modules[/](react|react-dom|scheduler)[/]/.test(id)) return 'react';
+          if (/[/]node_modules[/](fflate|yaml)[/]/.test(id)) return 'formats';
+        }
+      }
+    }
+  }
+});
