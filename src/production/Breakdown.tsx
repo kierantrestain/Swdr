@@ -1,0 +1,237 @@
+import { useState } from 'react';
+import type { FormEvent } from 'react';
+import { newId } from '../model';
+import { Dialog, Empty, SourceButton } from './components';
+import type { PaneProps } from './components';
+import { CATALOGUE_CATEGORIES, isShootDate, scriptTargets } from './model';
+import type { BreakdownTag, CatalogueCategory, Location, Person, ProductionScene } from './model';
+
+type Section = 'Scene tags' | 'Catalogue' | 'Cast & crew' | 'Locations';
+
+function field(form: FormData, key: string): string {
+  return String(form.get(key) ?? '').trim();
+}
+
+function dateList(value: string): string[] {
+  return [...new Set(value.split(/[\s,]+/).filter(Boolean))].sort();
+}
+
+export function Breakdown({ plan, project, snapshot, source, readOnly, update, onOpenSource }: PaneProps) {
+  const [section, setSection] = useState<Section>('Scene tags');
+  const [sceneId, setSceneId] = useState('');
+  const [editingPerson, setEditingPerson] = useState<Person>();
+  const [editingLocation, setEditingLocation] = useState<Location>();
+  const [reviewing, setReviewing] = useState<BreakdownTag>();
+  const [error, setError] = useState('');
+  const scene = plan.scenes.find(item => item.id === sceneId) ?? plan.scenes.find(item => item.status === 'active');
+  const target = scriptTargets(project, snapshot.document).find(item => item.id === (scene?.source.sceneId ?? scene?.source.shotId));
+  const tagBlocks = target?.source.sceneId ? target.blocks.filter(block => block.text.trim() && block.kind !== 'note') : [];
+
+  function addPerson(event: FormEvent<HTMLFormElement>, editing?: Person) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const unavailable = dateList(field(form, 'unavailable'));
+    const holdDates = dateList(field(form, 'hold'));
+    if (![...unavailable, ...holdDates].every(isShootDate)) return setError('Enter dates as YYYY-MM-DD separated by spaces or commas.');
+    const name = field(form, 'name');
+    const type = field(form, 'type') === 'Cast' ? 'Cast' : 'Crew';
+    if (!name) return setError('Enter a name.');
+    if (editing?.type === 'Cast' && type === 'Crew' && plan.catalogue.some(item => item.personId === editing.id)) {
+      return setError('Review this person’s cast items before changing their role type.');
+    }
+    const person: Person = { id: editing?.id ?? newId(), name, type, role: field(form, 'role'), unavailable, holdDates, source };
+    if (update(current => ({
+      ...current,
+      people: editing ? current.people.map(item => item.id === person.id ? person : item) : [...current.people, person]
+    }), 'Personnel saved.')) {
+      event.currentTarget.reset();
+      setEditingPerson(undefined);
+      setError('');
+    }
+  }
+
+  function addLocation(event: FormEvent<HTMLFormElement>, editing?: Location) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const location: Location = {
+      id: editing?.id ?? newId(), name: field(form, 'name'), address: field(form, 'address'), notes: field(form, 'notes'), source
+    };
+    if (!location.name) return setError('Enter a location name.');
+    if (update(current => ({
+      ...current,
+      locations: editing ? current.locations.map(item => item.id === location.id ? location : item) : [...current.locations, location]
+    }), 'Location saved.')) {
+      event.currentTarget.reset();
+      setEditingLocation(undefined);
+      setError('');
+    }
+  }
+
+  function attachTag(event: FormEvent<HTMLFormElement>, activeScene: ProductionScene, editing?: BreakdownTag) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const blockId = field(form, 'block');
+    const itemId = editing?.itemId ?? field(form, 'item');
+    if (activeScene.status !== 'active' || !plan.catalogue.some(item => item.id === itemId)) return setError('Choose an active scene and a catalogue item.');
+    if (blockId && !tagBlocks.some(block => block.id === blockId)) return setError('Choose a block from the current source scene.');
+    const tag: BreakdownTag = {
+      id: editing?.id ?? newId(), sceneId: activeScene.id, itemId, notes: field(form, 'notes'),
+      source: blockId ? { ...activeScene.source, blockId } : activeScene.source, reviewed: true
+    };
+    if (update(current => ({
+      ...current,
+      tags: editing ? current.tags.map(item => item.id === tag.id ? tag : item) : [...current.tags, tag]
+    }), editing ? 'Tag re-linked to the active revision.' : 'Tag added.')) {
+      event.currentTarget.reset();
+      setReviewing(undefined);
+      setError('');
+    }
+  }
+
+  return <>
+    <div className="production-actions production-subnav" aria-label="Breakdown areas">
+      {(['Scene tags', 'Catalogue', 'Cast & crew', 'Locations'] as const).map(label => <button
+        type="button" className="production-button" key={label} aria-pressed={section === label}
+        onClick={() => { setSection(label); setError(''); }}
+      >{label}</button>)}
+    </div>
+    {section === 'Scene tags' && <>
+      {!scene && <Empty>The released script has no scenes available for breakdown.</Empty>}
+      {scene && <div className="production-two-columns">
+        <div className="production-card">
+          <label className="production-field">Scene<select value={scene.id} onChange={event => { setSceneId(event.target.value); setError(''); }}>
+            {plan.scenes.map(item => <option key={item.id} value={item.id}>{item.number} · {item.heading || 'Untitled scene'}{item.status === 'omitted' ? ' (omitted)' : ''}</option>)}
+          </select></label>
+          <div className="production-section-heading"><h3>{scene.heading || 'Untitled scene'}</h3><SourceButton source={scene.source} onOpenSource={onOpenSource} /></div>
+          <div className="production-passage" aria-label="Released script excerpt">
+            {target?.blocks.filter(block => block.kind !== 'note' && block.kind !== 'scene').map(block => <p key={block.id} className={`production-script-${block.kind}`}>{block.text}</p>)}
+            {scene.status === 'omitted' && <p>Omitted from the active release. Open Source to read the original snapshot.</p>}
+          </div>
+        </div>
+        <section className="production-card">
+          <h3>Breakdown tags</h3>
+          {!plan.tags.some(tag => tag.sceneId === scene.id) && <p className="production-muted">No tags on this scene.</p>}
+          {plan.tags.filter(tag => tag.sceneId === scene.id).map(tag => {
+            const item = plan.catalogue.find(entry => entry.id === tag.itemId);
+            return <div className="production-list-row" key={tag.id}><div>
+              <strong>{item?.name ?? 'Unknown item'}</strong>
+              <small>{item?.category}{tag.notes && ` · ${tag.notes}`}{tag.reviewed === false && ' · Source review required'}</small>
+            </div><div className="production-actions">
+              <SourceButton source={tag.source} onOpenSource={onOpenSource} />
+              {!readOnly && scene.status === 'active' && tag.reviewed === false && <button type="button" className="production-link" onClick={() => {
+                setError(''); setReviewing(tag);
+              }}>Re-link</button>}
+              {!readOnly && <button type="button" className="production-link" onClick={() => update(current => ({
+                ...current, tags: current.tags.filter(item => item.id !== tag.id)
+              }), 'Tag removed.')} aria-label={`Remove ${item?.name ?? 'breakdown'} tag`}>Remove</button>}
+            </div></div>;
+          })}
+          {!readOnly && scene.status === 'active' && (plan.catalogue.length ? <form className="production-form" onSubmit={event => attachTag(event, scene)}>
+            <label>Catalogue item<select name="item" required>{plan.catalogue.map(item => <option key={item.id} value={item.id}>{item.name} · {item.category}</option>)}</select></label>
+            <label>Source line<select name="block"><option value="">Whole scene</option>{tagBlocks.map(block => <option key={block.id} value={block.id}>{block.text.slice(0, 120)}</option>)}</select></label>
+            <label>Notes<input name="notes" /></label>
+            {error && <p className="production-form-error" role="alert">{error}</p>}
+            <div className="production-actions"><button type="submit" className="production-button production-primary">Add breakdown tag</button></div>
+          </form> : <p><button type="button" className="production-link" onClick={() => setSection('Catalogue')}>Add a catalogue item</button> to tag this scene.</p>)}
+        </section>
+        {reviewing && <Dialog title="Review breakdown tag" onClose={() => setReviewing(undefined)}>
+          <form className="production-form" onSubmit={event => attachTag(event, scene, reviewing)}>
+            <label>Source line<select name="block"><option value="">Whole scene</option>{tagBlocks.map(block => <option key={block.id} value={block.id}>{block.text.slice(0, 120)}</option>)}</select></label>
+            <label>Notes<input name="notes" defaultValue={reviewing.notes} /></label>
+            {error && <p className="production-form-error" role="alert">{error}</p>}
+            <div className="production-actions production-right"><button type="submit" className="production-button production-primary">Confirm source</button></div>
+          </form>
+        </Dialog>}
+      </div>}
+    </>}
+    {section === 'Catalogue' && <div className="production-two-columns">
+      <section className="production-card">
+        <h3>Catalogue</h3>
+        {!plan.catalogue.length && <p className="production-muted">Add an item to tag it in the released script.</p>}
+        {plan.catalogue.map(item => <div className="production-list-row" key={item.id}>
+          <div><strong>{item.name}</strong><small>{item.category}{item.notes && ` · ${item.notes}`}</small></div>
+          <SourceButton source={item.source} onOpenSource={onOpenSource} />
+        </div>)}
+      </section>
+      {!readOnly && <section className="production-card">
+        <h3>Add catalogue item</h3>
+        <form className="production-form" onSubmit={event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const name = field(form, 'name');
+          const category = field(form, 'category') as CatalogueCategory;
+          const personId = field(form, 'person');
+          if (!name || !CATALOGUE_CATEGORIES.includes(category)) return setError('Enter a name and category.');
+          if (category === 'Cast' && !plan.people.some(person => person.id === personId && person.type === 'Cast')) {
+            return setError('Add a cast member under Cast & crew, then link that person here.');
+          }
+          const item = { id: newId(), name, category, personId: category === 'Cast' ? personId : undefined, notes: field(form, 'notes'), source };
+          if (update(current => ({ ...current, catalogue: [...current.catalogue, item] }), 'Catalogue item added.')) {
+            event.currentTarget.reset(); setError('');
+          }
+        }}>
+          <label>Item name<input name="name" required /></label>
+          <div className="production-form-row">
+            <label>Category<select name="category">{CATALOGUE_CATEGORIES.map(category => <option key={category}>{category}</option>)}</select></label>
+            <label>Cast member<select name="person"><option value="">None</option>{plan.people.filter(person => person.type === 'Cast').map(person => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
+          </div>
+          <label>Notes<textarea name="notes" rows={2} /></label>
+          {error && <p className="production-form-error" role="alert">{error}</p>}
+          <div className="production-actions"><button type="submit" className="production-button production-primary">Add catalogue item</button></div>
+        </form>
+      </section>}
+    </div>}
+    {section === 'Cast & crew' && <div className="production-two-columns">
+      <section className="production-card">
+        <h3>Cast & crew</h3>
+        {!plan.people.length && <p className="production-muted">Add a cast or crew member to build the production directory.</p>}
+        {plan.people.map(person => <div className="production-list-row" key={person.id}>
+          <div><strong>{person.name}</strong><small>{person.type}{person.role && ` · ${person.role}`}</small>
+            {person.unavailable.length > 0 && <small>Unavailable {person.unavailable.join(', ')}</small>}
+          </div>
+          {!readOnly && <button className="production-link" type="button" onClick={() => { setEditingPerson(person); setError(''); }} aria-label={`Edit ${person.name}`}>Edit</button>}
+        </div>)}
+      </section>
+      {!readOnly && <section className="production-card">
+        <h3>{editingPerson ? 'Edit person' : 'Add person'}</h3>
+        <form key={editingPerson?.id ?? 'new-person'} onSubmit={event => addPerson(event, editingPerson)} className="production-form">
+          <label>Name<input name="name" required defaultValue={editingPerson?.name} /></label>
+          <div className="production-form-row">
+            <label>Type<select name="type" defaultValue={editingPerson?.type}><option>Cast</option><option>Crew</option></select></label>
+            <label>Role<input name="role" defaultValue={editingPerson?.role} /></label>
+          </div>
+          <label>Unavailable dates<input name="unavailable" placeholder="YYYY-MM-DD, YYYY-MM-DD" defaultValue={editingPerson?.unavailable.join(', ')} /></label>
+          <label>Paid hold dates<input name="hold" placeholder="YYYY-MM-DD" defaultValue={editingPerson?.holdDates?.join(', ')} /></label>
+          {error && <p className="production-form-error" role="alert">{error}</p>}
+          <div className="production-actions">
+            <button type="submit" className="production-button production-primary">{editingPerson ? 'Save person' : 'Add person'}</button>
+            {editingPerson && <button type="button" className="production-button" onClick={() => { setEditingPerson(undefined); setError(''); }}>Cancel edit</button>}
+          </div>
+        </form>
+      </section>}
+    </div>}
+    {section === 'Locations' && <div className="production-two-columns">
+      <section className="production-card">
+        <h3>Locations</h3>
+        {!plan.locations.length && <p className="production-muted">Add a location to use on the stripboard.</p>}
+        {plan.locations.map(location => <div className="production-list-row" key={location.id}>
+          <div><strong>{location.name}</strong><small>{location.address}</small>{location.notes && <small>{location.notes}</small>}</div>
+          {!readOnly && <button className="production-link" type="button" onClick={() => { setEditingLocation(location); setError(''); }} aria-label={`Edit ${location.name}`}>Edit</button>}
+        </div>)}
+      </section>
+      {!readOnly && <section className="production-card">
+        <h3>{editingLocation ? 'Edit location' : 'Add location'}</h3>
+        <form key={editingLocation?.id ?? 'new-location'} className="production-form" onSubmit={event => addLocation(event, editingLocation)}>
+          <label>Location name<input name="name" defaultValue={editingLocation?.name} required /></label>
+          <label>Address<input name="address" defaultValue={editingLocation?.address} /></label>
+          <label>Notes<textarea name="notes" rows={2} defaultValue={editingLocation?.notes} /></label>
+          {error && <p className="production-form-error" role="alert">{error}</p>}
+          <div className="production-actions">
+            <button type="submit" className="production-button production-primary">{editingLocation ? 'Save location' : 'Add location'}</button>
+            {editingLocation && <button type="button" className="production-button" onClick={() => { setEditingLocation(undefined); setError(''); }}>Cancel edit</button>}
+          </div>
+        </form>
+      </section>}
+    </div>}
+  </>;
+}
