@@ -119,8 +119,13 @@ export function validateProject(input: unknown): Project {
     integerField(episode.number, 'episode number', 1, 1000);
   });
   const revisions = new Set<string>();
+  const bindings = new Map<unknown, unknown>();
   const register = (document: JsonRecord) => {
     verifyDocument(document, episodeIds);
+    if (bindings.has(document.id) && bindings.get(document.id) !== document.episodeId) {
+      throw new TeamFault(422, 'Revisions of a document must retain their original episode.');
+    }
+    bindings.set(document.id, document.episodeId);
     const key = `${document.id}:${document.revisionId}`;
     if (revisions.has(key)) throw new TeamFault(400, 'A document revision can identify only one saved state.');
     revisions.add(key);
@@ -212,8 +217,9 @@ function mergeNode(base: unknown, local: unknown, remote: unknown, path: string,
       const source = new Map(base.map(item => [item.id, item]));
       const left = new Map(local.map(item => [item.id, item]));
       const right = new Map(remote.map(item => [item.id, item]));
+      const kept = new Set(order);
       for (const id of baseIds) {
-        if (!order.includes(id)) mergeNode(source.get(id), left.get(id), right.get(id), `${path}/${id}`, conflicts);
+        if (!kept.has(id)) mergeNode(source.get(id), left.get(id), right.get(id), `${path}/${id}`, conflicts);
       }
       return order.map(id => mergeNode(source.get(id), left.get(id), right.get(id), `${path}/${id}`, conflicts))
         .filter(value => value !== undefined);
@@ -244,8 +250,13 @@ export function applyProjection(current: Project, input: Project, grant: TeamGra
     || input.snapshots.some(snapshot => !canReadEpisode(grant, snapshot.document.episodeId))) {
     throw new TeamFault(403, 'This update contains an episode outside your access.');
   }
-  const hiddenDocs = current.documents.filter(document => !canReadEpisode(grant, document.episodeId));
-  if (input.documents.some(document => hiddenDocs.some(hidden => hidden.id === document.id))) {
+  const permittedAssets = new Set(toVisibleProject(current, grant).assets.map(asset => asset.id));
+  if ([...input.documents, ...input.snapshots.map(snapshot => snapshot.document)].some(document =>
+    document.avRows.some(row => row.storyboardAssetId && !permittedAssets.has(row.storyboardAssetId)))) {
+    throw new TeamFault(403, 'This update contains an asset outside your episode access.');
+  }
+  const hiddenIds = new Set(current.documents.filter(document => !canReadEpisode(grant, document.episodeId)).map(document => document.id));
+  if (input.documents.some(document => hiddenIds.has(document.id))) {
     throw new TeamFault(403, 'The document ID belongs to a restricted episode.');
   }
   const replacements = new Map(input.documents.map(document => [document.id, document]));

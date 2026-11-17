@@ -433,7 +433,6 @@ export function ReviewWorkspace({ reviewKey, onHome }: { reviewKey: string; onHo
   const [message, setMessage] = useState<string>('Opening issued draft…');
   useEffect(() => {
     let stopped = false;
-    let timer: number;
     let expiryTimer: number;
     const refresh = async () => {
       try {
@@ -453,7 +452,7 @@ export function ReviewWorkspace({ reviewKey, onHome }: { reviewKey: string; onHo
       }
     };
     void refresh();
-    timer = window.setInterval(() => { void refresh(); }, 5000);
+    const timer = window.setInterval(() => { void refresh(); }, 5000);
     return () => {
       stopped = true;
       window.clearInterval(timer);

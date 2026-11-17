@@ -101,6 +101,14 @@ export function useWorkspace() {
   }, [drain]);
 
   const saveProject = useCallback((project: Project) => {
+    const previous = records.current.get(project.id)?.project;
+    if (previous && previous.snapshots !== project.snapshots) {
+      const known = new Map(project.snapshots.map(snapshot => [snapshot.id, snapshot]));
+      if (previous.snapshots.some(snapshot => {
+        const target = known.get(snapshot.id);
+        return target !== snapshot && JSON.stringify(target) !== JSON.stringify(snapshot);
+      })) throw new Error('This update changes a stored snapshot. Restore the snapshot as a new head.');
+    }
     const next = { ...project, updatedAt: new Date().toISOString() };
     change(project.id, next);
     return next;

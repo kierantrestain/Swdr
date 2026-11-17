@@ -35,7 +35,7 @@
 .team-review .review-scene { text-transform: uppercase; font-weight: 700 !important; margin-top: .9rem !important; }
 .team-review table { width: 100%; border-collapse: collapse; }
 .team-review th, .team-review td { border: 1px solid var(--line, #ded8ce); padding: .55rem; text-align: left; }
-.team-toolbar button, .team-body button {
+.team-toolbar button, :is(.team-auth, .team-library, .team-panel, .team-editor-tools) button {
   display: inline-flex;
   gap: .35rem;
   align-items: center;
@@ -48,14 +48,14 @@
   cursor: pointer;
   color: inherit;
 }
-.team-body button:disabled, .team-toolbar button:disabled { opacity: .52; cursor: default; }
-.team-body button:hover:not(:disabled), .team-toolbar button:hover:not(:disabled) { border-color: var(--accent, #76514e); }
-.team-body button[type="submit"] { background: var(--team-accent, #655144); color: white; border-color: transparent; }
+:is(.team-auth, .team-library, .team-panel, .team-editor-tools, .team-toolbar) button:disabled { opacity: .52; cursor: default; }
+:is(.team-auth, .team-library, .team-panel, .team-editor-tools, .team-toolbar) button:hover:not(:disabled) { border-color: var(--accent, #76514e); }
+:is(.team-auth, .team-library, .team-panel) button[type="submit"] { background: var(--team-accent, #655144); color: white; border-color: transparent; }
 .team-form { display: grid; gap: .8rem; max-width: 420px; }
 .team-form button { justify-self: start; }
 .team-inline-form { display: flex; align-items: end; flex-wrap: wrap; gap: .65rem; margin-top: .8rem; }
-.team-body label { display: grid; gap: .2rem; font-size: .82rem; font-weight: 600; }
-.team-body input, .team-body select, .team-body textarea {
+:is(.team-auth, .team-library, .team-panel, .team-editor-tools) label { display: grid; gap: .2rem; font-size: .82rem; font-weight: 600; }
+:is(.team-auth, .team-library, .team-panel, .team-editor-tools) :is(input, select, textarea) {
   max-width: 100%;
   min-height: 34px;
   padding: .32rem .5rem;
@@ -66,7 +66,7 @@
   font: inherit;
   font-weight: 400;
 }
-.team-body textarea { min-height: 84px; resize: vertical; }
+:is(.team-auth, .team-library, .team-panel) textarea { min-height: 84px; resize: vertical; }
 .team-editor-tools { margin: -1.35rem -1.35rem 1.35rem; }
 .team-editor-tools label { display: flex; align-items: center; }
 .team-list, .team-notes { list-style: none; padding: 0; }

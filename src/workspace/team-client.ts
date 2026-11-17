@@ -30,7 +30,8 @@ export async function teamRequest<T>(action: string, body: Record<string, unknow
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...body, action }),
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10000)
     });
   } catch {
     throw new TeamRequestError(0, { error: 'SWDR is offline. Saved local team edits are queued.' });
@@ -106,7 +107,7 @@ export function useTeamDraft() {
 
   const flush = useCallback(async () => {
     const opening = cache.current;
-    if (!opening || busy.current || opening.conflict) return;
+    if (!opening || busy.current) return;
     if (!navigator.onLine) {
       setServerStatus('offline');
       return;
@@ -114,7 +115,7 @@ export function useTeamDraft() {
     busy.current = true;
     const stamp = generation.current;
     try {
-      if (!opening.pending && !opening.draft) {
+      if (opening.conflict || (!opening.pending && !opening.draft)) {
         const remote = await teamRequest<TeamProject>('open', { projectId: opening.head.project.id });
         if (!mount.current || generation.current !== stamp) return;
         const current = cache.current;
@@ -123,6 +124,13 @@ export function useTeamDraft() {
           void persist({ head: remote, verifiedAt: Date.now() });
           setMessage('Your project access changed.');
           setServerStatus('synced');
+          return;
+        }
+        if (current.conflict) {
+          if (current.conflict.latest.version !== remote.version) {
+            void persist({ ...current, conflict: { ...current.conflict, latest: remote }, verifiedAt: Date.now() });
+          }
+          setServerStatus('conflict');
           return;
         }
         if (current.draft || current.pending) return;
@@ -143,7 +151,8 @@ export function useTeamDraft() {
       if (!mount.current || generation.current !== stamp) return;
       setServerStatus('syncing');
       const updated = await teamRequest<TeamProject>('save', {
-        projectId: opening.head.project.id, ...pending
+        projectId: opening.head.project.id, ...pending,
+        expectedRole: opening.head.grant.role, expectedEpisodeIds: opening.head.grant.episodeIds
       });
       if (!mount.current || generation.current !== stamp) return;
       const current = cache.current;
@@ -174,8 +183,14 @@ export function useTeamDraft() {
           void persist(undefined);
           setServerStatus('denied');
         } else if (error.status === 409 && current && error.latest) {
-          void persist({ ...current, conflict: { latest: error.latest, paths: error.conflicts ?? ['project'] } });
-          setServerStatus('conflict');
+          if (sameAccess(current.head, error.latest)) {
+            void persist({ ...current, conflict: { latest: error.latest, paths: error.conflicts ?? ['project'] } });
+            setServerStatus('conflict');
+          } else {
+            void persist({ head: error.latest, verifiedAt: Date.now() });
+            setServerStatus('synced');
+            setMessage('Your project access changed.');
+          }
         } else {
           setServerStatus(error.status === 0 ? 'offline' : 'error');
         }
@@ -295,6 +310,9 @@ export function useTeamDraft() {
         setMessage('Your version is available in the draft history.');
         return;
       }
+    }
+    if (decision === 'stash') {
+      setMessage('This conflict has no changed script to stash.');
     }
     if (decision === 'server') {
       void persist({ head: latest, verifiedAt: Date.now() });

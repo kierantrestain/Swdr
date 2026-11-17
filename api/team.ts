@@ -10,7 +10,10 @@ let pool: Pool | undefined;
 function getPool(): Pool {
   const connectionString = process.env.SWDR_TEAM_DATABASE_URL;
   if (!connectionString) throw new TeamFault(503, 'Private team access is not configured.');
-  pool ??= new Pool({ connectionString, max: 4, idleTimeoutMillis: 10000, connectionTimeoutMillis: 5000 });
+  if (!pool) {
+    pool = new Pool({ connectionString, max: 4, idleTimeoutMillis: 10000, connectionTimeoutMillis: 5000 });
+    pool.on('error', () => console.error('SWDR team database connection failed'));
+  }
   return pool;
 }
 
@@ -51,7 +54,11 @@ async function bodyOf(req: TeamRequest): Promise<Record<string, unknown>> {
       throw new TeamFault(400, 'Invalid JSON.');
     }
   }
-  return asObject(value);
+  const body = asObject(value);
+  if (typeof req.body === 'object' && Buffer.byteLength(JSON.stringify(body)) > MAX_BYTES) {
+    throw new TeamFault(413, 'The project exceeds the hosted request limit.');
+  }
+  return body;
 }
 
 export default async function handler(req: TeamRequest, res: ServerResponse): Promise<void> {

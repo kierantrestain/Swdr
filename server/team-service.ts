@@ -62,7 +62,11 @@ export function readAccounts(value?: string): TeamAccounts {
     if (typeof digest !== 'string' || !HASH.test(digest)) {
       throw new TeamFault(503, 'Private team access is not configured.');
     }
-    accounts.set(emailField(email), Buffer.from(digest, 'hex'));
+    try {
+      accounts.set(emailField(email), Buffer.from(digest, 'hex'));
+    } catch {
+      throw new TeamFault(503, 'Private team access is not configured.');
+    }
   }
   if (accounts.size === 0) throw new TeamFault(503, 'Private team access is not configured.');
   return accounts;
@@ -155,6 +159,33 @@ function editorOnly(grant: TeamGrant): void {
   if (!canWrite(grant)) throw new TeamFault(403, 'Editing access is required.');
 }
 
+async function retainDocumentBindings(db: PoolClient, project: Project): Promise<void> {
+  const current = await db.query<{ document_id: string; episode_id: string | null }>(
+    'SELECT document_id, episode_id FROM swdr_team_documents WHERE project_id = $1',
+    [project.id]
+  );
+  const known = new Map(current.rows.map(binding => [binding.document_id, binding.episode_id]));
+  const additions = [];
+  for (const document of [...project.documents, ...project.snapshots.map(snapshot => snapshot.document)]) {
+    const episodeId = document.episodeId ?? null;
+    if (known.has(document.id)) {
+      if (known.get(document.id) !== episodeId) {
+        throw new TeamFault(422, 'A document cannot move between scopes. Create a new document in that episode.');
+      }
+    } else {
+      additions.push({ document_id: document.id, episode_id: episodeId });
+      known.set(document.id, episodeId);
+    }
+  }
+  if (additions.length) {
+    await db.query(
+      `INSERT INTO swdr_team_documents (project_id, document_id, episode_id)
+       SELECT $1, document_id, episode_id FROM jsonb_to_recordset($2) AS b(document_id text, episode_id text)`,
+      [project.id, JSON.stringify(additions)]
+    );
+  }
+}
+
 async function createProject(db: PoolClient, email: string, request: Body): Promise<TeamProject> {
   const project = validateProject(request.project);
   const insert = await db.query(
@@ -170,6 +201,7 @@ async function createProject(db: PoolClient, email: string, request: Body): Prom
     if (!existing.rows[0]) throw new TeamFault(409, 'That project could not be created.');
     return teamProject(existing.rows[0], email);
   }
+  await retainDocumentBindings(db, project);
   await db.query("INSERT INTO swdr_team_grants (project_id, email, role) VALUES ($1, $2, 'owner')", [project.id, email]);
   await db.query('INSERT INTO swdr_team_versions (project_id, version, body) VALUES ($1, 1, $2)', [project.id, project]);
   return { project, grant: { email, role: 'owner', episodeIds: null }, version: 1 };
@@ -207,6 +239,7 @@ async function commitProject(db: PoolClient, stored: StoredProject, project: Pro
   const version = stored.version + 1;
   const head = { ...project, updatedAt: new Date().toISOString() };
   validateProject(head);
+  await retainDocumentBindings(db, head);
   await db.query(
     'UPDATE swdr_team_projects SET body = $2, version = $3 WHERE id = $1',
     [project.id, head, version]
@@ -227,6 +260,14 @@ async function commitProject(db: PoolClient, stored: StoredProject, project: Pro
 
 async function saveProject(db: PoolClient, stored: StoredProject, grant: TeamGrant, request: Body) {
   editorOnly(grant);
+  const clientEpisodes = request.expectedEpisodeIds;
+  const sameScope = grant.episodeIds === null
+    ? clientEpisodes === null
+    : Array.isArray(clientEpisodes) && clientEpisodes.length === grant.episodeIds.length
+      && grant.episodeIds.every(id => clientEpisodes.includes(id));
+  if (request.expectedRole !== grant.role || !sameScope) {
+    throw new TeamConflict(teamProject(stored, grant.email), ['access']);
+  }
   const baseVersion = integerField(request.version, 'base version', 1, stored.version);
   const operation = idField(request.operationId, 'operation ID');
   const duplicate = await db.query<{ email: string }>(
@@ -335,7 +376,7 @@ async function addNote(db: PoolClient, project: Project, grant: TeamGrant, reque
   const result = await db.query<StoredNote>(
     `INSERT INTO swdr_team_notes (project_id, id, document_id, revision_id, block_id, kind, author, body, original, state)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open') RETURNING *`,
-    [project.id, randomBytes(16).toString('hex'), source.id, source.revisionId, block.id, request.kind, grant.email, value, suggestion ? block.text : null]
+    [project.id, randomBytes(16).toString('hex'), source.id, source.revisionId, block.id, request.kind, grant.email, value, block.text]
   );
   return noteRow(result.rows[0]);
 }

@@ -20,6 +20,13 @@ CREATE TABLE IF NOT EXISTS swdr_team_grants (
   PRIMARY KEY (project_id, email)
 );
 
+CREATE TABLE IF NOT EXISTS swdr_team_documents (
+  project_id text NOT NULL REFERENCES swdr_team_projects (id),
+  document_id text NOT NULL,
+  episode_id text,
+  PRIMARY KEY (project_id, document_id)
+);
+
 CREATE TABLE IF NOT EXISTS swdr_team_versions (
   project_id text NOT NULL REFERENCES swdr_team_projects (id),
   version integer NOT NULL,

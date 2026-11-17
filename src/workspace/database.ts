@@ -15,10 +15,11 @@ type ProjectFields = Partial<Omit<Project, 'documents'>>;
 type DocumentFields = Partial<Omit<DocumentModel, 'blocks'>>;
 type Change =
   | { type: 'replace'; project: Project | null }
-  | { type: 'patch'; fields: ProjectFields; documents?: DocumentModel[]; documentPatches?: DocumentPatch[] };
+  | { type: 'patch'; fields: ProjectFields; removed: (keyof ProjectFields)[]; documents?: DocumentModel[]; documentPatches?: DocumentPatch[] };
 interface DocumentPatch {
   id: string;
   fields: DocumentFields;
+  removed?: (keyof DocumentFields)[];
   blocks?: Block[];
   blockPatches?: Array<[index: number, block: Block]>;
 }
@@ -129,45 +130,41 @@ export async function removeWorkspaceCache(key: string): Promise<void> {
 
 function documentPatch(previous: DocumentModel, next: DocumentModel): DocumentPatch {
   const fields: DocumentFields = {};
-  const removed = new Set(Object.keys(previous).filter(key => !Object.hasOwn(next, key)));
+  const removed = (Object.keys(previous) as (keyof DocumentFields)[]).filter(key => next[key] === undefined);
   for (const key of Object.keys(next) as Array<keyof DocumentFields>) {
-    if (key !== ('blocks' as keyof DocumentFields) && previous[key] !== next[key]) {
+    if (key !== ('blocks' as keyof DocumentFields) && next[key] !== undefined && previous[key] !== next[key]) {
       Object.assign(fields, { [key]: next[key] });
     }
   }
-  // Optional fields can be cleared. Retain the complete non-block fields in that case.
-  if (removed.size) {
-    const { blocks, ...nextFields } = next;
-    return { id: previous.id, fields: nextFields, blocks };
-  }
-  if (previous.blocks === next.blocks) return { id: previous.id, fields };
-  if (previous.blocks.length !== next.blocks.length) return { id: previous.id, fields, blocks: next.blocks };
+  if (previous.blocks === next.blocks) return { id: previous.id, fields, removed };
+  if (previous.blocks.length !== next.blocks.length) return { id: previous.id, fields, removed, blocks: next.blocks };
   const blockPatches: DocumentPatch['blockPatches'] = [];
   for (const [index, block] of next.blocks.entries()) {
-    if (previous.blocks[index].id !== block.id) return { id: previous.id, fields, blocks: next.blocks };
+    if (previous.blocks[index].id !== block.id) return { id: previous.id, fields, removed, blocks: next.blocks };
     if (previous.blocks[index] !== block) blockPatches.push([index, block]);
   }
-  return { id: previous.id, fields, blockPatches };
+  return { id: previous.id, fields, removed, blockPatches };
 }
 
 function changeFor(previous: Project | null, next: Project | null): Change {
-  if (!previous || !next || Object.keys(previous).some(key => !Object.hasOwn(next, key))) {
+  if (!previous || !next) {
     return { type: 'replace', project: next };
   }
   const fields: ProjectFields = {};
+  const removed = (Object.keys(previous) as (keyof ProjectFields)[]).filter(key => next[key] === undefined);
   for (const key of Object.keys(next) as Array<keyof ProjectFields>) {
-    if (key !== ('documents' as keyof ProjectFields) && previous[key] !== next[key]) {
+    if (key !== ('documents' as keyof ProjectFields) && next[key] !== undefined && previous[key] !== next[key]) {
       Object.assign(fields, { [key]: next[key] });
     }
   }
-  if (previous.documents === next.documents) return { type: 'patch', fields };
+  if (previous.documents === next.documents) return { type: 'patch', fields, removed };
   if (previous.documents.length !== next.documents.length || next.documents.some((document, index) => document.id !== previous.documents[index].id)) {
-    return { type: 'patch', fields, documents: next.documents };
+    return { type: 'patch', fields, removed, documents: next.documents };
   }
   const documentPatches = next.documents.flatMap((document, index) => document === previous.documents[index]
     ? []
     : [documentPatch(previous.documents[index], document)]);
-  return { type: 'patch', fields, documentPatches };
+  return { type: 'patch', fields, removed, documentPatches };
 }
 
 function applyChange(previous: Project | null, change: Change): Project | null {
@@ -179,16 +176,16 @@ function applyChange(previous: Project | null, change: Change): Project | null {
     documents = documents.map(document => {
       const patch = patches.get(document.id);
       if (!patch) return document;
-      if (patch.blocks) {
-        // An ordinary replacement preserves every unrelated document field.
-        return { ...document, ...patch.fields, blocks: patch.blocks };
-      }
-      const blocks = patch.blockPatches?.length ? [...document.blocks] : document.blocks;
+      const blocks = patch.blocks ?? (patch.blockPatches?.length ? [...document.blocks] : document.blocks);
       patch.blockPatches?.forEach(([index, block]) => { blocks[index] = block; });
-      return { ...document, ...patch.fields, blocks };
+      const next = { ...document, ...patch.fields, blocks };
+      patch.removed?.forEach(key => { delete next[key]; });
+      return next;
     });
   }
-  return { ...previous, ...change.fields, documents };
+  const next = { ...previous, ...change.fields, documents };
+  change.removed?.forEach(key => { delete next[key]; });
+  return next;
 }
 
 export function journalProject(previous: ProjectRecord | undefined, next: ProjectRecord): string | undefined {
@@ -237,7 +234,7 @@ function readJournal(): Array<[string, JournalEntry]> {
   return result.sort((left, right) => left[1].at - right[1].at);
 }
 
-export async function loadWorkspace(): Promise<Map<string, ProjectRecord>> {
+async function recoverWorkspace(): Promise<Map<string, ProjectRecord>> {
   const records = new Map((await allRecords()).map(record => [record.id, record]));
   const journal = readJournal();
   const committed = new Map(records);
@@ -279,4 +276,11 @@ export async function loadWorkspace(): Promise<Map<string, ProjectRecord>> {
   }
   clearJournal([...applied]);
   return records;
+}
+
+let loading: Promise<Map<string, ProjectRecord>> | undefined;
+
+export function loadWorkspace(): Promise<Map<string, ProjectRecord>> {
+  loading ??= recoverWorkspace().finally(() => { loading = undefined; });
+  return loading;
 }
