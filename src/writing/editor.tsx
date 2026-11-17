@@ -4,7 +4,7 @@ import {
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 import { ChevronDown, CircleCheck, Expand, FileText, List, MessageSquareText, Printer, Redo2, Undo2, X } from 'lucide-react';
 import { BLOCK_KINDS, newBlock, sceneList } from '../model';
-import type { Block, BlockKind, DocumentModel, SourceRef, WorkspaceViewProps } from '../model';
+import type { BlockKind, DocumentModel, SourceRef, WorkspaceViewProps } from '../model';
 import type { LaidOutLine, PageGeometry, WritingPage } from './layout';
 import { geometryFor, isUppercaseElement, paginateDocument, revisionInk } from './layout';
 import { cycleElement, elementNames, nextElement, replaceBlock, splitBlock, withElement } from './keyboard';
@@ -82,6 +82,8 @@ export function WritingView(props: WritingProps) {
   const [activeId, setActiveId] = useState('');
   const [drawer, setDrawer] = useState<'scenes' | 'notes' | null>(null);
   const [focused, setFocused] = useState(false);
+  const [compact, setCompact] = useState(() => window.matchMedia('(max-width: 560px)').matches);
+  const [compactPage, setCompactPage] = useState(0);
   const [visible, setVisible] = useState({ first: 0, last: 2, current: 0 });
   const [step, setStep] = useState(1080);
   const [historyVersion, setHistoryVersion] = useState(0);
@@ -102,7 +104,15 @@ export function WritingView(props: WritingProps) {
   const activePage = byBlock.get(active?.id ?? '');
   const print = useScriptPrint(document);
   const pageCount = layout.pages.filter(page => !page.titlePage).length;
-  const page = layout.pages[Math.min(visible.current, layout.pages.length - 1)];
+  const pageIndex = Math.min(compact ? compactPage : visible.current, layout.pages.length - 1);
+  const page = layout.pages[pageIndex];
+
+  useEffect(() => {
+    const breakpoint = window.matchMedia('(max-width: 560px)');
+    function change(event: MediaQueryListEvent) { setCompact(event.matches); }
+    breakpoint.addEventListener('change', change);
+    return () => breakpoint.removeEventListener('change', change);
+  }, []);
 
   useLayoutEffect(() => {
     currentDocument.current = document;
@@ -120,18 +130,18 @@ export function WritingView(props: WritingProps) {
 
   const locate = useCallback(() => {
     const viewport = scroller.current;
-    if (!viewport) return;
+    if (!viewport || compact) return;
     const index = Math.max(0, Math.floor((viewport.scrollTop - PAPER_PAD + 120) / step));
     const first = Math.max(0, Math.floor((viewport.scrollTop - PAPER_PAD) / step) - 1);
     const last = Math.ceil((viewport.scrollTop + viewport.clientHeight) / step) + 1;
     setVisible(position => position.first === first && position.last === last && position.current === index ? position : { first, last, current: index });
     scrolled.current = false;
-  }, [step]);
+  }, [compact, step]);
 
   useLayoutEffect(locate, [locate]);
 
   function notifyScroll() {
-    if (scrolled.current) return;
+    if (compact || scrolled.current) return;
     scrolled.current = true;
     requestAnimationFrame(locate);
   }
@@ -146,11 +156,16 @@ export function WritingView(props: WritingProps) {
   }, []);
 
   useLayoutEffect(() => {
-    if (!pending.current || !restoreCaret(pending.current)) return;
+    if (!pending.current) return;
+    if (!restoreCaret(pending.current)) {
+      const nextPage = byBlock.get(pending.current.blockId);
+      if (compact && revealPending.current && nextPage !== undefined && nextPage !== pageIndex) setCompactPage(nextPage);
+      return;
+    }
     if (revealPending.current) findField(scroller.current, pending.current.blockId)?.scrollIntoView({ block: 'nearest' });
     revealPending.current = false;
     pending.current = null;
-  }, [projection, activeId, focused, drawer, restoreCaret, visible]);
+  }, [projection, activeId, focused, drawer, restoreCaret, visible, byBlock, compact, pageIndex]);
 
   function refocus(point = caret.current) {
     if (!point) return;
@@ -161,16 +176,21 @@ export function WritingView(props: WritingProps) {
     if (!scroller.current) return;
     const pageIndex = byBlock.get(blockId);
     if (pageIndex === undefined) return;
-    const row = projection[pageIndex].rows.find(entry => entry.first.blockId === blockId);
-    const centre = row ? Math.max(0, row.first.y / layout.geometry.height * (step - PAPER_GAP) - 135) : 0;
-    scroller.current.scrollTop = Math.max(0, PAPER_PAD + pageIndex * step + centre);
-    locate();
+    if (compact) {
+      setCompactPage(pageIndex);
+      scroller.current.scrollTop = 0;
+    } else {
+      const row = projection[pageIndex].rows.find(entry => entry.first.blockId === blockId);
+      const centre = row ? Math.max(0, row.first.y / layout.geometry.height * (step - PAPER_GAP) - 135) : 0;
+      scroller.current.scrollTop = Math.max(0, PAPER_PAD + pageIndex * step + centre);
+      locate();
+    }
     if (edit) {
       setActiveId(blockId);
       const point = { blockId, start: offset, end: offset };
       pending.current = restoreCaret(point) ? null : point;
     }
-  }, [byBlock, layout.geometry.height, locate, projection, restoreCaret, step]);
+  }, [byBlock, compact, layout.geometry.height, locate, projection, restoreCaret, step]);
 
   const lastTarget = useRef<SourceRef | undefined>(undefined);
   useEffect(() => {
@@ -277,9 +297,10 @@ export function WritingView(props: WritingProps) {
       else refocus(caret.current ?? (active && { blockId: active.id, start: 0, end: 0 }));
       return;
     }
-    if (!(event.target instanceof HTMLTextAreaElement) || !event.target.dataset.blockId || readOnly || event.nativeEvent.isComposing) return;
+    if (!(event.target instanceof HTMLTextAreaElement) || readOnly || event.nativeEvent.isComposing) return;
     const field = event.target;
-    const block = blocks.get(field.dataset.blockId);
+    const { blockId } = field.dataset;
+    const block = blockId ? blocks.get(blockId) : undefined;
     if (!block) return;
     const point = readCaret(field);
     const index = currentDocument.current.blocks.findIndex(item => item.id === block.id);
@@ -333,11 +354,11 @@ export function WritingView(props: WritingProps) {
       focusElement({ blockId: previous.id, start: previous.text.length, end: previous.text.length });
       return;
     }
-    const up = event.key === 'ArrowUp' && collapsed && point.start === 0 && previous;
-    const down = event.key === 'ArrowDown' && collapsed && point.end === field.value.length && next;
-    if (!event.shiftKey && !modifier && (up || down)) {
+    const up = event.key === 'ArrowUp' && collapsed && point.start === 0;
+    const down = event.key === 'ArrowDown' && collapsed && point.end === field.value.length;
+    const neighbour = up ? previous : down ? next : undefined;
+    if (!event.shiftKey && !modifier && neighbour) {
       event.preventDefault();
-      const neighbour = up || down;
       const offset = up ? neighbour.text.length : 0;
       if (byBlock.get(neighbour.id) !== byBlock.get(block.id)) jump(neighbour.id, true, offset);
       else {
@@ -354,7 +375,7 @@ export function WritingView(props: WritingProps) {
   } as CSSProperties;
 
   return (
-    <section className={`swdr-writing ${focused ? 'swdr-writing-focus' : ''}`} style={styles} onKeyDown={handleKeys} aria-label={heading} data-history={historyVersion}>
+    <section className={`swdr-writing ${focused ? 'swdr-writing-focus' : ''} ${compact ? 'swdr-writing-compact' : ''}`} style={styles} onKeyDown={handleKeys} aria-label={heading} data-history={historyVersion}>
       {!focused && <div className="swdr-write-toolbar" ref={toolbar}>
         <span className="swdr-w-current" aria-current="page"><FileText size={15} aria-hidden="true" /> Write</span>
         {onOpenOutline && <button type="button" className="swdr-w-quiet" onClick={onOpenOutline}>Outline</button>}
@@ -374,10 +395,11 @@ export function WritingView(props: WritingProps) {
       <div ref={scroller} className="swdr-manuscript-scroll" onScroll={notifyScroll} aria-label="Manuscript pages">
         <div ref={paperWidth} className="swdr-papers">
           {projection.map(({ page: sheet, rows, fragments }, index) => {
-            const rendered = (index >= visible.first && index <= visible.last) || index === activePage;
+            if (compact && index !== pageIndex) return null;
+            const rendered = compact || (index >= visible.first && index <= visible.last) || index === activePage;
             if (!rendered) return <div className="swdr-manuscript-paper swdr-paper-placeholder" key={sheet.label || 'title'} aria-hidden="true" />;
             return <article className="swdr-manuscript-paper" key={sheet.label || 'title'} aria-label={sheet.titlePage ? 'Title page' : `Page ${sheet.label}`} data-page-label={sheet.label}>
-              {fragments.map((line, lineIndex) => <span key={lineIndex} className={`swdr-paper-line ${line.decoration ? 'swdr-paper-decoration' : ''}`} style={lineStyle(line, layout.geometry)} aria-hidden={line.decoration === 'scene-number' || undefined}>{line.text}</span>)}
+              {fragments.filter(line => !compact || !line.decoration || line.decoration === 'continuation').map((line, lineIndex) => <span key={lineIndex} className={`swdr-paper-line ${line.decoration ? 'swdr-paper-decoration' : ''}`} style={lineStyle(line, layout.geometry)} aria-hidden={line.decoration === 'scene-number' || undefined}>{line.text}</span>)}
               {rows.map(row => {
                 const block = blocks.get(row.first.blockId);
                 if (!block) return null;
@@ -410,13 +432,23 @@ export function WritingView(props: WritingProps) {
             jump(scene.blockId);
             setCaption(`Scene ${scene.number}`);
             if (window.matchMedia('(max-width: 850px)').matches) setDrawer(null);
-            refocus();
+            if (!compact) refocus();
           }}><small>{scene.number}</small><span>{scene.heading.toUpperCase() || 'Untitled scene'}</span></button>
         </li>)}</ol> : <p>Add a scene heading to start the scene list.</p>}
       </aside>}
       {!focused && drawer === 'notes' && <WritingContext {...props} active={active} onClose={() => toggleDrawer('notes')} onDocumentChange={commit} onResetHistory={resetHistory} onPrint={print.requestPrint} />}
       <footer className="swdr-write-footer">
-        <span>{page?.titlePage ? 'Title page' : `Page ${page?.label || '1'} of ${pageCount}`}</span>
+        <span className="swdr-w-page-control">
+          {compact && <button className="swdr-w-quiet" aria-label="Previous manuscript page" disabled={pageIndex <= 0} onClick={() => {
+            setCompactPage(pageIndex - 1);
+            if (scroller.current) scroller.current.scrollTop = 0;
+          }}>‹</button>}
+          {page?.titlePage ? 'Title page' : `Page ${page?.label || '1'} of ${pageCount}`}
+          {compact && <button className="swdr-w-quiet" aria-label="Next manuscript page" disabled={pageIndex >= layout.pages.length - 1} onClick={() => {
+            setCompactPage(pageIndex + 1);
+            if (scroller.current) scroller.current.scrollTop = 0;
+          }}>›</button>}
+        </span>
         <span className="swdr-sr" role="status">{caption}</span>
         <span>{focused ? <><span>{saveLabel || 'Local draft'}</span><button type="button" className="swdr-w-quiet" onClick={() => setFocus(false)}>Esc to exit focus</button></>
           : <>{readOnly ? 'Read only' : document.revisionLabel || 'Draft'} <span aria-hidden="true">·</span> {document.paper === 'a4' ? 'A4' : 'Letter'}</>}</span>
