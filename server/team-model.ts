@@ -275,11 +275,65 @@ export function applyProjection(current: Project, input: Project, grant: TeamGra
   };
 }
 
+function member(record: unknown, key: string): unknown {
+  return hasObject(record) && Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
+function immutableIssue(label: string): TeamFault {
+  return new TeamFault(422, `Stored ${label} are immutable. Issue a new version instead.`);
+}
+
+function preserveIssuedList(previous: unknown, next: unknown, key: string, label: string): boolean {
+  const existing = member(previous, key);
+  if (!Array.isArray(existing) || !existing.length) return false;
+  const candidates = member(next, key);
+  if (!Array.isArray(candidates)) throw immutableIssue(label);
+  const byId = new Map<string, unknown>();
+  for (const candidate of candidates) {
+    const id = member(candidate, 'id');
+    if (typeof id !== 'string' || byId.has(id)) throw immutableIssue(label);
+    byId.set(id, candidate);
+  }
+  if (existing.some(issue => {
+    const id = member(issue, 'id');
+    return typeof id !== 'string' || !equal(issue, byId.get(id));
+  })) throw immutableIssue(label);
+  return true;
+}
+
+function preserveModuleIssues(previous: Project['modules'], next: Project['modules']): void {
+  if (preserveIssuedList(previous.story, next.story, 'canon', 'canon snapshots')) {
+    const draft = member(next.story, 'draft');
+    if (member(next.story, 'schema') !== 1
+      || !['characters', 'points', 'exceptions'].every(key => Array.isArray(member(draft, key)))) {
+      throw immutableIssue('canon snapshots');
+    }
+  }
+  if (preserveIssuedList(previous.editorial, next.editorial, 'issues', 'editorial issues')) {
+    if (member(next.editorial, 'schema') !== 1 || !hasObject(member(next.editorial, 'drafts'))
+      || !['evidence', 'claims'].every(key => Array.isArray(member(next.editorial, key)))) {
+      throw immutableIssue('editorial issues');
+    }
+  }
+  const oldPlans = member(previous.production, 'documents');
+  if (!hasObject(oldPlans)) return;
+  const newPlans = member(next.production, 'documents');
+  for (const [id, plan] of Object.entries(oldPlans)) {
+    const retainedPlan = member(newPlans, id);
+    const hasSheets = preserveIssuedList(plan, retainedPlan, 'callSheets', 'call sheets');
+    const hasOutputs = preserveIssuedList(plan, retainedPlan, 'outputs', 'production outputs');
+    if ((hasSheets || hasOutputs) && (member(next.production, 'version') !== 1 || member(retainedPlan, 'documentId') !== id)) {
+      throw immutableIssue('production issues');
+    }
+  }
+}
+
 export function preserveSnapshots(previous: Project, next: Project): void {
   const nextSnapshots = new Map(next.snapshots.map(snapshot => [snapshot.id, snapshot]));
   if (previous.snapshots.some(snapshot => !equal(snapshot, nextSnapshots.get(snapshot.id)))) {
     throw new TeamFault(422, 'Stored snapshots are immutable. Restore one as a new draft.');
   }
+  preserveModuleIssues(previous.modules, next.modules);
   const known = new Set(previous.snapshots.map(snapshot => snapshot.id));
   const previousDocuments = new Map(previous.documents.map(document => [document.id, document]));
   for (const saved of next.snapshots.filter(snapshot => !known.has(snapshot.id))) {

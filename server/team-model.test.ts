@@ -52,6 +52,58 @@ test('named issue and restore preserve the original revision, block, and episode
   assert.throws(() => preserveSnapshots(restored, { ...restored, snapshots: [] }), /immutable/);
 });
 
+test('stored canon, editorial issues and production issues resist revisions while live records can change', () => {
+  const project = twoEpisodes();
+  const id = project.documents[0].id;
+  const draft = { characters: [], points: [], exceptions: [] };
+  const modules = {
+    story: { schema: 1, draft, canon: [{ id: 'canon-1', data: { characters: [{ id: 'lead', name: 'Morgan' }] } }] },
+    editorial: { schema: 1, drafts: {}, evidence: [], claims: [], issues: [{ id: 'editorial-1', number: 1 }] },
+    production: { version: 1, documents: {
+      [id]: {
+        documentId: id,
+        callSheets: [{ id: 'call-1', version: 1, notes: 'Arrive at dawn' }],
+        outputs: [{ id: 'report-1', content: 'Original wrap report' }],
+        deliveries: [{ id: 'delivery-1', callSheetId: 'call-1' }]
+      }
+    } }
+  };
+  const saved = { ...project, modules };
+  const amended = structuredClone(saved);
+  amended.modules.production.documents[id].deliveries = [{
+    id: 'delivery-2', callSheetId: 'call-1'
+  }];
+  amended.modules.production.documents[id].callSheets.push({ id: 'call-2', version: 2, notes: 'Arrive at midday' });
+  amended.modules.editorial.issues.push({ id: 'editorial-2', number: 2 });
+  preserveSnapshots(saved, amended);
+
+  const changedCanon = structuredClone(saved);
+  changedCanon.modules.story.canon[0].data.characters[0].name = 'Alex';
+  assert.throws(() => preserveSnapshots(saved, changedCanon), /canon snapshots are immutable/);
+
+  const hiddenCanon = structuredClone(saved);
+  hiddenCanon.modules.story.schema = 2;
+  assert.throws(() => preserveSnapshots(saved, hiddenCanon), /canon snapshots are immutable/);
+
+  const removedEditorial = structuredClone(saved);
+  removedEditorial.modules.editorial.issues = [];
+  assert.throws(() => preserveSnapshots(saved, removedEditorial), /editorial issues are immutable/);
+
+  const alteredCallSheet = structuredClone(saved);
+  alteredCallSheet.modules.production.documents[id].callSheets[0].notes = 'Arrive after dark';
+  assert.throws(() => preserveSnapshots(saved, alteredCallSheet), /call sheets are immutable/);
+
+  const duplicateCallSheet = structuredClone(saved);
+  duplicateCallSheet.modules.production.documents[id].callSheets.push(duplicateCallSheet.modules.production.documents[id].callSheets[0]);
+  assert.throws(() => preserveSnapshots(saved, duplicateCallSheet), /call sheets are immutable/);
+
+  const removedOutput = structuredClone(saved);
+  removedOutput.modules.production.documents[id].outputs = [];
+  assert.throws(() => preserveSnapshots(saved, removedOutput), /production outputs are immutable/);
+
+  assert.throws(() => preserveSnapshots(saved, { ...saved, modules: {} }), /immutable/);
+});
+
 test('episode projection excludes restricted documents, modules, snapshots and assets', () => {
   const seed = twoEpisodes();
   const { project } = issueDocument(seed, seed.documents[2].id, 'Restricted draft');
