@@ -29,6 +29,10 @@ function describeFile(file: File): string {
   return format?.[0] || 'Source file';
 }
 
+function countLabel(count: number, unit: string): string {
+  return count + ' ' + unit + (count === 1 ? '' : 's');
+}
+
 async function readBytes(file: File, signal: AbortSignal): Promise<Uint8Array> {
   if (file.size > MAX_FILE_BYTES) throw new Error('This file exceeds the 24 MB import limit.');
   const reader = file.stream().getReader();
@@ -299,7 +303,7 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
     {review && draft && file && <>
       <div className="import-panels">
         <section className="import-panel">
-          <header><div><h2>Original document</h2><p>{describeFile(file)}{review.type === 'script' && review.conversion.sourcePages ? ' · ' + review.conversion.sourcePages + ' pages' : ''}</p></div>
+          <header><div><h2>Original document</h2><p>{describeFile(file)}{review.type === 'script' && review.conversion.sourcePages ? ' · ' + countLabel(review.conversion.sourcePages, 'page') : ''}</p></div>
             {sourceSliceCount > 1 && <select aria-label="Original text range" value={sourceSlice} onChange={event => setSourceSlice(Number(event.target.value))}>
               {Array.from({ length: sourceSliceCount }, (_, part) => <option key={part} value={part}>Lines {part * 100 + 1}–{Math.min(sourceLines.length, (part + 1) * 100)}</option>)}
             </select>}
@@ -311,7 +315,7 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
           <footer>The original file will be kept with the project.</footer>
         </section>
         <section className="import-panel">
-          <header><div><h2>{isAv ? 'AV preview' : 'Screenplay preview'}</h2><p>{isAv ? draft.avRows.length + ' rows · ' + timingLabel(timed?.durationSeconds ?? 0) : scenes.length + ' scenes · ' + layout.length + ' pages · ' + (draft.paper === 'a4' ? 'A4' : 'Letter')}</p></div>
+          <header><div><h2>{isAv ? 'AV preview' : 'Screenplay preview'}</h2><p>{isAv ? countLabel(draft.avRows.length, 'row') + ' · ' + timingLabel(timed?.durationSeconds ?? 0) : countLabel(scenes.length, 'scene') + ' · ' + countLabel(layout.length, 'page') + ' · ' + (draft.paper === 'a4' ? 'A4' : 'Letter')}</p></div>
             {!isAv && layout.length > 0 && <select aria-label="Converted page" value={checkedPage} onChange={event => setPage(Number(event.target.value))}>
               {layout.map((item, part) => <option key={part} value={part}>{item.titlePage ? 'Title page' : 'Page ' + item.label}</option>)}
             </select>}
@@ -364,21 +368,21 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
         <ul>{warnings.map((note, i) => <li key={i}>{note}</li>)}</ul>
       </details>}
 
-      {!isAv && <section className="import-mapping"><h2>Manuscript layout</h2>
+      {!isAv && <details className="import-mapping import-layout-options"><summary>Manuscript layout</summary>
         <div className="import-field-grid">
-          <label>Writing format<select value={draft.kind} onChange={event => {
+          <label>Writing format<select aria-label="Writing format" value={draft.kind} onChange={event => {
             const kind = event.target.value as 'screenplay' | 'stageplay';
             setDraft(current => current && { ...current, kind });
           }}><option value="screenplay">Screenplay</option><option value="stageplay">Stageplay</option></select></label>
-          <label>Paper<select value={draft.paper} onChange={event => {
+          <label>Paper<select aria-label="Paper" value={draft.paper} onChange={event => {
             const paper = event.target.value as DocumentModel['paper'];
             setDraft(current => current && { ...current, paper });
           }}><option value="letter">Letter</option><option value="a4">A4</option></select></label>
         </div>
-      </section>}
+      </details>}
 
       {revisionOptions.length > 0 && <section className="import-mapping"><h2>Save to project</h2>
-        <label>Draft destination <select value={destination} onChange={event => { setDestination(event.target.value); setOverrides({}); }}>
+        <label>Draft destination <select aria-label="Draft destination" value={destination} onChange={event => { setDestination(event.target.value); setOverrides({}); }}>
           <option value="">Create new document</option>
           {revisionOptions.map(item => <option key={item.id} value={item.id}>Reimport {item.title}</option>)}
         </select></label>
@@ -447,10 +451,10 @@ function EditLine({ block, close, apply }: { block: Block; close: () => void; ap
   return <form className="import-mapping" onSubmit={event => { event.preventDefault(); apply(kind, value); }}>
     <h2>Correct element</h2>
     <div className="import-field-grid">
-      <label>Element <select value={kind} onChange={event => setKind(event.target.value as BlockKind)}>
+      <label>Element <select aria-label="Element" value={kind} onChange={event => setKind(event.target.value as BlockKind)}>
         {BLOCK_KINDS.map(element => <option key={element} value={element}>{elementLabel[element]}</option>)}
       </select></label>
-      <label>Line text <textarea rows={2} value={value} onChange={event => setValue(event.target.value)}/></label>
+      <label>Line text <textarea aria-label="Line text" rows={2} value={value} onChange={event => setValue(event.target.value)}/></label>
     </div>
     <div className="actions"><button type="button" onClick={close}>Close</button><button type="submit">Apply correction</button></div>
   </form>;
