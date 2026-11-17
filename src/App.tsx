@@ -1,14 +1,16 @@
-import { Check, ChevronLeft, Home as HomeIcon, LoaderCircle } from 'lucide-react';
+import { Home as HomeIcon, LoaderCircle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Home } from './Home';
 import { ProjectView } from './ProjectView';
 import type { ProjectDestination } from './ProjectView';
 import { createDemoProjects, episodeLabel } from './demo';
-import { newBlock } from './model';
 import type { DocumentModel, Project, ProjectKind, SourceRef, WorkspaceViewProps } from './model';
 import { createProject, resolveSource, useWorkspace } from './workspace';
+import { AVView, OutlineView, WritingView } from './writing';
+import { ReviewWorkspace, TeamWorkspace } from './workspace/team-ui';
+import { ScriptTools } from './ScriptTools';
 
-type Destination = 'home' | 'project' | 'team' | ProjectDestination;
+type Destination = 'home' | 'project' | 'team' | 'review' | ProjectDestination;
 interface Route {
   view: Destination;
   projectId?: string;
@@ -16,6 +18,7 @@ interface Route {
   revisionId?: string;
   sceneId?: string;
   blockId?: string;
+  reviewKey?: string;
 }
 const recentKey = 'swdr.recent.v1';
 const projectViews = new Set<Destination>(['project', 'write', 'outline', 'av', 'story', 'editorial', 'production', 'import']);
@@ -23,6 +26,7 @@ const deviceLabels = { loading: 'Opening local workspace', saving: 'Saving on th
 
 function parseRoute(): Route {
   const [path, query = ''] = window.location.hash.slice(1).split('?');
+  if (path.startsWith('review=')) return { view: 'review', reviewKey: path.slice('review='.length) };
   if (path === 'team' || (!path && window.location.pathname === '/team')) return { view: 'team' };
   if (path === 'import') return { view: 'import' };
   const [prefix, projectId, view, documentId] = path.split('/');
@@ -33,6 +37,7 @@ function parseRoute(): Route {
 }
 
 function encodeRoute(route: Route): string {
+  if (route.view === 'review') return `#review=${route.reviewKey ?? ''}`;
   if (!route.projectId) return route.view === 'home' ? '#home' : `#${route.view}`;
   const params = new URLSearchParams();
   if (route.revisionId) params.set('rev', route.revisionId);
@@ -76,7 +81,11 @@ export function App() {
       setFocus(false);
     }
     window.addEventListener('hashchange', onHistory);
-    return () => window.removeEventListener('hashchange', onHistory);
+    window.addEventListener('popstate', onHistory);
+    return () => {
+      window.removeEventListener('hashchange', onHistory);
+      window.removeEventListener('popstate', onHistory);
+    };
   }, []);
 
   useEffect(() => {
@@ -148,12 +157,19 @@ export function App() {
     readOnly: historical
   } satisfies WorkspaceViewProps : undefined;
 
+  const target = shared && route.revisionId ? {
+    projectId: shared.project.id, documentId: shared.document.id, episodeId: shared.document.episodeId,
+    revisionId: route.revisionId, sceneId: route.sceneId, blockId: route.blockId
+  } : undefined;
+  const hasRequestedRevision = !target || (active && Boolean(resolveSource(active, target)));
+  const goHome = () => go({ view: 'home' });
+
   return <div className={`app${focus ? ' is-focused' : ''}`}>
     <a href="#main-content" className="skip-link" onClick={event => {
       const main = window.document.getElementById('main-content');
       if (main) { event.preventDefault(); main.tabIndex = -1; main.focus(); }
     }}>Skip to content</a>
-    {!focus && <header className="top-bar">
+    {!focus && route.view !== 'team' && route.view !== 'review' && <header className="top-bar">
       {route.view === 'home' ? <>
         <span className="wordmark" aria-label="SWDR">SWDR</span>
         <span className="top-caption">Writing workspace</span>
@@ -165,7 +181,11 @@ export function App() {
         <span className="top-caption top-context">{[episodeLabel(episode), destinationLabels[route.view]].filter(Boolean).join(' · ')}</span>
       </>}
     </header>}
-    {!ready ? <main className="swdr-page" id="main-content">
+    {route.view === 'review' ? <ReviewWorkspace reviewKey={route.reviewKey ?? ''} onHome={goHome} />
+      : route.view === 'team' ? <TeamWorkspace localProjects={projects.filter(project => !project.archivedAt)} onHome={goHome}
+        renderWorkspace={view => view.document.kind === 'av' ? <AVView key={view.document.id} {...view} />
+          : <div className="team-script-stage" id="main-content"><WritingView key={view.document.id} {...view} target={view.selectedSource} /></div>} />
+      : !ready ? <main className="swdr-page" id="main-content">
       <div className="empty-block">{error ? <><h1>Workspace unavailable</h1><p>{error}</p><button onClick={() => location.reload()}>Try again</button></>
         : <p><LoaderCircle size={15} className="spinner" /> Opening local workspace</p>}</div>
     </main> : route.view === 'home' ? <Home projects={projects} recent={recentProject && recentDocument ? { project: recentProject, document: recentDocument } : undefined}
@@ -175,28 +195,19 @@ export function App() {
       : route.view === 'project' && active ? <ProjectView key={active.id} project={active} open={(view, doc) => openProject(active, view, doc ?? head)}
         update={update => { updateProject(active.id, update); }}
         archive={() => { updateProject(active.id, project => ({ ...project, archivedAt: new Date().toISOString() })); go({ view: 'home' }); setMessage('Project moved to the archive.'); }} />
-      : route.view === 'write' && shared ? <Manuscript {...shared} saveLabel={deviceLabels[status]} />
+      : route.view === 'write' && shared && hasRequestedRevision ? <div className="script-stage" id="main-content">
+        <WritingView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} onFocusChange={setFocus}
+          onOpenOutline={() => openProject(shared.project, 'outline', shared.document)}
+          toolbarEnd={<ScriptTools {...shared} />} />
+      </div>
+      : route.view === 'outline' && shared ? <OutlineView key={shared.document.id} {...shared}
+        toolbarEnd={<button onClick={() => resume(shared.project, shared.document)}>Open script</button>} />
+      : route.view === 'av' && shared && hasRequestedRevision ? <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} />
       : <main className="swdr-page" id="main-content"><div className="empty-block">
-        <p>{route.projectId && !active ? 'The project is unavailable on this device.' : 'Open a manuscript from your projects.'}</p>
-        <button onClick={() => go({ view: 'home' })}><ChevronLeft size={16} /> Home</button>
+        <p>{!hasRequestedRevision ? 'This exact source revision is unavailable.' : route.projectId && !active ? 'The project is unavailable on this device.' : 'Open a manuscript from your projects.'}</p>
       </div></main>}
     {error && ready && <aside className="save-error" role="alert">{error}<button onClick={retrySave}>Retry save</button></aside>}
     {message && <div className="status-toast" role="status">{message}</div>}
   </div>;
 }
 
-function Manuscript({ document, onDocumentChange, readOnly, saveLabel }: WorkspaceViewProps & { saveLabel: string }) {
-  return <main className="starter-editor" id="main-content">
-    <div className="starter-toolbar"><strong>{document.title}</strong><span className="device-status"><Check size={14} /> {saveLabel}</span></div>
-    <div className="starter-paper">
-      {document.blocks.map(block => <textarea key={block.id} value={block.text} rows={Math.max(1, block.text.split('\n').length)}
-        className={block.kind === 'scene' ? 'starter-scene' : undefined} placeholder={block.kind === 'scene' ? 'INT. LOCATION – DAY' : 'Write your scene'}
-        aria-label={block.kind === 'scene' ? 'Scene heading' : 'Action'} readOnly={readOnly}
-        onChange={event => {
-          const text = event.currentTarget.value;
-          onDocumentChange(current => ({ ...current, blocks: current.blocks.map(item => item.id === block.id ? { ...item, text } : item) }));
-        }} />)}
-      {!readOnly && <button className="quiet" onClick={() => onDocumentChange(current => ({ ...current, blocks: [...current.blocks, newBlock()] }))}>Add paragraph</button>}
-    </div>
-  </main>;
-}

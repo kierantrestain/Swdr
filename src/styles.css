@@ -166,12 +166,19 @@ button.workspace-card {
 .spinner { animation: rotate 1.1s linear infinite; }
 @keyframes rotate { to { transform: rotate(1turn); } }
 
-.starter-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; min-height: 42px; border-bottom: 1px solid var(--line); background: #f7f6f1; }
-.device-status { display: inline-flex; align-items: center; gap: 5px; color: var(--sage-ink); font-size: 13px; }
-.starter-paper { width: min(816px, calc(100% - 24px)); min-height: 1000px; padding: 90px clamp(18px, 10vw, 144px); margin: 24px auto 38px; background: var(--paper); border: 1px solid var(--line); box-shadow: 0 2px 8px #18232a14; }
-.starter-paper textarea { display: block; width: 100%; padding: 2px 0; border: 0; background: transparent; font: 12pt/1.3 'Courier New', monospace; }
-.starter-scene { font-weight: 700 !important; }
-.starter-paper button { margin-top: 12px; }
+.script-stage { height: calc(100dvh - var(--topbar-height)); }
+.is-focused .script-stage { height: 100dvh; }
+.team-script-stage { height: min(760px, 75dvh); }
+.team-workspace .team-toolbar { min-height: var(--topbar-height); background: var(--slate); color: var(--paper); }
+.team-workspace .team-toolbar button { background: #263640; border-color: #43525b; color: var(--paper); }
+.team-workspace .team-save-status { color: #d2ddd6; }
+.script-tools { position: relative; z-index: 4; }
+.script-tools summary { display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 8px 10px; font-size: 13px; font-weight: 650; border: 1px solid var(--line); background: var(--paper); border-radius: 7px; }
+.script-tools summary::-webkit-details-marker { display: none; }
+.script-tools-panel { position: absolute; top: calc(100% + 7px); right: 0; width: min(265px, 87vw); max-height: 65dvh; overflow: auto; padding: 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 6px 20px #18232a24; }
+.script-tools-panel h3 { padding-top: 7px; margin-bottom: 6px; font-size: 14px; }
+.script-tools-panel p { font-size: 13px; }
+.script-tools-panel button { margin-bottom: 3px; text-align: left; }
 
 @media (max-width: 900px) {
   .swdr-page { width: calc(100% - 44px); padding-top: 30px; }

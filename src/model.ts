@@ -32,6 +32,7 @@ export interface Beat {
   notes: string;
   act?: 1 | 2 | 3;
   sceneId?: string;
+  source?: SourceRef;
 }
 
 export interface TitlePage {
