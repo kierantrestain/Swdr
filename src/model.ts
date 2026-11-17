@@ -30,6 +30,7 @@ export interface Beat {
   id: string;
   title: string;
   notes: string;
+  act?: 1 | 2 | 3;
   sceneId?: string;
 }
 
@@ -59,6 +60,7 @@ export interface DocumentModel {
   beats: Beat[];
   lockedPages?: LockedPage[];
   revisionLabel?: string;
+  showSceneNumbers?: boolean;
 }
 
 export interface Episode {
