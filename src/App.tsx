@@ -9,6 +9,7 @@ import { createProject, resolveSource, useWorkspace } from './workspace';
 import { AVView, OutlineView, WritingView } from './writing';
 import { ReviewWorkspace, TeamWorkspace } from './workspace/team-ui';
 import { ScriptTools } from './ScriptTools';
+import { ProductionView } from './production';
 
 type Destination = 'home' | 'project' | 'team' | 'review' | ProjectDestination;
 interface Route {
@@ -203,6 +204,7 @@ export function App() {
       : route.view === 'outline' && shared ? <OutlineView key={shared.document.id} {...shared}
         toolbarEnd={<button onClick={() => resume(shared.project, shared.document)}>Open script</button>} />
       : route.view === 'av' && shared && hasRequestedRevision ? <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} />
+      : route.view === 'production' && shared ? <ProductionView key={shared.document.id} {...shared} />
       : <main className="swdr-page" id="main-content"><div className="empty-block">
         <p>{!hasRequestedRevision ? 'This exact source revision is unavailable.' : route.projectId && !active ? 'The project is unavailable on this device.' : 'Open a manuscript from your projects.'}</p>
       </div></main>}
