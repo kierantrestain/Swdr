@@ -364,6 +364,19 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
         <ul>{warnings.map((note, i) => <li key={i}>{note}</li>)}</ul>
       </details>}
 
+      {!isAv && <section className="import-mapping"><h2>Manuscript layout</h2>
+        <div className="import-field-grid">
+          <label>Writing format<select value={draft.kind} onChange={event => {
+            const kind = event.target.value as 'screenplay' | 'stageplay';
+            setDraft(current => current && { ...current, kind });
+          }}><option value="screenplay">Screenplay</option><option value="stageplay">Stageplay</option></select></label>
+          <label>Paper<select value={draft.paper} onChange={event => {
+            const paper = event.target.value as DocumentModel['paper'];
+            setDraft(current => current && { ...current, paper });
+          }}><option value="letter">Letter</option><option value="a4">A4</option></select></label>
+        </div>
+      </section>}
+
       {revisionOptions.length > 0 && <section className="import-mapping"><h2>Save to project</h2>
         <label>Draft destination <select value={destination} onChange={event => { setDestination(event.target.value); setOverrides({}); }}>
           <option value="">Create new document</option>

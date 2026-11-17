@@ -329,6 +329,11 @@ export async function decodePdf(data: Uint8Array, title: string, signal?: AbortS
     throw new PdfImportError('image-only', 'No editable text was recovered. For a scan, run OCR in your PDF editor, review the result and export DOCX or a searchable PDF.');
   }
   const conversion = decodeFountain(pageText.join('\n\n'), title, true);
+  const pageBox = pages.map(([, page]) => /\/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\]/.exec(page)).find(Boolean);
+  if (pageBox) {
+    const [, x1, y1, x2, y2] = pageBox.map(Number);
+    if (Math.abs(x2 - x1 - 595.28) <= 2 && Math.abs(y2 - y1 - 841.89) <= 2) conversion.document.paper = 'a4';
+  }
   const emptyPages = pageText.filter(text => !text.trim()).length;
   if (emptyPages) conversion.warnings.push(emptyPages + ' page' + (emptyPages === 1 ? ' has' : 's have') +
     ' no extractable text. Review the original for blank or scanned pages. For missing pages, run OCR or re-export an editable copy before reimporting.');
