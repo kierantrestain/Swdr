@@ -9,13 +9,13 @@ test('creates, formats, saves and reopens a screenplay with the keyboard', async
   await page.keyboard.press('Enter');
   await page.keyboard.type('Rain on the lamp glass.');
   await page.keyboard.press('Tab');
-  await expect(page.getByLabel('Screenplay element')).toHaveValue('character');
+  await expect(page.getByRole('button', { name: /^Screenplay element/ })).toHaveAttribute('data-element', 'character');
   await page.keyboard.press('Shift+Tab');
-  await expect(page.getByLabel('Screenplay element')).toHaveValue('action');
+  await expect(page.getByRole('button', { name: /^Screenplay element/ })).toHaveAttribute('data-element', 'action');
   await page.keyboard.press('Tab');
   await page.keyboard.type('Mara');
   await page.keyboard.press('Enter');
-  await expect(page.getByLabel('Screenplay element')).toHaveValue('dialogue');
+  await expect(page.getByRole('button', { name: /^Screenplay element/ })).toHaveAttribute('data-element', 'dialogue');
   await page.keyboard.type('The train leaves at midnight.');
   expect(await elementKinds(page)).toEqual([
     'scene:INT. LANTERN ROOM - NIGHT', 'action:Rain on the lamp glass.', 'character:MARA', 'dialogue:The train leaves at midnight.'
@@ -53,7 +53,7 @@ test('writes a scene with SmartType, auto-format, multi-block paste and undo', a
   await page.keyboard.type('Pull the red one.');
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
-  await expect(page.getByLabel('Screenplay element')).toHaveValue('scene');
+  await expect(page.getByRole('button', { name: /^Screenplay element/ })).toHaveAttribute('data-element', 'scene');
   await page.keyboard.type('e');
   await page.keyboard.press('Enter');
   await expect(suggestions.getByRole('option')).toHaveText(['SIGNAL BOX']);
@@ -153,15 +153,40 @@ test('keeps the selection through Focus and drawers, and the scene list moves th
   await expect.poll(() => caretIn(dialogue)).toEqual({ start: 3, end: 8 });
 
   const scenes = page.getByRole('button', { name: 'Scenes', exact: true });
-  await expect(scenes).toHaveAttribute('aria-expanded', 'false');
-  await scenes.click();
   const list = page.getByRole('complementary', { name: 'Scenes', exact: true });
+  await expect(list).toHaveCount(0);
+  await scenes.click();
   await expect(list).toBeVisible();
   await list.getByRole('button', { name: /HARBOUR WALL/ }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Scene 3' })).toHaveCount(1);
   await expect.poll(() => caretIn(element(page, 'scene').nth(2))).toEqual({ start: 0, end: 0 });
   await page.keyboard.press('Escape');
-  await expect(scenes).toHaveAttribute('aria-expanded', 'false');
+  await expect(list).toHaveCount(0);
+  expect(pageFaults).toEqual([]);
+});
+
+test('shows every element shortcut in the element menu and applies the choice', async ({ page, pageFaults }) => {
+  await loadDemo(page);
+  await page.getByRole('button', { name: 'Resume screenplay' }).click();
+  await element(page, 'dialogue').first().click();
+  const trigger = page.getByRole('button', { name: /^Screenplay element/ });
+  await expect(trigger).toHaveAttribute('data-element', 'dialogue');
+  await trigger.click();
+  const menu = page.getByRole('menu');
+  await expect(menu.getByText('Tab to switch')).toBeVisible();
+  for (const label of ['Scene heading', 'Action', 'Character', 'Parenthetical', 'Dialogue', 'Transition', 'Shot', 'Note', 'Act']) {
+    await expect(menu.getByRole('menuitem', { name: new RegExp(`^${label}\\b(?!ion)`) })).toBeVisible();
+  }
+  await expect(menu.getByRole('menuitem', { name: /^Transition/ })).toContainText('6');
+  await menu.getByRole('menuitem', { name: /^Parenthetical/ }).click();
+  await expect(trigger).toHaveAttribute('data-element', 'parenthetical');
+  await expect(manuscript(page)).toBeFocused();
+  await page.keyboard.press('Control+Alt+5');
+  await expect(trigger).toHaveAttribute('data-element', 'dialogue');
+  await page.getByRole('button', { name: '100%' }).click();
+  await page.getByRole('menuitem', { name: '125%' }).click();
+  await expect(page.locator('.swdr-sheet')).toHaveCSS('zoom', '1.25');
+  await expect(page.locator('.swdr-w-words')).toHaveText(/^\d[\d,]* words$/);
   expect(pageFaults).toEqual([]);
 });
 

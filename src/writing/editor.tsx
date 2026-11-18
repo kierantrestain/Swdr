@@ -1,13 +1,17 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import {
-  ChevronDown, CircleCheck, Columns2, Expand, FileText, List, MessageSquareText, Printer, Redo2, Replace, Search, Undo2, X
+  Check, ChevronDown, CircleCheck, Columns2, Expand, FileText, List, MessageSquareText, Printer, Redo2, Replace, Search, Undo2, X
 } from 'lucide-react';
 import { baseKeymap } from 'prosemirror-commands';
 import { closeHistory, history, redo, redoDepth, undo, undoDepth } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
 import { EditorState, Plugin, Selection, TextSelection } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
+import { Button } from '@astryxdesign/core/Button';
+import { DropdownMenu } from '@astryxdesign/core/DropdownMenu';
+import { IconButton } from '@astryxdesign/core/IconButton';
+import { Kbd } from '@astryxdesign/core/Kbd';
 import { sceneList } from '../model';
 import type { Block, BlockKind, DocumentModel, SourceRef, WorkspaceViewProps } from '../model';
 import { geometryFor, paginateDocument } from './layout';
@@ -34,6 +38,17 @@ export interface WritingProps extends WorkspaceViewProps {
 /** Below this manuscript width the page renders as a fluid column without sheet gaps. */
 const COMPACT_WIDTH = 880;
 const PT = 96 / 72;
+const ZOOM_KEY = 'swdr.zoom.v1';
+const ZOOM_LEVELS = [75, 90, 100, 110, 125, 150];
+
+function readZoom(): number {
+  try {
+    const value = Number(localStorage.getItem(ZOOM_KEY));
+    return ZOOM_LEVELS.includes(value) ? value : 100;
+  } catch {
+    return 100;
+  }
+}
 
 interface Popover {
   mode: 'suggest' | 'elements';
@@ -68,10 +83,15 @@ export function WritingView(props: WritingProps) {
   const [finder, setFinder] = useState<{ open: boolean; replace: string }>({ open: false, replace: '' });
   const [search, setSearch] = useState({ query: '', count: 0, current: 0 });
   const [popover, setPopoverState] = useState<Popover | null>(null);
+  const [elementMenuOpen, setElementMenuOpen] = useState(false);
   const [depth, setDepth] = useState({ undo: 0, redo: 0 });
   const [compact, setCompact] = useState(false);
   const [page, setPage] = useState(1);
   const [caption, setCaption] = useState('');
+  const [zoom, setZoomState] = useState(readZoom);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const words = useMemo(() => deferred.blocks.reduce((total, block) => block.kind === 'note' ? total : total + (block.text.match(/[\p{L}\p{N}'’-]+/gu)?.length ?? 0), 0), [deferred.blocks]);
   const compactRef = useRef(compact);
   compactRef.current = compact;
 
@@ -96,7 +116,7 @@ export function WritingView(props: WritingProps) {
       const editor = view.current;
       if (!editor || compactRef.current) return;
       const contentHeight = (geometry.height - geometry.top - geometry.bottom) * PT;
-      pageStarts.current = measurePages(editor, contentHeight, geometry.top * PT);
+      pageStarts.current = measurePages(editor, contentHeight, geometry.top * PT, zoomRef.current / 100);
     });
   }, [geometry.bottom, geometry.height, geometry.top]);
 
@@ -310,12 +330,20 @@ export function WritingView(props: WritingProps) {
   useEffect(() => {
     const element = scroller.current;
     if (!element) return;
-    const observer = new ResizeObserver(() => setCompact(element.clientWidth < COMPACT_WIDTH));
+    const observer = new ResizeObserver(() => setCompact(element.clientWidth < Math.max(COMPACT_WIDTH * zoomRef.current / 100, 600)));
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => { measure(); }, [compact, measure]);
+  useEffect(() => { measure(); }, [compact, measure, zoom]);
+
+  function setZoom(value: number) {
+    setZoomState(value);
+    try { localStorage.setItem(ZOOM_KEY, String(value)); } catch { /* zoom is a per-device convenience */ }
+    const element = scroller.current;
+    if (element) setCompact(element.clientWidth < Math.max(COMPACT_WIDTH * value / 100, 600));
+    requestAnimationFrame(() => view.current?.focus());
+  }
 
   // ------------------------------------------------------------ navigation
   const jump = useCallback((blockId: string, edit = true) => {
@@ -462,24 +490,43 @@ export function WritingView(props: WritingProps) {
 
   return (
     <section className={`swdr-writing ${focused ? 'swdr-writing-focus' : ''}`} style={styles} onKeyDown={shellKeys} aria-label={heading}>
-      {!focused && <div className="swdr-write-toolbar" ref={toolbar}>
+      {!focused && <div className="swdr-write-toolbar" ref={toolbar} role="toolbar" aria-label="Writing tools">
         <span className="swdr-w-current" aria-current="page"><FileText size={15} aria-hidden="true" /> Write</span>
-        {onOpenOutline && <button type="button" className="swdr-w-quiet" onClick={onOpenOutline}>Outline</button>}
-        <label className="swdr-w-element"><span className="swdr-sr">Screenplay element</span>
-          <select aria-label="Screenplay element" value={active.kind} disabled={readOnly} onChange={event => changeKind(event.target.value as BlockKind)}>
-            {ELEMENT_ORDER.map(kind => <option key={kind} value={kind}>{ELEMENTS[kind].label}</option>)}
-          </select><ChevronDown size={13} aria-hidden="true" />
-        </label>
-        <button type="button" className="swdr-w-quiet swdr-w-history" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={readOnly || !depth.undo} onClick={() => runHistory('undo')}><Undo2 size={16} aria-hidden="true" /></button>
-        <button type="button" className="swdr-w-quiet swdr-w-history" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={readOnly || !depth.redo} onClick={() => runHistory('redo')}><Redo2 size={16} aria-hidden="true" /></button>
-        {active.kind === 'character' && !readOnly && <button type="button" className="swdr-w-quiet" onClick={toggleDual} title="Pair this speech with the next one" aria-pressed={Boolean(activeBlock?.dual)}><Columns2 size={15} aria-hidden="true" /><span>Dual</span></button>}
+        {onOpenOutline && <Button label="Outline" variant="ghost" size="sm" onClick={onOpenOutline} />}
+        <span className="swdr-w-divider" aria-hidden="true" />
+        <DropdownMenu
+          menuWidth={248}
+          menuMaxHeight={480}
+          isMenuOpen={elementMenuOpen}
+          onOpenChange={setElementMenuOpen}
+          renderTrigger={trigger => <button {...trigger} type="button" className="swdr-w-element-trigger" data-element={active.kind}
+            aria-label={`Screenplay element: ${ELEMENTS[active.kind].label}`} disabled={readOnly}>
+            <span>{ELEMENTS[active.kind].label}</span><ChevronDown size={14} aria-hidden="true" />
+          </button>}
+          items={[{
+            type: 'section', title: 'Tab to switch', id: 'elements',
+            items: ELEMENT_ORDER.map(kind => ({
+              id: kind, label: ELEMENTS[kind].label,
+              endContent: <span className="swdr-w-menu-key">{kind === active.kind && <Check size={14} aria-label="Current element" />}<Kbd keys={`mod+alt+${ELEMENTS[kind].digit}`} /></span>,
+              onClick: () => { changeKind(kind); requestAnimationFrame(() => view.current?.focus()); }
+            }))
+          }]}
+        />
+        <IconButton label="Undo" tooltip="Undo (Ctrl+Z)" icon={<Undo2 size={16} />} variant="ghost" size="sm" isDisabled={readOnly || !depth.undo} onClick={() => runHistory('undo')} />
+        <IconButton label="Redo" tooltip="Redo (Ctrl+Shift+Z)" icon={<Redo2 size={16} />} variant="ghost" size="sm" isDisabled={readOnly || !depth.redo} onClick={() => runHistory('redo')} />
+        {active.kind === 'character' && !readOnly && <Button label="Dual" variant="ghost" size="sm" icon={<Columns2 size={15} />} tooltip="Pair this speech with the next one" onClick={toggleDual} />}
+        <DropdownMenu
+          menuWidth={120}
+          button={{ label: `${zoom}%`, variant: 'ghost', size: 'sm', tooltip: 'Zoom' }}
+          items={ZOOM_LEVELS.map(level => ({ id: String(level), label: `${level}%`, endContent: level === zoom ? <Check size={14} aria-label="Current zoom" /> : undefined, onClick: () => setZoom(level) }))}
+        />
         <span className="swdr-write-save"><CircleCheck size={14} aria-hidden="true" /> {saveLabel || 'Local draft'}</span>
-        <button type="button" className={`swdr-w-quiet ${finder.open ? 'swdr-w-current' : ''}`} aria-label="Find and replace" title="Find and replace (Ctrl+F)" aria-expanded={finder.open}
-          onClick={() => { setFinder(previous => ({ ...previous, open: !previous.open })); requestAnimationFrame(() => globalThis.document.querySelector<HTMLInputElement>('#swdr-find-input')?.focus()); }}><Search size={15} aria-hidden="true" /></button>
-        <button type="button" className={`swdr-w-quiet ${drawer === 'scenes' ? 'swdr-w-current' : ''}`} onClick={() => setDrawer(previous => previous === 'scenes' ? null : 'scenes')} aria-label="Scenes" aria-expanded={drawer === 'scenes'}><List size={16} aria-hidden="true" /><span>Scenes</span></button>
-        <button type="button" className={`swdr-w-quiet ${drawer === 'notes' ? 'swdr-w-current' : ''}`} onClick={() => setDrawer(previous => previous === 'notes' ? null : 'notes')} aria-label="Notes" aria-expanded={drawer === 'notes'}><MessageSquareText size={15} aria-hidden="true" /><span>Notes</span></button>
-        <button type="button" className="swdr-w-button" aria-keyshortcuts="Control+Shift+F Meta+Shift+F" onClick={() => setFocus(true)}><Expand size={14} aria-hidden="true" /><span>Focus</span></button>
-        {toolbarEnd || <button type="button" className="swdr-w-button" onClick={print.requestPrint}><Printer size={14} aria-hidden="true" /> Print</button>}
+        <IconButton label="Find and replace" tooltip="Find and replace (Ctrl+F)" icon={<Search size={16} />} variant="ghost" size="sm"
+          onClick={() => { setFinder(previous => ({ ...previous, open: !previous.open })); requestAnimationFrame(() => globalThis.document.querySelector<HTMLInputElement>('#swdr-find-input')?.focus()); }} />
+        <Button label="Scenes" variant={drawer === 'scenes' ? 'secondary' : 'ghost'} size="sm" icon={<List size={16} />} onClick={() => setDrawer(previous => previous === 'scenes' ? null : 'scenes')} />
+        <Button label="Notes" variant={drawer === 'notes' ? 'secondary' : 'ghost'} size="sm" icon={<MessageSquareText size={15} />} onClick={() => setDrawer(previous => previous === 'notes' ? null : 'notes')} />
+        <Button label="Focus" variant="secondary" size="sm" icon={<Expand size={14} />} tooltip="Focus mode (Ctrl+Shift+F)" onClick={() => setFocus(true)} />
+        {toolbarEnd || <Button label="Print" variant="secondary" size="sm" icon={<Printer size={14} />} onClick={print.requestPrint} />}
       </div>}
 
       {finder.open && <div className="swdr-finder" role="search" aria-label="Find and replace">
@@ -499,7 +546,7 @@ export function WritingView(props: WritingProps) {
       </div>}
 
       <div ref={scroller} className={`swdr-manuscript-scroll ${compact ? 'swdr-compact' : ''}`} onScroll={onScroll} aria-label="Manuscript pages">
-        <div className={`swdr-sheet swdr-sheet-${document.paper}`}>
+        <div className={`swdr-sheet swdr-sheet-${document.paper}`} style={compact ? undefined : { zoom: zoom / 100 }}>
           <div ref={mount} className="swdr-pm-mount" />
         </div>
         {popover && <ul className={`swdr-popover swdr-popover-${popover.mode}`} role="listbox" aria-label={popover.mode === 'elements' ? 'Element type' : 'Suggestions'}
@@ -528,10 +575,10 @@ export function WritingView(props: WritingProps) {
       {!focused && drawer === 'notes' && activeBlock && <WritingContext {...props} active={activeBlock} onClose={() => setDrawer(null)} onDocumentChange={commit} onResetHistory={() => undefined} onPrint={print.requestPrint} />}
 
       <footer className="swdr-write-footer">
-        <span className="swdr-w-page-control"><span>Page {Math.min(page, pageCount) || 1} of {pageCount || 1}</span><span aria-hidden="true">·</span><span className="swdr-w-element-name">{ELEMENTS[active.kind]?.label}</span></span>
+        <span className="swdr-w-page-control"><span>Page {Math.min(page, pageCount) || 1} of {pageCount || 1}</span><span aria-hidden="true">·</span><span className="swdr-w-words">{words.toLocaleString()} words</span><span aria-hidden="true">·</span><span className="swdr-w-element-name">{ELEMENTS[active.kind]?.label}</span></span>
         <span className="swdr-sr" role="status">{caption}</span>
         <span>{focused ? <><span>{saveLabel || 'Local draft'}</span><button type="button" className="swdr-w-quiet" onClick={() => setFocus(false)}>Esc to exit focus</button></>
-          : <>{readOnly ? 'Read only' : document.revisionLabel || 'Draft'} <span aria-hidden="true">·</span> {document.paper === 'a4' ? 'A4' : 'Letter'}<span className="swdr-w-hint"><span aria-hidden="true"> · </span><button type="button" className="swdr-w-link-quiet" onClick={openElementMenu} disabled={readOnly}>Elements {shortcutLabel('scene').replace(/1$/, '1–9')}</button></span></>}</span>
+          : <>{readOnly ? 'Read only' : document.revisionLabel || 'Draft'} <span aria-hidden="true">·</span> {document.paper === 'a4' ? 'A4' : 'Letter'}<span className="swdr-w-hint"><span aria-hidden="true"> · </span><button type="button" className="swdr-w-link-quiet" onClick={openElementMenu} disabled={readOnly}>Element menu <Kbd keys="mod+e" /></button></span></>}</span>
       </footer>
       {print.output}
     </section>

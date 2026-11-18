@@ -425,7 +425,7 @@ export function pageDecorations(doc: PMNode, pages: WritingPage[]): DecorationSe
  * Sizes each page's filler from the live DOM so pages are exactly one sheet tall even
  * if the browser wraps a line differently from the layout engine (self-correcting).
  */
-export function measurePages(view: EditorView, contentHeight: number, topPadding: number): number[] {
+export function measurePages(view: EditorView, contentHeight: number, topPadding: number, scale = 1): number[] {
   const root = view.dom as HTMLElement;
   const origin = root.getBoundingClientRect().top;
   let pageStart = topPadding;
@@ -434,12 +434,13 @@ export function measurePages(view: EditorView, contentHeight: number, topPadding
     const filler = widget.querySelector<HTMLElement>('.swdr-page-fill');
     const more = widget.querySelector<HTMLElement>('.swdr-page-more');
     if (!filler) continue;
-    const top = widget.getBoundingClientRect().top - origin + (more?.offsetHeight ?? 0);
+    // Rects are in zoomed viewport pixels; heights and the page model are in unzoomed CSS pixels.
+    const top = (widget.getBoundingClientRect().top - origin) / scale + (more?.offsetHeight ?? 0);
     const height = Math.max(0, contentHeight - (top - pageStart));
     if (Math.abs(filler.offsetHeight - height) > 0.5) filler.style.height = `${height}px`;
     const start = widget.querySelector<HTMLElement>('.swdr-page-start');
     if (start) {
-      pageStart = start.getBoundingClientRect().bottom - origin;
+      pageStart = (start.getBoundingClientRect().bottom - origin) / scale;
       starts.push(start.getBoundingClientRect().top - origin);
     }
   }

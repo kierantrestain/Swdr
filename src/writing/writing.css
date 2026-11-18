@@ -450,6 +450,9 @@
 }
 .swdr-sheet-a4 { --avail: 415.28pt; --right-edge: 523.28pt; }
 .swdr-writing .swdr-pm:focus-visible { outline: none; }
+/* Design-system resets style p/span directly; inside the manuscript everything inherits the
+   screenplay face, size and spacing. :where() keeps this below the element rules below. */
+.swdr-pm :where(*) { font: inherit; letter-spacing: inherit; color: inherit; margin-block: 0; }
 .swdr-pm {
   position: relative;
   padding: 72pt 0 0;
@@ -676,3 +679,32 @@
   .swdr-finder input { flex: 1 1 120px; width: auto; }
 }
 @media print { .swdr-writing .swdr-popover, .swdr-finder { display: none; } }
+
+/* Toolbar (Astryx controls) */
+.swdr-write-toolbar { gap: 4px; }
+.swdr-w-divider { width: 1px; height: 22px; margin: 0 4px; background: var(--color-border, var(--swdr-w-line)); }
+.swdr-w-element-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 158px;
+  height: 32px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--color-border, var(--swdr-w-line));
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-background-body, #fff);
+  color: var(--color-text-primary, var(--swdr-w-ink));
+  font: 600 13px/1 var(--font-family-body, system-ui, sans-serif);
+  cursor: pointer;
+}
+.swdr-w-element-trigger:hover:not(:disabled) { background: var(--color-background-secondary, #f4f3ef); }
+.swdr-w-element-trigger:focus-visible { outline: 2px solid var(--color-focus-ring, var(--swdr-w-accent)); outline-offset: 2px; }
+.swdr-w-element-trigger:disabled { opacity: .5; cursor: default; }
+.swdr-w-menu-key { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-secondary, var(--swdr-w-muted)); }
+.swdr-w-words { font-variant-numeric: tabular-nums; }
+.swdr-write-footer kbd, .swdr-w-link-quiet .astryx-kbd { font-size: 11px; }
+@media (max-width: 650px) {
+  .swdr-w-element-trigger { min-width: 0; padding-inline: 8px; }
+  .swdr-w-divider, .swdr-write-toolbar .swdr-w-current:first-child { display: none; }
+}
