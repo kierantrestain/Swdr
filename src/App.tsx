@@ -11,6 +11,7 @@ import { createProject, resolveSource, snapshotDocument, useWorkspace } from './
 import { AVView, OutlineView, WritingView } from './writing';
 import { ReviewWorkspace, TeamWorkspace } from './workspace/team-ui';
 import type { TeamRenderProps } from './workspace/team-ui';
+import { CreatorStudio } from './creator/CreatorStudio';
 import { ScriptTools } from './ScriptTools';
 import { ProductionView } from './production';
 import { EditorialView, SeriesView } from './story';
@@ -134,7 +135,7 @@ export function App() {
 
   function create(title: string, kind: ProjectKind, synopsis: string) {
     const project = saveProject(createProject(title, kind, synopsis));
-    openProject(project, kind === 'commercial' ? 'av' : kind === 'documentary' ? 'editorial' : 'write');
+    openProject(project, kind === 'creator' ? 'creator' : kind === 'commercial' ? 'av' : kind === 'documentary' ? 'editorial' : 'write');
   }
 
   const openSource = useCallback((source: SourceRef) => {
@@ -248,7 +249,7 @@ export function App() {
   function loadDemo() {
     const examples = createDemoProjects();
     examples.forEach(saveProject);
-    const series = examples[examples.length - 1];
+    const series = examples.find(project => project.kind === 'series') ?? examples[0];
     setRecent({ projectId: series.id, documentId: series.documents[0].id });
     writeJson(recentKey, { projectId: series.id, documentId: series.documents[0].id });
   }
@@ -317,6 +318,7 @@ export function App() {
   else if (route.view === 'av' && shared && hasRequestedRevision) page = <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} toolbarEnd={<ExportActions {...shared} />} />;
   else if (route.view === 'production' && shared) page = <ProductionView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} />;
   else if (route.view === 'story' && shared) page = <SeriesView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} />;
+  else if (route.view === 'creator' && shared) page = <CreatorStudio key={shared.project.id} {...shared} />;
   else if (route.view === 'editorial' && shared) page = <EditorialView key={shared.project.id} {...shared} tab={route.tab} onTabChange={setTab} onSelectDocument={selectDocument} />;
   else page = <div className="swdr-page" id="main-content"><div className="empty-block">
     <p>{!hasRequestedRevision ? 'This exact source revision is unavailable.' : route.projectId && !active ? 'The project is unavailable on this device.' : 'Open a manuscript from your projects.'}</p>

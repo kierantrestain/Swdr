@@ -601,6 +601,7 @@ strong > .production-cast-id { margin-inline-end: .4rem; }
 .production-day-band h3, .production-day-band h2 { color: inherit; }
 /* Strips are printed-paper colours, so their text keeps the light-paper inks in a dark shell too. */
 .production-strip { --ink: #1e2a33; --muted: #56636a; --accent: #1d5c78; --line: #c9cfcc; color: var(--ink); }
+.production-strip :is(.production-link, .production-source) { color: var(--accent); }
 .production-tab[aria-current],
 .production-button[aria-pressed='true'],
 .production-segmented button[aria-pressed='true'] {
@@ -812,3 +813,7 @@ strong > .production-cast-id { margin-inline-end: .4rem; }
 .production-spend small { font-size: var(--font-size-xs); }
 .production-line-open > span:first-child { flex: 1 1 auto; }
 .production-cost-result small { color: var(--color-text-secondary); font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
+/* Strip colours stay pale in every theme, so anything drawn on them keeps dark ink. */
+:is(tr, li)[class*='production-tone-'] { --ink: #1e2a33; --muted: #56636a; --accent: #1d5c78; color: var(--ink); }
+:is(tr, li)[class*='production-tone-'] :is(.production-link, .production-source, small) { color: var(--accent); }
+:is(tr, li)[class*='production-tone-'] small { color: var(--muted); }

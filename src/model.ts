@@ -1,4 +1,4 @@
-export const PROJECT_KINDS = ['film', 'series', 'stage', 'documentary', 'commercial'] as const;
+export const PROJECT_KINDS = ['film', 'series', 'stage', 'documentary', 'commercial', 'creator'] as const;
 export type ProjectKind = (typeof PROJECT_KINDS)[number];
 export const DOCUMENT_KINDS = ['screenplay', 'stageplay', 'av'] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];

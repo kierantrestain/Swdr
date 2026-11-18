@@ -1,6 +1,6 @@
 # SWDR
 
-**A private writing and production workspace for film, television, documentary, stage and commercials.**
+**A private writing and production workspace for film, television, documentary, stage, commercials and creator video.**
 
 SWDR takes a project from first draft to the shoot in one place. You write in an industry-formatted script editor, shape the story on beat boards and series maps, then break the script down, schedule it, budget it and issue call sheets. Every production document links back to the exact line of the script it came from.
 
@@ -25,6 +25,15 @@ It works offline in the browser, keeps your projects on your device by default, 
 - **Checks**: a formatting checker for headings without INT./EXT. or a time, cues without dialogue, stray parentheticals, transitions, duplicate scene numbers, overlong action and likely misspelt names. Each issue jumps to its line.
 - **Table read**: the script read aloud with a different voice for each character and a narrator for action, starting from any scene.
 - **Goals**: a daily word goal with progress in the toolbar, a streak and a 14-day chart.
+
+### Creator studio: social short-form and YouTube long-form
+- **Short-form** for TikTok, Instagram Reels, YouTube Shorts and LinkedIn, built on a **Hook → Cut → Convert** structure.
+- **YouTube long-form** with a cold open, intro, chapters, sponsor read, recap and end screen.
+- **Beat-by-beat scripting**: what you say, on-screen text and B-roll for every beat. Timing is estimated from your speaking pace (or set by hand) and shown on a timeline against the platform's target length.
+- **Checks per platform**: hook timing, maximum and target length, title and caption limits, YouTube chapter rules (at least three chapters, each at least 10 seconds) and the hashtag limit.
+- **Publishing pack**: thumbnail text, description or caption, hashtags and auto-generated YouTube chapters, ready to copy or export.
+- **Repurpose**: cut a short from any YouTube chapter in one click.
+- **Content slate** with status (Idea → Published) and publish dates, a full-screen **teleprompter** paced to your script, and **Send to AV script** for a printable two-column version.
 
 ### Story development
 - **Outline and beat board** by act, with beats linked to scenes.
@@ -76,7 +85,7 @@ npm ci
 npm run dev        # http://127.0.0.1:5173
 ```
 
-Choose **Load demo projects** on Home to explore a feature film, a TV series and a documentary.
+Choose **Load demo projects** on Home to explore a TV series, a documentary, a commercial and a creator channel.
 
 | Command | What it does |
 | --- | --- |
@@ -117,6 +126,7 @@ src/
   writing/       Script editor, pagination, outline, AV scripts, script tools
   story/         Series map, relationships, dossiers, editorial workspace
   production/    Breakdown, stripboard, call sheets, sides, reports, budget
+  creator/       Creator studio: short-form and YouTube planning, checks, publishing
   interchange/   FDX, Fountain, DOCX and PDF import and export
   workspace/     Local storage, accounts, team sync and sharing
   shell/         App frame, navigation, command palette, shortcuts

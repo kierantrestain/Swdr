@@ -7,7 +7,7 @@ export function createProject(title: string, kind: ProjectKind, synopsis = ''): 
   const episode = kind === 'series' ? { id: newId(), season: 1, number: 1, title: 'Episode 1', synopsis: '' } : undefined;
   const document = newDocument(
     episode?.title ?? cleanTitle,
-    kind === 'commercial' ? 'av' : kind === 'stage' ? 'stageplay' : 'screenplay',
+    kind === 'commercial' || kind === 'creator' ? 'av' : kind === 'stage' ? 'stageplay' : 'screenplay',
     episode?.id
   );
   return {

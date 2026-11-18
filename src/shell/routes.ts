@@ -2,7 +2,7 @@ import type { DocumentModel, Project } from '../model';
 export { episodeCode, orderedEpisodes } from '../story/source';
 
 /** Every view that belongs to an open project. */
-export type ProjectSection = 'project' | 'write' | 'outline' | 'av' | 'story' | 'editorial' | 'production' | 'import';
+export type ProjectSection = 'project' | 'write' | 'outline' | 'av' | 'story' | 'editorial' | 'production' | 'creator' | 'import';
 export type Destination = 'home' | 'team' | 'review' | ProjectSection;
 
 export interface Route {
@@ -18,7 +18,7 @@ export interface Route {
   tab?: string;
 }
 
-const projectViews = new Set<Destination>(['project', 'write', 'outline', 'av', 'story', 'editorial', 'production', 'import']);
+const projectViews = new Set<Destination>(['project', 'write', 'outline', 'av', 'story', 'editorial', 'production', 'creator', 'import']);
 
 export function parseRoute(location: Pick<Location, 'hash' | 'pathname'> = window.location): Route {
   const [path, query = ''] = location.hash.slice(1).split('?');
@@ -50,7 +50,7 @@ export function encodeRoute(route: Route): string {
 
 export const SECTION_LABELS: Record<Destination, string> = {
   home: 'Projects', team: 'Team', review: 'Review', project: 'Overview', write: 'Script', outline: 'Outline',
-  av: 'AV script', story: 'Series Intelligence', editorial: 'Editorial', production: 'Production', import: 'Import & files'
+  av: 'AV script', story: 'Series Intelligence', editorial: 'Editorial', production: 'Production', creator: 'Creator studio', import: 'Import & files'
 };
 
 /** Production panes, in the order the workspace shows them, with their URL slugs. */
@@ -76,15 +76,16 @@ export function documentForEpisode(project: Project, episodeId: string, prefer?:
 
 /** The view that opens a document for writing. */
 export function scriptView(project: Project, document?: DocumentModel): 'write' | 'av' {
-  return document?.kind === 'av' || (!document && project.kind === 'commercial') ? 'av' : 'write';
+  return document?.kind === 'av' || (!document && (project.kind === 'commercial' || project.kind === 'creator')) ? 'av' : 'write';
 }
 
 /** Which workspaces make sense for each kind of project. */
-export function sectionsFor(project: Project): { series: boolean; editorial: boolean; production: boolean } {
+export function sectionsFor(project: Project): { series: boolean; editorial: boolean; production: boolean; creator: boolean } {
   return {
     series: project.kind === 'series',
+    creator: project.kind === 'creator' || project.kind === 'commercial',
     editorial: project.kind === 'documentary' || project.kind === 'commercial',
-    production: project.kind !== 'commercial'
+    production: project.kind !== 'commercial' && project.kind !== 'creator'
   };
 }
 

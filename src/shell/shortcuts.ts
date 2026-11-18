@@ -18,6 +18,7 @@ export const GO_KEYS: { key: string; label: string; target: string }[] = [
   { key: 'o', label: 'Outline', target: 'outline' },
   { key: 'i', label: 'Series Intelligence', target: 'story' },
   { key: 'e', label: 'Editorial', target: 'editorial' },
+  { key: 'y', label: 'Creator studio', target: 'creator' },
   { key: 's', label: 'Production schedule', target: 'production-schedule' },
   { key: 'b', label: 'Breakdown', target: 'production-breakdown' },
   { key: 'v', label: 'Shots & storyboard', target: 'production-shots' },

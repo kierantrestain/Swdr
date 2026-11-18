@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } f
 import { Text } from '@astryxdesign/core/Text';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { TextInput } from '@astryxdesign/core/TextInput';
-import { ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Clapperboard, FileText, FolderOpen, Mic, Plus, Search, ShieldCheck, Sparkles, Theater, Tv } from 'lucide-react';
+import { ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Clapperboard, FileText, FolderOpen, Mic, Plus, Search, ShieldCheck, Sparkles, Theater, Tv, Video } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { PROJECT_KINDS } from './model';
@@ -18,7 +18,7 @@ import type { DocumentModel, Project, ProjectKind } from './model';
 import { episodeLabel } from './demo';
 
 export const PROJECT_LABELS: Record<ProjectKind, string> = {
-  film: 'Film', series: 'Television', stage: 'Stage', documentary: 'Documentary', commercial: 'Commercial / AV'
+  film: 'Film', series: 'Television', stage: 'Stage', documentary: 'Documentary', commercial: 'Commercial / AV', creator: 'Social & YouTube'
 };
 
 const TEMPLATES: Record<ProjectKind, string> = {
@@ -26,11 +26,12 @@ const TEMPLATES: Record<ProjectKind, string> = {
   series: 'Episodes, outline, screenplay and a connected story bible.',
   stage: 'A stage manuscript with acts, cues and dialogue.',
   documentary: 'An episode plan with segments, sources and production outputs.',
-  commercial: 'Timed video and audio for a spot or branded brief.'
+  commercial: 'Timed video and audio for a spot or branded brief.',
+  creator: 'Shorts, Reels, TikTok and YouTube videos: hooks, beats, chapters and a publishing pack.'
 };
 
 const KIND_ICONS: Record<ProjectKind, typeof FileText> = {
-  film: Clapperboard, series: Tv, stage: Theater, documentary: Mic, commercial: FileText
+  film: Clapperboard, series: Tv, stage: Theater, documentary: Mic, commercial: FileText, creator: Video
 };
 
 type LibraryTab = 'recent' | 'all' | 'templates' | 'archive';
@@ -208,7 +209,7 @@ export function Home({ projects, recent, open, resume, create, importScript, loa
         </Table>
       </div> : <div className="empty-frame">
         <EmptyState icon={<FolderOpen size={28} aria-hidden="true" />} title={query ? 'No matching projects' : 'Your workspace is ready'}
-          description={query ? 'Try another title or format.' : 'Create a project, import a script or explore three demo productions.'}
+          description={query ? 'Try another title or format.' : 'Create a project, import a script or explore four demo projects.'}
           actions={!query && <Button label="Load demo projects" icon={<Sparkles size={15} aria-hidden="true" />} onClick={loadDemo} />} />
       </div>}
     </section>

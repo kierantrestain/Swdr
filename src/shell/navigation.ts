@@ -1,4 +1,4 @@
-import { BookOpen, CalendarRange, Camera, ClipboardList, Clapperboard, FileStack, FileText, FolderInput, LayoutGrid, LayoutDashboard, Mic, PiggyBank, ScrollText, Users } from 'lucide-react';
+import { BookOpen, CalendarRange, Camera, ClipboardList, Clapperboard, FileStack, FileText, FolderInput, LayoutGrid, LayoutDashboard, Mic, PiggyBank, ScrollText, Users, Video } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 import type { DocumentModel, Project } from '../model';
 import { getProductionPlan, scheduleConflicts } from '../production/model';
@@ -36,6 +36,7 @@ export function projectNavigation(project: Project, document: DocumentModel | un
     { id: 'outline', label: 'Outline', key: 'o', icon: icon(LayoutGrid), route: { ...base, view: 'outline' }, count: document?.beats.length || undefined }
   ];
   const development: NavEntry[] = [
+    ...(sections.creator ? [{ id: 'creator', label: 'Creator studio', key: 'y', icon: icon(Video), route: { ...base, view: 'creator' as Destination }, count: Array.isArray((project.modules.creator as { pieces?: unknown[] } | undefined)?.pieces) ? (project.modules.creator as { pieces: unknown[] }).pieces.length || undefined : undefined }] : []),
     ...(sections.series ? [{ id: 'story', label: 'Series Intelligence', key: 'i', icon: icon(BookOpen), route: { ...base, view: 'story' as Destination } }] : []),
     ...(sections.editorial ? [{ id: 'editorial', label: project.kind === 'commercial' ? 'Brief & editorial' : 'Editorial', key: 'e', icon: icon(Mic), route: { ...base, view: 'editorial' as Destination } }] : [])
   ];

@@ -49,6 +49,15 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 | Two-column AV scripts with timing | Celtx AV format (Bundle), OpenDraft AV (source) | ✅ |
 | Research, sources, claim verification, host briefs, rundowns | (SWDR original) | ✅ Claim board, sources, segments, issued outputs |
 
+## 3b. Creator video
+
+| Capability | Reference | SWDR |
+| --- | --- | --- |
+| Short-form scripts for TikTok, Reels, Shorts, LinkedIn | (SWDR original) | ✅ Hook → Cut → Convert beats with spoken, on-screen and B-roll lines; timing from speaking pace |
+| YouTube long-form with chapters | (SWDR original) | ✅ Cold open, intro, chapters, sponsor, recap, end screen; chapters generated for the description |
+| Platform checks | (SWDR original) | ✅ Hook timing, target and maximum length, title and caption limits, chapter rules, hashtag limit |
+| Publishing pack, repurposing, teleprompter | (SWDR original) | ✅ Copy or export; cut a short from a chapter; paced full-screen teleprompter; send to AV script |
+
 ## 4. Production
 
 | Capability | Reference | SWDR |

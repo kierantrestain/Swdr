@@ -3,6 +3,7 @@ import type { DocumentModel, Episode, Project } from './model';
 import { createProject } from './workspace';
 import { seedProduction } from './production';
 import { seedEditorial, seedSeries } from './story';
+import { cutShort, newPiece, withCreator } from './creator/model';
 
 const episodeNames = [
   'The Last Boat', 'Crossing', 'The Original', 'Doubt', 'The Service Road', 'First Light',
@@ -81,7 +82,35 @@ export function createDemoProjects(): Project[] {
     id: newId(), durationSeconds: 60, video: `Camera cue ${index + 1}`, audio: `Minute ${index + 1}`
   }));
   commercial.documents.push(long);
-  return [seedEditorial(commercial), seedEditorial(factual), seedSeries(seedProduction(series, selected.id))];
+  return [seedEditorial(commercial), seedEditorial(factual), seedSeries(seedProduction(series, selected.id)), creatorDemo()];
+}
+
+function creatorDemo(): Project {
+  const channel = createProject('Frame by Frame', 'creator', 'A filmmaking channel: one YouTube breakdown a week, cut into shorts for TikTok, Reels and Shorts.');
+  const video = newPiece('youtube', 'How a 3-person crew shot a car chase for £500');
+  video.status = 'editing';
+  video.thumbnailText = '£500 CAR CHASE';
+  video.hashtags = '#filmmaking #lowbudget #indiefilm';
+  video.description = 'We shot a full car chase with three people, two cars and one weekend. Here is every trick, the kit list and what we would never do again.';
+  // [label, spoken, on screen, b-roll, seconds on screen]
+  const beats: Array<[string, string, string, string, number]> = [
+    ['Cold open', 'This chase cost less than your phone. And nobody watching it can tell.', 'SHOT IN ONE WEEKEND', 'Fastest 3 seconds of the chase, hard cut to black', 6],
+    ['Intro', 'By the end of this video you will know how we planned it, rigged it and cut it — and the one shot that nearly sank the whole thing.', '', 'Crew on location, wide', 40],
+    ['Planning the route', 'We storyboarded every shot on index cards and drove the route twice at the same time of day. Every corner got a number, and every number got a camera position. That map is the reason we finished on time.', 'THE ROUTE MAP', 'Index cards on the bonnet, drone of the route', 210],
+    ['Rigging the car', 'A suction mount, a ratchet strap and a borrowed estate car gave us six angles. We never drove above thirty — the speed is all in the shutter and the edit.', 'SIX ANGLES, ONE CAR', 'Rig close-ups, behind the scenes', 240],
+    ['Cutting the chase', 'Short shots, sound effects doing the heavy lifting, and one long take in the middle so the audience can breathe before the crash.', 'CUT FAST, THEN HOLD', 'Timeline screen recording', 225],
+    ['Recap', 'Plan the route, fake the speed, let sound sell it.', '', '', 30],
+    ['Outro & end screen', 'If you want the shot list we used, the next video breaks down every single setup.', 'NEXT: THE SHOT LIST', 'End screen: next video and subscribe', 20]
+  ];
+  video.beats = video.beats.map((beat, index) => {
+    const [label, spoken, onScreen, broll, seconds] = beats[index];
+    return { ...beat, label, spoken, onScreen, broll, seconds };
+  });
+  const short = cutShort(video, video.beats[3].id, 'tiktok');
+  short.beats = short.beats.map(beat => ({ ...beat, seconds: beat.kind === 'hook' ? 2 : beat.kind === 'cut' ? 24 : 4 }));
+  short.status = 'scheduled';
+  short.title = 'The £0 trick that makes a slow car look fast';
+  return withCreator(channel, { pieces: [video, short] });
 }
 
 export function episodeLabel(episode: Episode | undefined): string {

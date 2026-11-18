@@ -39,7 +39,7 @@ function NewDocumentDialog({ project, form, close, submit }: {
 }) {
   const [title, setTitle] = useState('');
   const [season, setSeason] = useState(Math.max(1, ...project.episodes.map(episode => episode.season)));
-  const [kind, setKind] = useState<DocumentKind>(project.kind === 'commercial' ? 'av' : project.kind === 'stage' ? 'stageplay' : 'screenplay');
+  const [kind, setKind] = useState<DocumentKind>(project.kind === 'commercial' || project.kind === 'creator' ? 'av' : project.kind === 'stage' ? 'stageplay' : 'screenplay');
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (title.trim()) submit(title.trim(), kind, Math.max(1, season));
