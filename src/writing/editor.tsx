@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import {
-  Check, ChevronDown, CircleCheck, MessageSquarePlus, NotebookPen, Columns2, Expand, FileText, List, MessageSquareText, Printer, Redo2, Replace, Search, Undo2, X
+  Check, ChevronDown, CircleCheck, MessageSquarePlus, NotebookPen, Columns2, Expand, List, MessageSquareText, Printer, Redo2, Replace, Search, Undo2, X
 } from 'lucide-react';
 import { baseKeymap, toggleMark } from 'prosemirror-commands';
 import { closeHistory, history, redo, redoDepth, undo, undoDepth } from 'prosemirror-history';
@@ -33,6 +33,7 @@ export interface WritingProps extends WorkspaceViewProps {
   onFocusChange?: (focus: boolean) => void;
   toolbarEnd?: ReactNode;
   saveLabel?: string;
+  /** Kept for callers; the project sidebar now carries Outline. */
   onOpenOutline?: () => void;
 }
 
@@ -61,7 +62,7 @@ interface Popover {
 }
 
 export function WritingView(props: WritingProps) {
-  const { document, onDocumentChange, onFocusChange, onOpenOutline, saveLabel, toolbarEnd, readOnly, target } = props;
+  const { document, onDocumentChange, onFocusChange, saveLabel, toolbarEnd, readOnly, target } = props;
   const deferred = useDeferredValue(document);
   const layout = useMemo(() => paginateDocument(deferred, { includeNotes: true }), [deferred]);
   const scenes = useMemo(() => sceneList(deferred), [deferred]);
@@ -98,7 +99,7 @@ export function WritingView(props: WritingProps) {
   const [zoom, setZoomState] = useState(readZoom);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
-  const words = useMemo(() => deferred.blocks.reduce((total, block) => block.kind === 'note' ? total : total + (block.text.match(/[\p{L}\p{N}'’-]+/gu)?.length ?? 0), 0), [deferred.blocks]);
+  const words = useMemo(() => deferred.blocks.reduce((total, block) => total + blockWords(block), 0), [deferred.blocks]);
   const compactRef = useRef(compact);
   compactRef.current = compact;
 
@@ -352,9 +353,15 @@ export function WritingView(props: WritingProps) {
   }, [document.comments, activeComment]);
 
   // Page breaks follow the (deferred) layout; widgets map through intermediate edits.
+  const breakSignature = useRef('');
   useEffect(() => {
     const editor = view.current;
     if (!editor) return;
+    // Most keystrokes move no page break; then the mapped widgets are already right and
+    // replacing them would make ProseMirror diff every widget in the script.
+    const signature = pageSignature(layout.pages);
+    if (signature === breakSignature.current) return;
+    breakSignature.current = signature;
     editor.dispatch(editor.state.tr.setMeta(pagesKey, pageDecorations(editor.state.doc, layout.pages)).setMeta('swdr-external', true).setMeta('addToHistory', false));
   }, [layout.pages, compact]);
 
@@ -431,10 +438,14 @@ export function WritingView(props: WritingProps) {
     }
   }
 
+  // Ordering needs the block list only while the Comments panel is open; elsewhere the count is enough.
+  const commentsOpen = drawer === 'comments';
   const orderedComments = useMemo(() => {
+    const comments = document.comments ?? [];
+    if (!commentsOpen || comments.length < 2) return comments;
     const order = new Map(document.blocks.map((block, index) => [block.id, index]));
-    return (document.comments ?? []).slice().sort((a, b) => (order.get(a.blockId) ?? 1e9) - (order.get(b.blockId) ?? 1e9) || a.from - b.from);
-  }, [document.blocks, document.comments]);
+    return comments.slice().sort((a, b) => (order.get(a.blockId) ?? 1e9) - (order.get(b.blockId) ?? 1e9) || a.from - b.from);
+  }, [commentsOpen, document.blocks, document.comments]);
   const openComments = orderedComments.filter(comment => !comment.resolved);
 
   // ------------------------------------------------------------ navigation
@@ -577,15 +588,29 @@ export function WritingView(props: WritingProps) {
   }
 
   const activeBlock = document.blocks.find(block => block.id === active.id) ?? document.blocks[0];
+  // Menu item trees are rebuilt only when what they show changes, not on every keystroke.
+  const changeKindRef = useRef(changeKind);
+  changeKindRef.current = changeKind;
+  const setZoomRef = useRef(setZoom);
+  setZoomRef.current = setZoom;
+  const elementItems = useMemo(() => [{
+    type: 'section' as const, title: 'Tab to switch', id: 'elements',
+    items: ELEMENT_ORDER.map(kind => ({
+      id: kind, label: ELEMENTS[kind].label,
+      endContent: <span className="swdr-w-menu-key">{kind === active.kind && <Check size={14} aria-label="Current element" />}<Kbd keys={`mod+alt+${ELEMENTS[kind].digit}`} /></span>,
+      onClick: () => { changeKindRef.current(kind); requestAnimationFrame(() => view.current?.focus()); }
+    }))
+  }], [active.kind]);
+  const zoomItems = useMemo(() => ZOOM_LEVELS.map(level => ({
+    id: String(level), label: `${level}%`, endContent: level === zoom ? <Check size={14} aria-label="Current zoom" /> : undefined, onClick: () => setZoomRef.current(level)
+  })), [zoom]);
   const styles = { '--swdr-paper-width': `${geometry.width * PT}px` } as CSSProperties;
   const heading = document.kind === 'stageplay' ? 'Stageplay editor' : 'Manuscript editor';
 
   return (
     <section className={`swdr-writing ${focused ? 'swdr-writing-focus' : ''}`} style={styles} onKeyDown={shellKeys} aria-label={heading}>
       {!focused && <div className="swdr-write-toolbar" ref={toolbar} role="toolbar" aria-label="Writing tools">
-        <span className="swdr-w-current" aria-current="page"><FileText size={15} aria-hidden="true" /> Write</span>
-        {onOpenOutline && <Button label="Outline" variant="ghost" size="sm" onClick={onOpenOutline} />}
-        <span className="swdr-w-divider" aria-hidden="true" />
+        <h1 className="swdr-sr">{document.title}</h1>
         <DropdownMenu
           menuWidth={248}
           menuMaxHeight={480}
@@ -595,14 +620,7 @@ export function WritingView(props: WritingProps) {
             aria-label={`Screenplay element: ${ELEMENTS[active.kind].label}`} disabled={readOnly}>
             <span>{ELEMENTS[active.kind].label}</span><ChevronDown size={14} aria-hidden="true" />
           </button>}
-          items={[{
-            type: 'section', title: 'Tab to switch', id: 'elements',
-            items: ELEMENT_ORDER.map(kind => ({
-              id: kind, label: ELEMENTS[kind].label,
-              endContent: <span className="swdr-w-menu-key">{kind === active.kind && <Check size={14} aria-label="Current element" />}<Kbd keys={`mod+alt+${ELEMENTS[kind].digit}`} /></span>,
-              onClick: () => { changeKind(kind); requestAnimationFrame(() => view.current?.focus()); }
-            }))
-          }]}
+          items={elementItems}
         />
         <IconButton label="Undo" tooltip="Undo (Ctrl+Z)" icon={<Undo2 size={16} />} variant="ghost" size="sm" isDisabled={readOnly || !depth.undo} onClick={() => runHistory('undo')} />
         <IconButton label="Redo" tooltip="Redo (Ctrl+Shift+Z)" icon={<Redo2 size={16} />} variant="ghost" size="sm" isDisabled={readOnly || !depth.redo} onClick={() => runHistory('redo')} />
@@ -617,7 +635,7 @@ export function WritingView(props: WritingProps) {
         <DropdownMenu
           menuWidth={120}
           button={{ label: `${zoom}%`, variant: 'ghost', size: 'sm', tooltip: 'Zoom' }}
-          items={ZOOM_LEVELS.map(level => ({ id: String(level), label: `${level}%`, endContent: level === zoom ? <Check size={14} aria-label="Current zoom" /> : undefined, onClick: () => setZoom(level) }))}
+          items={zoomItems}
         />
         <span className="swdr-write-save"><CircleCheck size={14} aria-hidden="true" /> {saveLabel || 'Local draft'}</span>
         <IconButton label="Find and replace" tooltip="Find and replace (Ctrl+F)" icon={<Search size={16} />} variant="ghost" size="sm"
@@ -759,6 +777,27 @@ function reanchor(comments: ScriptComment[] | undefined, anchors: Map<string, { 
     return { ...comment, ...anchor, detached: undefined };
   });
   return changed ? next : comments;
+}
+
+const wordCache = new WeakMap<Block, number>();
+/** Words in a block, cached by block identity (unchanged blocks keep their object). */
+function blockWords(block: Block): number {
+  if (block.kind === 'note') return 0;
+  let count = wordCache.get(block);
+  if (count === undefined) {
+    count = block.text.match(/[\p{L}\p{N}'’-]+/gu)?.length ?? 0;
+    wordCache.set(block, count);
+  }
+  return count;
+}
+
+/** Where each page starts (block, line text, continuation); equal signatures mean equal breaks. */
+function pageSignature(pages: ReturnType<typeof paginateDocument>['pages']): string {
+  return pages.filter(page => !page.titlePage).map(page => {
+    const first = page.lines.find(line => line.blockId && line.decoration !== 'scene-number' && line.decoration !== 'page-number');
+    const more = page.lines.some(line => line.decoration === 'continuation' && line.kind === 'parenthetical');
+    return `${page.label}|${first?.blockId}|${first?.decoration ?? ''}|${first?.text ?? ''}|${more ? 'm' : ''}`;
+  }).join('\n');
 }
 
 function activeSceneOf(blocks: Block[], blockId: string): string | undefined {

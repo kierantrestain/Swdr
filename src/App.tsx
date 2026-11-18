@@ -321,8 +321,7 @@ export function App() {
   else page = <div className="swdr-page" id="main-content"><div className="empty-block">
     <p>{!hasRequestedRevision ? 'This exact source revision is unavailable.' : route.projectId && !active ? 'The project is unavailable on this device.' : 'Open a manuscript from your projects.'}</p>
   </div></div>;
-  // The manuscript is paper: it keeps the light appearance inside a dark shell.
-  if (writing) page = <Theme theme={themes[defaultThemeSlug]} mode="light">{page}</Theme>;
+  // The manuscript stays paper-white in every appearance (writing.css); its chrome follows the theme.
 
   return <Theme theme={themes[defaultThemeSlug]} mode={mode}>
     <div className={`app${focus ? ' is-focused' : ''}`} data-view={route.view}>

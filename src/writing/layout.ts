@@ -90,10 +90,29 @@ export function manuscriptText(block: Block): string {
   return isUppercaseElement(block.kind) ? block.text.toUpperCase() : block.text;
 }
 
+const SURROGATE = /[\uD800-\uDFFF]/;
+const SPACE = /\s/u;
+
 export function wrapManuscriptText(text: string, characters: number): string[] {
   const max = Math.max(1, Math.floor(characters));
   const lines: string[] = [];
   for (const paragraph of text.replace(/\r\n?/g, '\n').replace(/\t/g, '    ').split('\n')) {
+    if (!SURROGATE.test(paragraph)) {
+      // Fast path: without surrogate pairs, code units are characters, so string slicing
+      // gives the same lines as the array path below without allocating per character.
+      let rest = paragraph;
+      while (rest.length > max) {
+        let breakAt = max;
+        while (breakAt > 0 && !SPACE.test(rest[breakAt])) breakAt--;
+        const length = breakAt > 0 ? breakAt : max;
+        lines.push(rest.slice(0, length).trimEnd());
+        let next = length;
+        while (next < rest.length && SPACE.test(rest[next])) next++;
+        rest = rest.slice(next);
+      }
+      lines.push(rest.trimEnd());
+      continue;
+    }
     let rest = Array.from(paragraph);
     while (rest.length > max) {
       let breakAt = max;

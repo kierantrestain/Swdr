@@ -22,6 +22,9 @@ function toProjects(records: Map<string, ProjectRecord>): Project[] {
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
+/** Delay before writing a burst of edits to IndexedDB. */
+const COALESCE_MS = 180;
+
 export function useWorkspace() {
   const records = useRef(new Map<string, ProjectRecord>());
   const queues = useRef(new Map<string, SaveQueue>());
@@ -63,6 +66,9 @@ export function useWorkspace() {
     if (queue.active) return;
     queue.active = true;
     syncStatus();
+    // Coalesce a burst of edits (typing) into one write. Every change is already in the
+    // synchronous localStorage journal, which load replays if the page closes first.
+    await new Promise(resolve => setTimeout(resolve, COALESCE_MS));
     while (queue.queued) {
       const writing = queue.queued;
       queue.queued = undefined;

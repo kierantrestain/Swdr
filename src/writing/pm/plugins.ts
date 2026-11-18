@@ -240,37 +240,97 @@ export interface PresentationOptions {
   sceneNumbers: () => boolean;
 }
 
+export const presentationKey = new PluginKey<{ set: DecorationSet; scenes: number }>('swdr-presentation');
+
+/** Scene numbers, revision marks and alternate markers for one element (no caret state). */
+function elementDecoration(node: PMNode, pos: number, sceneNumber: string | null): Decoration | null {
+  const attrs: Record<string, string> = {};
+  if (sceneNumber) attrs['data-scene-number'] = sceneNumber;
+  if (node.attrs.revision) attrs['data-revision'] = String(node.attrs.revision).toLowerCase();
+  const alternates = (node.attrs.alternate as string[] | null)?.filter(Boolean).length;
+  if (alternates && node.content.size) {
+    attrs['data-alternates'] = String(alternates);
+    attrs.title = `${alternates} alternate${alternates === 1 ? '' : 's'} · Ctrl+Alt+↑/↓ to cycle`;
+  }
+  return Object.keys(attrs).length ? Decoration.node(pos, pos + node.nodeSize, attrs) : null;
+}
+
+function buildPresentation(doc: PMNode, numbering: boolean): { set: DecorationSet; scenes: number } {
+  const decorations: Decoration[] = [];
+  let scenes = 0;
+  doc.descendants((node, pos) => {
+    if (node.type !== schema.nodes.element) return true;
+    const scene = node.attrs.kind === 'scene' ? String(node.attrs.sceneNumber || ++scenes) : null;
+    if (node.attrs.kind === 'scene' && node.attrs.sceneNumber) scenes++;
+    const decoration = elementDecoration(node, pos, numbering ? scene : null);
+    if (decoration) decorations.push(decoration);
+    return false;
+  });
+  return { set: DecorationSet.create(doc, decorations), scenes };
+}
+
+function countScenes(doc: PMNode): number {
+  let scenes = 0;
+  doc.descendants(node => {
+    if (node.type !== schema.nodes.element) return true;
+    if (node.attrs.kind === 'scene') scenes++;
+    return false;
+  });
+  return scenes;
+}
+
 export function presentationPlugin(options: PresentationOptions): Plugin {
   return new Plugin({
+    key: presentationKey,
+    state: {
+      init: (_config, state) => buildPresentation(state.doc, options.sceneNumbers()),
+      apply(tr, value, _old, state) {
+        if (tr.getMeta(presentationKey) || tr.getMeta('swdr-external')) return buildPresentation(state.doc, options.sceneNumbers());
+        if (!tr.docChanged) return value;
+        // A changed scene count renumbers scenes: rebuild. Otherwise refresh only touched elements.
+        const scenes = countScenes(state.doc);
+        if (scenes !== value.scenes) return buildPresentation(state.doc, options.sceneNumbers());
+        const ranges: [number, number][] = [];
+        tr.mapping.maps.forEach((map, index) => map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+          const rest = tr.mapping.slice(index + 1);
+          ranges.push([rest.map(newStart, -1), rest.map(newEnd, 1)]);
+        }));
+        let set = value.set.map(tr.mapping, tr.doc);
+        const numbering = options.sceneNumbers();
+        for (const [from, to] of ranges) {
+          state.doc.nodesBetween(Math.max(0, from - 1), Math.min(state.doc.content.size, to + 1), (node, pos) => {
+            if (node.type !== schema.nodes.element) return true;
+            set = set.remove(set.find(pos, pos + node.nodeSize).filter(decoration => decoration.from === pos));
+            let scene: string | null = null;
+            if (numbering && node.attrs.kind === 'scene') {
+              let index = 0;
+              state.doc.nodesBetween(0, pos + 1, (other, at) => {
+                if (other.type !== schema.nodes.element) return true;
+                if (other.attrs.kind === 'scene' && at <= pos) index++;
+                return false;
+              });
+              scene = node.attrs.sceneNumber || String(index);
+            }
+            const decoration = elementDecoration(node, pos, scene);
+            if (decoration) set = set.add(state.doc, [decoration]);
+            return false;
+          });
+        }
+        return { set, scenes };
+      }
+    },
     props: {
       decorations(state) {
-        const decorations: Decoration[] = [];
-        const numbering = options.sceneNumbers();
-        let scene = 0;
+        const value = presentationKey.getState(state);
+        if (!value) return null;
+        // The empty-line placeholder depends on the caret, so it is added per render.
         const caret = state.selection.empty ? currentElement(state.selection.$from) : null;
-        state.doc.descendants((node, pos) => {
-          if (node.type !== schema.nodes.element) return true;
-          const attrs: Record<string, string> = {};
-          if (node.attrs.kind === 'scene') {
-            scene++;
-            if (numbering) attrs['data-scene-number'] = node.attrs.sceneNumber || String(scene);
-          }
-          if (node.attrs.revision) {
-            attrs['data-revision'] = String(node.attrs.revision).toLowerCase();
-          }
-          const alternates = (node.attrs.alternate as string[] | null)?.filter(Boolean).length;
-          if (alternates && node.content.size) {
-            attrs['data-alternates'] = String(alternates);
-            attrs.title = `${alternates} alternate${alternates === 1 ? '' : 's'} · Ctrl+Alt+↑/↓ to cycle`;
-          }
-          if (!node.content.size && (caret?.pos === pos || state.doc.childCount === 1)) {
-            attrs['data-placeholder'] = options.placeholderFor(node.attrs.kind);
-            attrs.class = 'swdr-el-empty';
-          }
-          if (Object.keys(attrs).length) decorations.push(Decoration.node(pos, pos + node.nodeSize, attrs));
-          return false;
-        });
-        return DecorationSet.create(state.doc, decorations);
+        const lone = state.doc.childCount === 1 ? state.doc.firstChild : null;
+        const target = caret && !caret.node.content.size ? caret : lone && lone.type === schema.nodes.element && !lone.content.size ? { node: lone, pos: 0 } : null;
+        if (!target) return value.set;
+        return value.set.add(state.doc, [Decoration.node(target.pos, target.pos + target.node.nodeSize, {
+          'data-placeholder': options.placeholderFor(target.node.attrs.kind), class: 'swdr-el-empty'
+        }, { placeholder: true })]);
       }
     }
   });

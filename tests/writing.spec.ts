@@ -347,7 +347,7 @@ test('captures the writing workspace on desktop, tablet and phone', async ({ pag
 test('creates a scene from an outline beat and opens the exact linked heading', async ({ page }, testInfo) => {
   await loadDemo(page);
   await page.getByRole('button', { name: 'Resume screenplay' }).click();
-  await page.getByRole('button', { name: 'Outline', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Outline', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Episode outline', exact: true })).toBeVisible();
   await expect(page.getByText('The paper ticket', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('06-outline-1440x900.png'), animations: 'disabled' });
