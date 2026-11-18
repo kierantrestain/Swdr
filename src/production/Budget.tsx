@@ -1,15 +1,19 @@
 import { ProgressBar } from '@astryxdesign/core/ProgressBar';
 import { Table, TableBody, TableCell, TableFooter, TableHeader, TableHeaderCell, TableRow } from '@astryxdesign/core/Table';
-import { Download, Pencil, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, Eye, EyeOff, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { newId } from '../model';
+import { Dialog } from './components';
 import type { PaneProps } from './components';
 import { BUDGET_GROUPS, amountLabel, budgetCategory, budgetCsv, budgetTopSheet } from './budget';
 import { linePlanned, moneyLabel } from './model';
 import type { BudgetLine } from './model';
 
-function asPence(raw: FormDataEntryValue | null): number {
-  const value = String(raw ?? '').trim();
+const UNITS = ['days', 'weeks', 'hours', 'items', 'flat', 'allow'];
+
+function asPence(raw: string): number {
+  const value = raw.trim();
   if (!/^\d+(\.\d{1,2})?$/.test(value)) return NaN;
   const [pounds, decimals = ''] = value.split('.');
   return Number(pounds) * 100 + Number(decimals.padEnd(2, '0'));
@@ -19,84 +23,127 @@ function share(part: number, whole: number): string {
   return whole > 0 && part > 0 ? `${Math.round(part / whole * 1000) / 10}%` : '—';
 }
 
+function lineFormula(line: BudgetLine): string {
+  const units = line.units ?? 1;
+  return `${line.quantity} × £${amountLabel(line.unitCostPence)}${units !== 1 || line.unitLabel ? ` × ${units}${line.unitLabel ? ` ${line.unitLabel}` : ''}` : ''}`;
+}
+
+/** A thin bar showing how much of an account's plan has been spent. */
+function Spend({ planned, actual }: { planned: number; actual: number }) {
+  if (!planned && !actual) return <span className="production-muted">—</span>;
+  const percent = planned > 0 ? Math.round(actual / planned * 100) : 100;
+  const tone = percent > 100 ? 'over' : percent > 85 ? 'near' : 'ok';
+  return <span className={`production-spend production-spend-${tone}`} title={`${percent}% of planned spent`}>
+    <span className="production-spend-track" aria-hidden="true"><span style={{ width: `${Math.min(100, percent)}%` }} /></span>
+    <small>{percent}%</small>
+  </span>;
+}
+
+type Editing = { line?: BudgetLine; category: string };
+
 export function Budget({ project, plan, source, update, readOnly, issueOutput }: PaneProps) {
-  const [editing, setEditing] = useState<BudgetLine>();
-  const [category, setCategory] = useState('');
-  const [error, setError] = useState('');
+  const [editing, setEditing] = useState<Editing>();
+  const [hideEmpty, setHideEmpty] = useState(false);
+  const [collapsed, setCollapsed] = useState<string[]>([]);
   const sheet = budgetTopSheet(plan);
   const spent = sheet.total.planned > 0 ? Math.min(100, Math.round(sheet.total.actual / sheet.total.planned * 100)) : 0;
   const over = sheet.total.remaining < 0;
   const used = sheet.groups.reduce((count, group) => count + group.rows.filter(row => row.lines.length).length, 0);
   const categories = sheet.groups.reduce((count, group) => count + group.rows.length, 0);
+  const overAccounts = sheet.groups.flatMap(group => group.rows).filter(row => row.actual > row.planned).length;
 
-  function startEdit(line?: BudgetLine, preset = '') {
-    setEditing(line);
-    setCategory(line ? budgetCategory(line.category)?.name ?? line.category : preset);
-    setError('');
-  }
+  const toggleGroup = (name: string) => setCollapsed(list => list.includes(name) ? list.filter(item => item !== name) : [...list, name]);
 
   return <div className="production-budget">
     <section className="production-card production-budget-main" aria-label="Budget top sheet">
       <div className="production-section-heading">
         <div><h3>Budget top sheet</h3>
           <p className="production-muted">{plan.budget.length} cost {plan.budget.length === 1 ? 'line' : 'lines'} across {used} of {categories} accounts · GBP</p></div>
-        {!readOnly && <button type="button" className="production-button" onClick={() =>
-          issueOutput('budget', 'swdr-cost-report.csv', budgetCsv(project, plan))
-        }><Download size={16} /> Export CSV</button>}
+        <div className="production-actions">
+          <button type="button" className="production-button" aria-pressed={hideEmpty} onClick={() => setHideEmpty(value => !value)}>
+            {hideEmpty ? <Eye size={16} aria-hidden="true" /> : <EyeOff size={16} aria-hidden="true" />} {hideEmpty ? 'Show all accounts' : 'Hide empty accounts'}
+          </button>
+          {!readOnly && <button type="button" className="production-button" onClick={() =>
+            issueOutput('budget', 'swdr-cost-report.csv', budgetCsv(project, plan))
+          }><Download size={16} aria-hidden="true" /> Export CSV</button>}
+          {!readOnly && <button type="button" className="production-button production-primary" onClick={() => setEditing({ category: '' })}>
+            <Plus size={16} aria-hidden="true" /> New cost line</button>}
+        </div>
       </div>
-      <div className="production-metrics">
+      <div className="production-metrics production-metrics-4">
         <div><small>Total budget</small><strong>{moneyLabel(sheet.total.planned)}</strong><span>incl. {sheet.contingencyPercent}% contingency</span></div>
         <div><small>Actual spend</small><strong>{moneyLabel(sheet.total.actual)}</strong><span>{spent}% of budget</span></div>
-        <div className={over ? 'production-metric-over' : undefined}><small>{over ? 'Over budget' : 'Remaining'}</small><strong>{moneyLabel(sheet.total.remaining)}</strong>
-          <span>{over ? 'Review actuals' : 'Planned less actual'}</span></div>
+        <div className={over ? 'production-metric-over' : undefined}><small>{over ? 'Over budget' : 'Remaining'}</small><strong>{moneyLabel(Math.abs(sheet.total.remaining))}</strong>
+          <span>{over ? 'Actuals exceed the plan' : 'Planned less actual'}</span></div>
+        <div className={overAccounts ? 'production-metric-over' : undefined}><small>Accounts over</small><strong>{overAccounts}</strong>
+          <span>{overAccounts ? 'Check the red rows below' : 'Every account within plan'}</span></div>
       </div>
       <ProgressBar label="Budget spent" isLabelHidden value={spent} variant={over ? 'error' : spent > 85 ? 'warning' : 'accent'} />
-      <div className="production-table-scroll"><Table className="production-grid-table" density="compact" dividers="rows">
+      {!readOnly && !plan.budget.length && <div className="production-budget-hint">
+        <strong>Start your budget</strong>
+        <span>Choose <em>New cost line</em>, or <em>Add line</em> beside any account. Each line is quantity × rate × units, and the totals here update as you go.</span>
+      </div>}
+      <div className="production-table-scroll"><Table className="production-grid-table production-budget-table" dividers="rows">
         <TableHeader><TableRow isHeaderRow>
-          <TableHeaderCell>Acct</TableHeaderCell><TableHeaderCell>Category</TableHeaderCell>
+          <TableHeaderCell>Acct</TableHeaderCell><TableHeaderCell>Account and cost lines</TableHeaderCell>
           <TableHeaderCell>Planned (£)</TableHeaderCell><TableHeaderCell>Actual (£)</TableHeaderCell>
-          <TableHeaderCell>Remaining (£)</TableHeaderCell><TableHeaderCell>Share</TableHeaderCell>
+          <TableHeaderCell>Remaining (£)</TableHeaderCell><TableHeaderCell>Spent</TableHeaderCell><TableHeaderCell>Share</TableHeaderCell>
         </TableRow></TableHeader>
-        {sheet.groups.map(group => <TableBody key={group.name}>
-          <TableRow><TableCell colSpan={6} className="production-group-row">{group.name}</TableCell></TableRow>
-          {group.rows.map(row => [
-            <TableRow key={`${row.code}-${row.name}`}>
-              <TableCell><span className="production-account">{row.code}</span></TableCell>
-              <TableCell><span className="production-budget-category">
-                <strong className={row.lines.length ? undefined : 'production-muted'}>{row.name}</strong>
-                {!readOnly && <button type="button" className="production-link" onClick={() => startEdit(undefined, row.name)} aria-label={`Add cost line to ${row.name}`}><Plus size={13} aria-hidden="true" /> Line</button>}
-              </span></TableCell>
-              <TableCell><span className="production-num">{amountLabel(row.planned)}</span></TableCell>
-              <TableCell><span className="production-num">{amountLabel(row.actual)}</span></TableCell>
-              <TableCell><span className={`production-num${row.planned - row.actual < 0 ? ' production-negative' : ''}`}>{amountLabel(row.planned - row.actual)}</span></TableCell>
-              <TableCell><span className="production-num production-muted">{share(row.planned, sheet.total.planned)}</span></TableCell>
-            </TableRow>,
-            ...row.lines.map(line => <TableRow key={line.id}>
-              <TableCell />
-              <TableCell><span className="production-budget-line">
-                <span>{line.name}<small>{line.quantity} × {amountLabel(line.unitCostPence)}{(line.units ?? 1) !== 1 || line.unitLabel ? ` × ${line.units ?? 1}${line.unitLabel ? ` ${line.unitLabel}` : ''}` : ''}</small></span>
-                {!readOnly && <button type="button" className="production-icon" onClick={() => startEdit(line)} aria-label={`Edit ${line.name}`}><Pencil size={13} /></button>}
-              </span></TableCell>
-              <TableCell><span className="production-num">{amountLabel(linePlanned(line))}</span></TableCell>
-              <TableCell><span className="production-num">{amountLabel(line.actualPence)}</span></TableCell>
-              <TableCell><span className={`production-num${linePlanned(line) - line.actualPence < 0 ? ' production-negative' : ''}`}>{amountLabel(linePlanned(line) - line.actualPence)}</span></TableCell>
-              <TableCell />
-            </TableRow>)
-          ])}
-          <TableRow>
-            <TableCell /><TableCell><strong>Total {group.name.toLocaleLowerCase('en-GB')}</strong></TableCell>
-            <TableCell><strong className="production-num">{amountLabel(group.planned)}</strong></TableCell>
-            <TableCell><strong className="production-num">{amountLabel(group.actual)}</strong></TableCell>
-            <TableCell><strong className="production-num">{amountLabel(group.planned - group.actual)}</strong></TableCell>
-            <TableCell><span className="production-num production-muted">{share(group.planned, sheet.total.planned)}</span></TableCell>
-          </TableRow>
-        </TableBody>)}
+        {sheet.groups.map(group => {
+          const closed = collapsed.includes(group.name);
+          const rows = hideEmpty ? group.rows.filter(row => row.lines.length) : group.rows;
+          return <TableBody key={group.name}>
+            <TableRow><TableCell colSpan={7} className="production-group-row">
+              <button type="button" className="production-group-toggle" aria-expanded={!closed} onClick={() => toggleGroup(group.name)}>
+                {closed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}{group.name}
+              </button>
+            </TableCell></TableRow>
+            {!closed && rows.map(row => [
+              <TableRow key={`${row.code}-${row.name}`} className="production-account-row">
+                <TableCell><span className="production-account">{row.code}</span></TableCell>
+                <TableCell><span className="production-budget-category">
+                  <strong className={row.lines.length ? undefined : 'production-muted'}>{row.name}</strong>
+                  {!readOnly && <button type="button" className="production-chip-button" onClick={() => setEditing({ category: row.name })} aria-label={`Add cost line to ${row.name}`}>
+                    <Plus size={13} aria-hidden="true" /> Add line</button>}
+                </span></TableCell>
+                <TableCell><span className="production-num">{amountLabel(row.planned)}</span></TableCell>
+                <TableCell><span className="production-num">{amountLabel(row.actual)}</span></TableCell>
+                <TableCell><span className={`production-num${row.planned - row.actual < 0 ? ' production-negative' : ''}`}>{amountLabel(row.planned - row.actual)}</span></TableCell>
+                <TableCell><Spend planned={row.planned} actual={row.actual} /></TableCell>
+                <TableCell><span className="production-num production-muted">{share(row.planned, sheet.total.planned)}</span></TableCell>
+              </TableRow>,
+              ...row.lines.map(line => <TableRow key={line.id} className="production-line-row">
+                <TableCell />
+                <TableCell><span className="production-budget-line">
+                  {readOnly ? <span>{line.name}<small>{lineFormula(line)}</small></span> :
+                    <button type="button" className="production-line-open" aria-label={`Edit ${line.name}`} onClick={() => setEditing({ line, category: line.category })}>
+                      <span>{line.name}<small>{lineFormula(line)}</small></span>
+                      <span className="production-line-edit"><Pencil size={13} aria-hidden="true" /> Edit</span>
+                    </button>}
+                </span></TableCell>
+                <TableCell><span className="production-num">{amountLabel(linePlanned(line))}</span></TableCell>
+                <TableCell><span className="production-num">{amountLabel(line.actualPence)}</span></TableCell>
+                <TableCell><span className={`production-num${linePlanned(line) - line.actualPence < 0 ? ' production-negative' : ''}`}>{amountLabel(linePlanned(line) - line.actualPence)}</span></TableCell>
+                <TableCell><Spend planned={linePlanned(line)} actual={line.actualPence} /></TableCell>
+                <TableCell />
+              </TableRow>)
+            ])}
+            <TableRow className="production-total-row">
+              <TableCell /><TableCell><strong>Total {group.name.toLocaleLowerCase('en-GB')}</strong></TableCell>
+              <TableCell><strong className="production-num">{amountLabel(group.planned)}</strong></TableCell>
+              <TableCell><strong className="production-num">{amountLabel(group.actual)}</strong></TableCell>
+              <TableCell><strong className={`production-num${group.planned - group.actual < 0 ? ' production-negative' : ''}`}>{amountLabel(group.planned - group.actual)}</strong></TableCell>
+              <TableCell><Spend planned={group.planned} actual={group.actual} /></TableCell>
+              <TableCell><span className="production-num production-muted">{share(group.planned, sheet.total.planned)}</span></TableCell>
+            </TableRow>
+          </TableBody>;
+        })}
         <TableFooter>
           <TableRow>
             <TableCell /><TableCell>Subtotal</TableCell>
             <TableCell><span className="production-num">{amountLabel(sheet.subtotal.planned)}</span></TableCell>
             <TableCell><span className="production-num">{amountLabel(sheet.subtotal.actual)}</span></TableCell>
-            <TableCell /><TableCell />
+            <TableCell /><TableCell /><TableCell />
           </TableRow>
           <TableRow>
             <TableCell /><TableCell><span className="production-budget-category">Contingency
@@ -108,74 +155,111 @@ export function Budget({ project, plan, source, update, readOnly, issueOutput }:
                   }
                 }} />%</label>}</span></TableCell>
             <TableCell><span className="production-num">{amountLabel(sheet.contingency)}</span></TableCell>
-            <TableCell /><TableCell /><TableCell />
+            <TableCell /><TableCell /><TableCell /><TableCell />
           </TableRow>
-          <TableRow>
+          <TableRow className="production-grand-row">
             <TableCell /><TableCell><strong>Grand total</strong></TableCell>
             <TableCell><strong className="production-num">{amountLabel(sheet.total.planned)}</strong></TableCell>
             <TableCell><strong className="production-num">{amountLabel(sheet.total.actual)}</strong></TableCell>
             <TableCell><strong className={`production-num${over ? ' production-negative' : ''}`}>{amountLabel(sheet.total.remaining)}</strong></TableCell>
-            <TableCell />
+            <TableCell /><TableCell />
           </TableRow>
         </TableFooter>
       </Table></div>
     </section>
-    {!readOnly && <section className="production-card production-budget-side">
-      <h3>{editing ? 'Edit cost line' : 'Add cost line'}</h3>
-      <p className="production-muted">Planned cost is quantity × rate × units, such as 2 cameras × £120 × 5 days.</p>
-      <form className="production-form" key={editing?.id ?? `new-line-${category}`} onSubmit={event => {
-        event.preventDefault();
-        const data = new FormData(event.currentTarget);
-        const quantity = Number(data.get('quantity'));
-        const units = Number(data.get('units'));
-        const unitCostPence = asPence(data.get('rate'));
-        const actualPence = asPence(data.get('actual'));
-        const name = String(data.get('name')).trim();
-        const chosen = String(data.get('category')).trim();
-        const unitLabel = String(data.get('unitLabel') ?? '').trim();
-        if (!name || !chosen || !Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(units) || units < 0 ||
-            !Number.isSafeInteger(unitCostPence) || !Number.isSafeInteger(actualPence) ||
-            !Number.isSafeInteger(Math.round(quantity * unitCostPence * units))) {
-          return setError('Enter an item, category, quantity, units and valid GBP amounts.');
-        }
-        const line: BudgetLine = {
-          id: editing?.id ?? newId(), name, category: chosen, quantity, unitCostPence, actualPence, source: editing?.source ?? source,
-          ...(units !== 1 ? { units } : {}), ...(unitLabel ? { unitLabel } : {})
-        };
-        if (update(current => ({
-          ...current,
-          budget: editing ? current.budget.map(item => item.id === line.id ? line : item) : [...current.budget, line]
-        }), 'Cost saved.')) {
-          event.currentTarget.reset(); setEditing(undefined); setCategory(''); setError('');
-        }
-      }}>
-        <label>Category<select name="category" required defaultValue={category}>
-          <option value="" disabled>Choose an account</option>
-          {BUDGET_GROUPS.map(group => <optgroup key={group.name} label={group.name}>
-            {group.categories.map(item => <option key={item.code} value={item.name}>{item.code} · {item.name}</option>)}
-          </optgroup>)}
-          {category && !budgetCategory(category) && <option value={category}>{category}</option>}
-        </select></label>
-        <label>Item name<input name="name" required defaultValue={editing?.name} /></label>
-        <div className="production-form-row">
-          <label>Quantity<input name="quantity" type="number" step="0.01" min="0" defaultValue={editing?.quantity ?? 1} required /></label>
-          <label>Rate (£)<input name="rate" type="number" step="0.01" min="0" defaultValue={editing ? editing.unitCostPence / 100 : 0} required /></label>
-        </div>
-        <div className="production-form-row">
-          <label>Units<input name="units" type="number" step="0.5" min="0" defaultValue={editing?.units ?? 1} required /></label>
-          <label>Unit<input name="unitLabel" list="production-budget-units" defaultValue={editing?.unitLabel} placeholder="days" />
-            <datalist id="production-budget-units"><option value="days" /><option value="weeks" /><option value="flat" /><option value="allow" /></datalist></label>
-        </div>
-        <label>Actual spend (£)<input name="actual" type="number" step="0.01" min="0" defaultValue={editing ? editing.actualPence / 100 : 0} required /></label>
-        {error && <p className="production-form-error" role="alert">{error}</p>}
-        <div className="production-actions">
-          <button type="submit" className="production-button production-primary">{editing ? 'Save cost line' : 'Add cost line'}</button>
-          {editing && <button type="button" className="production-button" onClick={() => {
-            if (update(current => ({ ...current, budget: current.budget.filter(line => line.id !== editing.id) }), 'Cost line removed.')) startEdit();
-          }}>Remove line</button>}
-          {editing && <button type="button" className="production-link" onClick={() => startEdit()}>Cancel</button>}
-        </div>
-      </form>
-    </section>}
+    {editing && <CostLineDialog key={editing.line?.id ?? `new-${editing.category}`} line={editing.line} category={editing.category}
+      onClose={() => setEditing(undefined)} save={(line, remove) => update(current => ({
+        ...current,
+        budget: remove ? current.budget.filter(item => item.id !== line.id) :
+          current.budget.some(item => item.id === line.id) ? current.budget.map(item => item.id === line.id ? line : item) : [...current.budget, line]
+      }), remove ? 'Cost line removed.' : 'Cost saved.')} source={source} />}
   </div>;
+}
+
+function CostLineDialog({ line, category: preset, source, onClose, save }: {
+  line?: BudgetLine;
+  category: string;
+  source: PaneProps['source'];
+  onClose: () => void;
+  save: (line: BudgetLine, remove?: boolean) => boolean;
+}) {
+  const [category, setCategory] = useState(line ? budgetCategory(line.category)?.name ?? line.category : preset);
+  const [name, setName] = useState(line?.name ?? '');
+  const [quantity, setQuantity] = useState(String(line?.quantity ?? 1));
+  const [rate, setRate] = useState(line ? (line.unitCostPence / 100).toFixed(2) : '');
+  const [units, setUnits] = useState(String(line?.units ?? 1));
+  const [unitLabel, setUnitLabel] = useState(line?.unitLabel ?? '');
+  const [actual, setActual] = useState(line ? (line.actualPence / 100).toFixed(2) : '');
+  const [error, setError] = useState('');
+
+  const q = Number(quantity);
+  const u = Number(units);
+  const ratePence = asPence(rate || '0');
+  const actualPence = asPence(actual || '0');
+  const planned = Number.isFinite(q) && Number.isFinite(u) && Number.isSafeInteger(ratePence) ? Math.round(q * ratePence * u) : NaN;
+  const remaining = planned - actualPence;
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!name.trim() || !category.trim() || !Number.isFinite(q) || q < 0 || !Number.isFinite(u) || u < 0 ||
+        !Number.isSafeInteger(ratePence) || !Number.isSafeInteger(actualPence) || !Number.isSafeInteger(planned)) {
+      return setError('Enter an account, an item name, a quantity, units and amounts in pounds such as 120 or 120.50.');
+    }
+    const next: BudgetLine = {
+      id: line?.id ?? newId(), name: name.trim(), category: category.trim(), quantity: q, unitCostPence: ratePence, actualPence, source: line?.source ?? source,
+      ...(u !== 1 ? { units: u } : {}), ...(unitLabel.trim() ? { unitLabel: unitLabel.trim() } : {})
+    };
+    if (save(next)) onClose();
+  }
+
+  return <Dialog title={line ? `Edit ${line.name}` : 'Add a cost line'} onClose={onClose}>
+    <form className="production-form production-cost-form" onSubmit={submit}>
+      <div className="production-cost-step">
+        <span className="production-step-number" aria-hidden="true">1</span>
+        <div className="production-form">
+          <label>Category<select name="category" required value={category} onChange={event => setCategory(event.target.value)} autoFocus={!preset}>
+            <option value="" disabled>Choose an account</option>
+            {BUDGET_GROUPS.map(group => <optgroup key={group.name} label={group.name}>
+              {group.categories.map(item => <option key={item.code} value={item.name}>{item.code} · {item.name}</option>)}
+            </optgroup>)}
+            {category && !budgetCategory(category) && <option value={category}>{category}</option>}
+          </select></label>
+          <label>Item name<input name="name" required value={name} onChange={event => setName(event.target.value)} placeholder="Camera package, lunch for crew, location fee…" autoFocus={!!preset} /></label>
+        </div>
+      </div>
+      <div className="production-cost-step">
+        <span className="production-step-number" aria-hidden="true">2</span>
+        <div className="production-form">
+          <p className="production-cost-hint">Planned cost = <strong>how many</strong> × <strong>rate</strong> × <strong>how long</strong></p>
+          <div className="production-cost-formula">
+            <label>Quantity<input name="quantity" type="number" inputMode="decimal" step="any" min="0" value={quantity} onChange={event => setQuantity(event.target.value)} required /></label>
+            <span aria-hidden="true">×</span>
+            <label>Rate (£)<input name="rate" type="number" inputMode="decimal" step="0.01" min="0" value={rate} placeholder="0.00" onChange={event => setRate(event.target.value)} required /></label>
+            <span aria-hidden="true">×</span>
+            <label>Units<input name="units" type="number" inputMode="decimal" step="any" min="0" value={units} onChange={event => setUnits(event.target.value)} required /></label>
+            <label>Unit<select name="unitLabel" value={unitLabel} onChange={event => setUnitLabel(event.target.value)}>
+              <option value="">—</option>
+              {[...new Set([...UNITS, ...(unitLabel ? [unitLabel] : [])])].map(unit => <option key={unit} value={unit}>{unit}</option>)}
+            </select></label>
+          </div>
+          <p className="production-cost-result" aria-live="polite">Planned <strong>{Number.isFinite(planned) ? moneyLabel(planned) : '—'}</strong></p>
+        </div>
+      </div>
+      <div className="production-cost-step">
+        <span className="production-step-number" aria-hidden="true">3</span>
+        <div className="production-form">
+          <label>Actual spend (£)<input name="actual" type="number" inputMode="decimal" step="0.01" min="0" value={actual} placeholder="0.00 — fill in once you have paid" onChange={event => setActual(event.target.value)} /></label>
+          {Number.isFinite(remaining) && <p className={`production-cost-result${remaining < 0 ? ' production-negative' : ''}`}>
+            {remaining < 0 ? 'Over by' : 'Left on this line'} <strong>{moneyLabel(Math.abs(remaining))}</strong></p>}
+        </div>
+      </div>
+      {error && <p className="production-form-error" role="alert">{error}</p>}
+      <div className="production-actions production-right">
+        {line && <button type="button" className="production-button production-danger" onClick={() => { if (save(line, true)) onClose(); }}>
+          <Trash2 size={16} aria-hidden="true" /> Remove line</button>}
+        <button type="button" className="production-button" onClick={onClose}>Cancel</button>
+        <button type="submit" className="production-button production-primary">{line ? 'Save cost line' : 'Add cost line'}</button>
+      </div>
+    </form>
+  </Dialog>;
 }

@@ -79,7 +79,7 @@ export function People(pane: PaneProps) {
     {filter !== 'Crew' && <>
       <h4 className="production-table-title">Cast <span className="production-count">{shownCast.length}</span></h4>
       {!cast.length ? <p className="production-muted">No cast yet. Build the breakdown from the script to list every speaking role, or add cast by hand.</p> :
-        <div className="production-table-scroll"><Table className="production-grid-table" density="compact" hasHover>
+        <div className="production-table-scroll"><Table className="production-grid-table" hasHover>
           <TableHeader><TableRow isHeaderRow>
             <TableHeaderCell>ID</TableHeaderCell><TableHeaderCell>Character</TableHeaderCell><TableHeaderCell>Artist</TableHeaderCell>
             <TableHeaderCell>Contact</TableHeaderCell><TableHeaderCell>Agent</TableHeaderCell><TableHeaderCell>Scenes</TableHeaderCell>
@@ -109,7 +109,7 @@ export function People(pane: PaneProps) {
     {filter !== 'Cast' && <>
       <h4 className="production-table-title">Crew <span className="production-count">{shownCrew.length}</span></h4>
       {!crew.length ? <p className="production-muted">Add crew by department so call sheets list every call.</p> :
-        <div className="production-table-scroll"><Table className="production-grid-table" density="compact" hasHover>
+        <div className="production-table-scroll"><Table className="production-grid-table" hasHover>
           <TableHeader><TableRow isHeaderRow>
             <TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>Role</TableHeaderCell><TableHeaderCell>Contact</TableHeaderCell>
             <TableHeaderCell>Unavailable</TableHeaderCell><TableHeaderCell>Status</TableHeaderCell>

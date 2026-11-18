@@ -53,7 +53,7 @@ export function Sides({ plan, project, snapshot, source, readOnly, onOpenSource,
         <span>{selectedCast.length ? `Cast ${selectedCast.map(person => ids.get(person.id)).join(', ')}` : 'No cast selected'}</span>
         <button type="button" className="production-link" onClick={() => { setDayId(''); setSelected(allOn ? [] : scenes.map(scene => scene.id)); }}>{allOn ? 'Clear selection' : 'Select all'}</button>
       </div>
-      <div className="production-table-scroll production-sides-table"><Table className="production-grid-table" density="compact" hasHover>
+      <div className="production-table-scroll production-sides-table"><Table className="production-grid-table" hasHover>
         <TableHeader><TableRow isHeaderRow>
           <TableHeaderCell>Include</TableHeaderCell><TableHeaderCell>Sc.</TableHeaderCell><TableHeaderCell>Scene heading</TableHeaderCell>
           <TableHeaderCell>Pages</TableHeaderCell><TableHeaderCell>Cast</TableHeaderCell><TableHeaderCell>Day</TableHeaderCell>

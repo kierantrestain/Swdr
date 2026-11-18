@@ -31,11 +31,11 @@
   min-height: 35px;
   padding: 6px 11px;
   border: 1px solid var(--swdr-w-line);
-  border-radius: 7px;
-  background: var(--swdr-w-paper);
+  border-radius: var(--radius-element, 7px);
+  background: var(--swdr-w-chrome);
   color: var(--swdr-w-ink);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-sm, 13px);
   font-weight: 650;
   line-height: 1.2;
   white-space: nowrap;
@@ -196,7 +196,7 @@
   padding: 7px 9px;
   border: 1px solid var(--swdr-w-line);
   border-radius: 5px;
-  background: var(--swdr-w-paper);
+  background: var(--color-background-surface, var(--swdr-w-paper));
   color: var(--swdr-w-ink);
   font: inherit;
   font-size: 13px;
@@ -225,19 +225,19 @@
 }
 .swdr-w-pagehead h1 {
   margin: 0 0 4px;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-family-heading);
   font-size: clamp(32px, 3.45vw, 52px);
   line-height: 1.05;
   font-weight: 400;
   letter-spacing: -.025em;
 }
-.swdr-w-pagehead p { margin: 0; color: var(--swdr-w-muted); font-size: 15px; }
+.swdr-w-pagehead p { margin: 0; color: var(--swdr-w-muted); font-size: var(--font-size-base, 15px); }
 .swdr-w-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .swdr-w-empty {
   padding: 28px;
   color: var(--swdr-w-muted);
   text-align: center;
-  background: var(--swdr-w-paper);
+  background: var(--swdr-w-chrome);
   border: 1px solid var(--swdr-w-line);
   border-radius: 8px;
 }
@@ -258,7 +258,7 @@
   background: var(--color-background-muted, #e9ebe3);
 }
 .swdr-beat-list .swdr-beat-act { min-height: auto; }
-.swdr-beat-act h2 { margin: 0 4px 3px; font-family: Georgia, serif; font-size: clamp(19px, 2vw, 26px); font-weight: 400; }
+.swdr-beat-act h2 { margin: 0 4px 3px; font-family: var(--font-family-body); font-size: var(--font-size-lg, 18px); font-weight: 650; letter-spacing: 0; }
 .swdr-beat-card {
   position: relative;
   display: grid;
@@ -267,7 +267,7 @@
   padding: 12px 13px 11px 16px;
   border-radius: 8px;
   border: 1px solid var(--swdr-w-line);
-  background: var(--swdr-w-paper);
+  background: var(--swdr-w-chrome);
 }
 .swdr-beat-card::before {
   content: '';
@@ -305,7 +305,7 @@
   align-content: start;
   padding: 16px;
   min-height: 115px;
-  background: var(--swdr-w-paper);
+  background: var(--swdr-w-chrome);
   color: var(--swdr-w-ink);
   border: 1px solid var(--swdr-w-line);
   border-radius: 8px;

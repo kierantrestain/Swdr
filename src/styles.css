@@ -65,8 +65,8 @@
   a { color: var(--color-text-accent); text-underline-offset: 2px; }
   h1, h2, h3, p { margin-top: 0; }
   h1, h2, h3, h4, h5, h6 { color: inherit; }
-  h1, h2 { font-family: var(--font-family-heading); font-weight: 400; letter-spacing: -.015em; }
-  h3, h4, h5, h6 { font-family: var(--font-family-body); font-weight: 650; letter-spacing: 0; }
+  h1 { font-family: var(--font-family-heading); font-weight: 400; letter-spacing: -.015em; }
+  h2, h3, h4, h5, h6 { font-family: var(--font-family-body); font-weight: 650; letter-spacing: 0; }
   h1 { font-size: clamp(30px, 3.2vw, 42px); line-height: 1.08; margin-bottom: var(--spacing-2); }
   h2 { font-size: var(--font-size-xl); }
   p { line-height: 1.5; }

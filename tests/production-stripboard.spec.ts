@@ -57,7 +57,7 @@ test('schedules strips by keyboard, menu and drag and drop, and the call sheet f
   const rows = sheet.getByRole('table').first().getByRole('row');
   await expect(rows.nth(1)).toContainText('2');
   await expect(rows.nth(1)).toContainText('EXT. FERRY TERMINAL');
-  await expect(rows.nth(2)).toContainText('1, 2');
+  await expect(rows.nth(2)).toContainText('1Nora2Elias');
   const castTable = sheet.getByRole('table').nth(1);
   await expect(castTable.getByRole('row', { name: /^1 Nora Nora Vale 15:00$/ })).toBeVisible();
   await expect(castTable.getByRole('row', { name: /^2 Elias Elias Crowe 15:45$/ })).toBeVisible();

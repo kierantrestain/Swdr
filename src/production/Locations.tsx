@@ -54,7 +54,7 @@ export function Locations(pane: PaneProps) {
       <TextInput label="Search locations" isLabelHidden type="search" value={query} onChange={setQuery} placeholder="Search name, address or contact" hasClear width={340} />
     </div>
     {!plan.locations.length ? <p className="production-muted">No locations yet. Build the breakdown from the script to list every set its scene headings name, or add one by hand.</p> :
-      <div className="production-table-scroll"><Table className="production-grid-table" density="compact" hasHover>
+      <div className="production-table-scroll"><Table className="production-grid-table" hasHover>
         <TableHeader><TableRow isHeaderRow>
           <TableHeaderCell>Location</TableHeaderCell><TableHeaderCell>Setting</TableHeaderCell><TableHeaderCell>Scenes</TableHeaderCell>
           <TableHeaderCell>Day / night</TableHeaderCell><TableHeaderCell>Pages</TableHeaderCell><TableHeaderCell>Address</TableHeaderCell>

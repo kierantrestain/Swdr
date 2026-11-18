@@ -898,10 +898,10 @@ export function callSheetCsv(sheet: CallSheet): string {
     ['Parking and basecamp', sheet.parking ?? ''],
     ['Notes', sheet.notes],
     [],
-    ['Time', 'Scene', 'Heading', 'Setting', 'Pages', 'Cast IDs', 'Location', 'Address'],
+    ['Time', 'Scene', 'Heading', 'Setting', 'Pages', 'Cast IDs', 'Cast', 'Location', 'Address'],
     ...sheet.scenes.map(scene => [
       scene.startTime, scene.number, scene.heading, scene.setting ?? '', scene.eighths === undefined ? '' : eighthsLabel(scene.eighths),
-      (scene.castIds ?? []).join(' '), scene.location?.name ?? '', scene.location?.address ?? ''
+      (scene.castIds ?? []).join(' '), scene.cast.join(', '), scene.location?.name ?? '', scene.location?.address ?? ''
     ]),
     [],
     ['ID', 'Name', 'Role', 'Call'],

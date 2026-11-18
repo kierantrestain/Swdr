@@ -149,7 +149,8 @@ function CallSheetDocument({ sheet, superseded, issued, project, plan }: { sheet
         <td><strong>{scene.number}</strong></td>
         <td><strong>{scene.heading}</strong>{scene.setting && <small>{scene.setting}</small>}</td>
         {hasPages && <td>{scene.eighths === undefined ? '—' : eighthsLabel(scene.eighths)}</td>}
-        <td>{scene.castIds?.length ? scene.castIds.join(', ') : scene.cast.join(', ') || '—'}</td>
+        <td className="production-cast-cell">{scene.cast.length ? <ul className="production-cast-list">{scene.cast.map((name, at) =>
+          <li key={`${name}-${at}`}>{scene.castIds?.[at] ? <b>{scene.castIds[at]}</b> : null}{name}</li>)}</ul> : '—'}</td>
         <td>{scene.location?.name ?? '—'}<small>{scene.location?.address}</small></td>
       </tr>)}</tbody>
       {hasPages && <tfoot><tr><td colSpan={3}>{sheet.scenes.length} {sheet.scenes.length === 1 ? 'scene' : 'scenes'}</td><td>{eighthsLabel(pages)}</td><td colSpan={2} /></tr></tfoot>}

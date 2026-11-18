@@ -124,6 +124,7 @@ test('builds cast, locations and page counts from an imported film script, then 
   for (const name of ['Above the line', 'Below the line', 'Post-production', 'Other', 'Cast', 'Camera', 'Catering', 'Insurance']) {
     await expect(top.getByText(name, { exact: true })).toBeVisible();
   }
+  await top.getByRole('button', { name: 'New cost line', exact: true }).click();
   await page.getByLabel('Category').selectOption('Camera');
   await page.getByLabel('Item name').fill('Camera package');
   await page.getByLabel('Quantity').fill('2');
