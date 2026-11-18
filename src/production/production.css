@@ -811,3 +811,4 @@ strong > .production-cast-id { margin-inline-end: .4rem; }
 .production-form ::placeholder { color: var(--color-text-secondary); opacity: .8; }
 .production-spend small { font-size: var(--font-size-xs); }
 .production-line-open > span:first-child { flex: 1 1 auto; }
+.production-cost-result small { color: var(--color-text-secondary); font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }

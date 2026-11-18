@@ -28,7 +28,10 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 | Dual dialogue | All | ✅ |
 | Bold, italic, underline | Celtx (Owner) | ✅ Ctrl/⌘+B/I/U and toolbar; kept in FDX runs, Fountain emphasis, print and PDF faces |
 | Real-time co-writing in the editor (live cursors) | WriterDuet Firebase/Firepad (Bundle), OpenDraft Yjs (source) | ⬜ Team sync is document-level. Next step: Yjs over the team service. |
-| Read-through with voices | Celtx "Read Through" (Owner) | 🟡 Browser speech in Script tools; per-character voices not assigned |
+| Read-through with voices | Celtx "Read Through" (Owner) | ✅ Script tools → Table read: a device voice per character, narrator for headings and action, start from any scene, speed, choose what is read aloud |
+| Script reports and statistics | Final Draft reports, WriterDuet stats (Bundle) | ✅ Script tools → Report: pages, screen time, dialogue share per character, scenes, first appearance, locations, INT/EXT and time-of-day split, longest scenes, CSV |
+| Formatting checker | WriterDuet (Bundle) | ✅ Script tools → Checks: headings without INT./EXT. or time, cues without dialogue, orphan dialogue and parentheticals, transitions, duplicate scene numbers, long action, likely misspelt names; each jumps to the line |
+| Writing goals and streaks | WriterDuet goals/schedule (Bundle), Arc Studio | ✅ Script tools → Goals: daily word goal, toolbar progress, streak and a 14-day chart (per device) |
 
 ## 2. Story development
 
@@ -56,8 +59,8 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 | Shooting schedule and calendar | Celtx "Schedule" (Owner) | ✅ Calendar view |
 | Call sheets | Celtx print types (Bundle), StudioBinder (Docs) | ✅ Issue, acknowledge, reissue, CSV |
 | Day out of days, sides, shot lists | Celtx print types (Bundle) | ✅ |
-| Budget | Celtx "Budget" (Owner) | 🟡 Budget lines with planned vs actual; no account-code templates |
-| Cast & Crew directory | Celtx (Owner), StudioBinder (Docs) | 🟡 People live in production data, call sheets and cast IDs; no standalone directory page yet |
+| Budget | Celtx "Budget" (Owner), StudioBinder (Docs) | ✅ Top sheet with account codes, contingency, fringes (UK NI, holiday pay, pension presets), spend bars, over-budget flags, one-dialog cost entry, CSV |
+| Cast & Crew directory | Celtx (Owner), StudioBinder (Docs) | ✅ Breakdown → Cast & crew, with photos and cast IDs; call sheets list cast by name |
 | Files & Media | Celtx (Owner) | 🟡 Project assets and imports; no media browser yet |
 | Script revision impact on schedule | StudioBinder (Docs) | ✅ Script-change flags and review |
 
@@ -84,7 +87,7 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 
 1. **Real-time co-writing in the editor** (Yjs on the team service). This is the largest gap against WriterDuet.
 2. ~~Inline styles~~ shipped in this round.
-3. **Cast & Crew directory and Files & Media browser** as first-class sections.
-4. **Budget templates** (account codes, fringes) and exports.
+3. ~~Cast & Crew directory~~ shipped; **Files & Media browser** remains.
+4. ~~Budget account codes and fringes~~ shipped in this round.
 5. ~~Alternate-dialogue cycling~~ shipped in this round.
-6. **Per-character voices** for the read-through.
+6. ~~Per-character voices~~, reports, formatting checks and writing goals shipped in this round.

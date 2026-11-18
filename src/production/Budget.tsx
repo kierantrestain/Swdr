@@ -7,10 +7,18 @@ import { newId } from '../model';
 import { Dialog } from './components';
 import type { PaneProps } from './components';
 import { BUDGET_GROUPS, amountLabel, budgetCategory, budgetCsv, budgetTopSheet } from './budget';
-import { linePlanned, moneyLabel } from './model';
+import { lineBase, lineFringe, linePlanned, moneyLabel } from './model';
 import type { BudgetLine } from './model';
 
 const UNITS = ['days', 'weeks', 'hours', 'items', 'flat', 'allow'];
+/** Common UK employer costs on crew and cast wages. */
+const FRINGES = [
+  { value: '', label: 'None' },
+  { value: '13.8', label: 'Employer NI · 13.8%' },
+  { value: '12.07', label: 'Holiday pay · 12.07%' },
+  { value: '3', label: 'Pension · 3%' },
+  { value: '28.87', label: 'NI + holiday + pension · 28.87%' }
+];
 
 function asPence(raw: string): number {
   const value = raw.trim();
@@ -25,7 +33,7 @@ function share(part: number, whole: number): string {
 
 function lineFormula(line: BudgetLine): string {
   const units = line.units ?? 1;
-  return `${line.quantity} × £${amountLabel(line.unitCostPence)}${units !== 1 || line.unitLabel ? ` × ${units}${line.unitLabel ? ` ${line.unitLabel}` : ''}` : ''}`;
+  return `${line.quantity} × £${amountLabel(line.unitCostPence)}${units !== 1 || line.unitLabel ? ` × ${units}${line.unitLabel ? ` ${line.unitLabel}` : ''}` : ''}${line.fringePercent ? ` + ${line.fringePercent}% fringes` : ''}`;
 }
 
 /** A thin bar showing how much of an account's plan has been spent. */
@@ -51,6 +59,7 @@ export function Budget({ project, plan, source, update, readOnly, issueOutput }:
   const used = sheet.groups.reduce((count, group) => count + group.rows.filter(row => row.lines.length).length, 0);
   const categories = sheet.groups.reduce((count, group) => count + group.rows.length, 0);
   const overAccounts = sheet.groups.flatMap(group => group.rows).filter(row => row.actual > row.planned).length;
+  const fringes = plan.budget.reduce((sum, line) => sum + lineFringe(line), 0);
 
   const toggleGroup = (name: string) => setCollapsed(list => list.includes(name) ? list.filter(item => item !== name) : [...list, name]);
 
@@ -71,7 +80,7 @@ export function Budget({ project, plan, source, update, readOnly, issueOutput }:
         </div>
       </div>
       <div className="production-metrics production-metrics-4">
-        <div><small>Total budget</small><strong>{moneyLabel(sheet.total.planned)}</strong><span>incl. {sheet.contingencyPercent}% contingency</span></div>
+        <div><small>Total budget</small><strong>{moneyLabel(sheet.total.planned)}</strong><span>incl. {sheet.contingencyPercent}% contingency{fringes ? ` · ${moneyLabel(fringes)} fringes` : ''}</span></div>
         <div><small>Actual spend</small><strong>{moneyLabel(sheet.total.actual)}</strong><span>{spent}% of budget</span></div>
         <div className={over ? 'production-metric-over' : undefined}><small>{over ? 'Over budget' : 'Remaining'}</small><strong>{moneyLabel(Math.abs(sheet.total.remaining))}</strong>
           <span>{over ? 'Actuals exceed the plan' : 'Planned less actual'}</span></div>
@@ -190,24 +199,28 @@ function CostLineDialog({ line, category: preset, source, onClose, save }: {
   const [units, setUnits] = useState(String(line?.units ?? 1));
   const [unitLabel, setUnitLabel] = useState(line?.unitLabel ?? '');
   const [actual, setActual] = useState(line ? (line.actualPence / 100).toFixed(2) : '');
+  const [fringe, setFringe] = useState(line?.fringePercent ? String(line.fringePercent) : '');
   const [error, setError] = useState('');
 
   const q = Number(quantity);
   const u = Number(units);
   const ratePence = asPence(rate || '0');
   const actualPence = asPence(actual || '0');
-  const planned = Number.isFinite(q) && Number.isFinite(u) && Number.isSafeInteger(ratePence) ? Math.round(q * ratePence * u) : NaN;
+  const f = fringe.trim() ? Number(fringe) : 0;
+  const base = Number.isFinite(q) && Number.isFinite(u) && Number.isSafeInteger(ratePence) ? lineBase({ quantity: q, unitCostPence: ratePence, units: u } as BudgetLine) : NaN;
+  const extra = Number.isFinite(f) && f > 0 ? Math.round(base * f / 100) : 0;
+  const planned = base + extra;
   const remaining = planned - actualPence;
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim() || !category.trim() || !Number.isFinite(q) || q < 0 || !Number.isFinite(u) || u < 0 ||
-        !Number.isSafeInteger(ratePence) || !Number.isSafeInteger(actualPence) || !Number.isSafeInteger(planned)) {
-      return setError('Enter an account, an item name, a quantity, units and amounts in pounds such as 120 or 120.50.');
+        !Number.isSafeInteger(ratePence) || !Number.isSafeInteger(actualPence) || !Number.isSafeInteger(planned) || !Number.isFinite(f) || f < 0 || f > 100) {
+      return setError('Enter an account, an item name, a quantity, units, a fringe between 0 and 100% and amounts in pounds such as 120 or 120.50.');
     }
     const next: BudgetLine = {
       id: line?.id ?? newId(), name: name.trim(), category: category.trim(), quantity: q, unitCostPence: ratePence, actualPence, source: line?.source ?? source,
-      ...(u !== 1 ? { units: u } : {}), ...(unitLabel.trim() ? { unitLabel: unitLabel.trim() } : {})
+      ...(u !== 1 ? { units: u } : {}), ...(unitLabel.trim() ? { unitLabel: unitLabel.trim() } : {}), ...(f > 0 ? { fringePercent: f } : {})
     };
     if (save(next)) onClose();
   }
@@ -242,7 +255,15 @@ function CostLineDialog({ line, category: preset, source, onClose, save }: {
               {[...new Set([...UNITS, ...(unitLabel ? [unitLabel] : [])])].map(unit => <option key={unit} value={unit}>{unit}</option>)}
             </select></label>
           </div>
-          <p className="production-cost-result" aria-live="polite">Planned <strong>{Number.isFinite(planned) ? moneyLabel(planned) : '—'}</strong></p>
+          <div className="production-form-row">
+            <label>Fringes<select name="fringePreset" value={FRINGES.some(item => item.value === fringe) ? fringe : 'custom'} onChange={event => setFringe(event.target.value === 'custom' ? fringe || '10' : event.target.value)}>
+              {FRINGES.map(item => <option key={item.label} value={item.value}>{item.label}</option>)}
+              <option value="custom">Custom…</option>
+            </select></label>
+            <label>Fringe (%)<input name="fringe" type="number" inputMode="decimal" step="any" min="0" max="100" value={fringe} placeholder="0" onChange={event => setFringe(event.target.value)} /></label>
+          </div>
+          <p className="production-cost-result" aria-live="polite">Planned <span>{extra > 0 && Number.isFinite(base) && <small>{moneyLabel(base)} + {moneyLabel(extra)} fringes = </small>}
+            <strong>{Number.isFinite(planned) ? moneyLabel(planned) : '—'}</strong></span></p>
         </div>
       </div>
       <div className="production-cost-step">

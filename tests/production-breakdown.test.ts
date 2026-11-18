@@ -132,6 +132,13 @@ test('the budget top sheet files lines under standard accounts with units and co
   assert.match(csv, /"2100","Camera","Camera package","2","450","5 days","4500","3000","1500"/);
   assert.match(csv, /"Contingency 10%"/);
   assert.match(csv, /"TOTAL","","","","6105","3050","3055"/);
+
+  // Fringes add employer costs on top of the base rate and flow through every total.
+  const fringed: ProductionPlan = { ...withLines, budget: withLines.budget.map(line => line.id === 'b' ? { ...line, fringePercent: 13.8 } : line) };
+  const withFringes = budgetTopSheet(fringed);
+  assert.equal(withFringes.groups[0].planned, 113800);
+  assert.equal(withFringes.subtotal.planned, 568800);
+  assert.match(budgetCsv(setProductionPlan(project, fringed), fringed), /"Lead","1","1000","1","1138","0","1138","[^"]*","13\.8"/);
 });
 
 test('an AV script is left out of the screenplay breakdown', () => {

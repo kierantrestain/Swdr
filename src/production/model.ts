@@ -125,6 +125,8 @@ export interface BudgetLine extends SourcedRecord {
   /** Multiplier for the rate, such as days or weeks (planned = quantity × rate × units). */
   units?: number;
   unitLabel?: string;
+  /** Employer costs on top of the rate, such as National Insurance, holiday pay and pension, as a percentage. */
+  fringePercent?: number;
 }
 
 export interface CallSheetScene {
@@ -563,8 +565,18 @@ export function dayOutOfDays(plan: ProductionPlan): { dates: string[]; rows: Arr
   return { dates, rows };
 }
 
-export function linePlanned(line: BudgetLine): number {
+/** Quantity × rate × units, before fringes. */
+export function lineBase(line: BudgetLine): number {
   return Math.round(line.quantity * line.unitCostPence * (line.units ?? 1));
+}
+
+export function lineFringe(line: BudgetLine): number {
+  return line.fringePercent ? Math.round(lineBase(line) * line.fringePercent / 100) : 0;
+}
+
+/** The planned cost of a line: its base cost plus fringes. */
+export function linePlanned(line: BudgetLine): number {
+  return lineBase(line) + lineFringe(line);
 }
 
 export function budgetTotals(plan: Pick<ProductionPlan, 'budget'>): { planned: number; actual: number; variance: number } {

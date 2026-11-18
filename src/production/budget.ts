@@ -122,12 +122,12 @@ export function budgetCsv(project: Project, plan: ProductionPlan): string {
   const source = activeProductionSource(project, plan);
   const pounds = (pence: number) => pence / 100;
   return reportCsv([
-    ['Account', 'Category', 'Item', 'Quantity', 'Rate GBP', 'Units', 'Planned GBP', 'Actual GBP', 'Remaining GBP', 'Source revision'],
+    ['Account', 'Category', 'Item', 'Quantity', 'Rate GBP', 'Units', 'Planned GBP', 'Actual GBP', 'Remaining GBP', 'Source revision', 'Fringe %'],
     ...sheet.groups.flatMap(group => [
       ...group.rows.flatMap(item => [
         ...item.lines.map(line => [
           item.code, item.name, line.name, line.quantity, pounds(line.unitCostPence), `${line.units ?? 1}${line.unitLabel ? ` ${line.unitLabel}` : ''}`,
-          pounds(linePlanned(line)), pounds(line.actualPence), pounds(linePlanned(line) - line.actualPence), line.source.revisionId
+          pounds(linePlanned(line)), pounds(line.actualPence), pounds(linePlanned(line) - line.actualPence), line.source.revisionId, line.fringePercent ?? 0
         ]),
         [item.code, item.name, 'Category total', '', '', '', pounds(item.planned), pounds(item.actual), pounds(item.planned - item.actual), '']
       ]),
