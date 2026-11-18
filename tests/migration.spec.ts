@@ -6,7 +6,7 @@ import { newId, sceneList, sourceFor } from '../src/model';
 import { exportArchive, importArchive } from '../src/interchange/archive';
 import { exportDocx } from '../src/interchange/office';
 import { exportFountain } from '../src/interchange/screenplay';
-import { expect, openHome, test } from './support/browser';
+import { element, expect, manuscript, openHome, test } from './support/browser';
 import { makeLongScript, onePixelPng, rasterPdf, sampleScreenplay } from './support/fixtures';
 
 declare global {
@@ -38,7 +38,7 @@ test('reviews a Word draft, corrects an element and begins the editable screenpl
   await page.getByLabel('Line text').fill('Count the lamps at the far end.');
   await page.getByRole('button', { name: 'Apply correction' }).click();
   await page.getByRole('button', { name: 'Import draft', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Dialogue', exact: true })).toHaveValue('Count the lamps at the far end.');
+  await expect(element(page, 'dialogue').first()).toHaveText('Count the lamps at the far end.');
   await expect(page.getByText('Saved on this device', { exact: true })).toBeVisible();
   expect(pageFaults).toEqual([]);
 });
@@ -59,7 +59,7 @@ test('rejects an image-only scan and invalid source, then cancels and retries in
   const retry = await openImport(page);
   await retry.setInputFiles({ name: 'Corrected.fountain', mimeType: 'text/plain', buffer: Buffer.from('EXT. STATION - DAY\n\nA bicycle leans on the rail.\n') });
   await page.getByRole('button', { name: 'Import draft', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Scene heading', exact: true })).toHaveValue('EXT. STATION - DAY');
+  await expect(element(page, 'scene').first()).toHaveText('EXT. STATION - DAY');
 });
 
 test('restores a project archive, opens its exact issued line and re-exports the asset', async ({ page, pageFaults }) => {
@@ -85,9 +85,9 @@ test('restores a project archive, opens its exact issued line and re-exports the
   await expect(page.getByRole('heading', { name: project.title, exact: true })).toBeVisible();
   const hash = `#p/${project.id}/write/${document.id}?rev=${source.revisionId}&scene=${scene.id}&block=${source.blockId}`;
   await page.goto('/' + hash);
-  const dialogue = page.getByRole('textbox', { name: 'Dialogue', exact: true });
-  await expect(dialogue).toHaveValue('Count the red lamps.');
-  await expect(dialogue).toHaveAttribute('readonly', '');
+  const dialogue = element(page, 'dialogue').filter({ hasText: 'Count the red lamps.' });
+  await expect(dialogue).toHaveText('Count the red lamps.');
+  await expect(manuscript(page)).toHaveAttribute('contenteditable', 'false');
 
   // Export from the working copy while keeping the issued revision unchanged.
   await page.goto(`/#p/${project.id}/write/${document.id}`);
@@ -118,17 +118,23 @@ test('measures keyboard input to a completed-frame proxy on a 150–200 page dra
   const actualPages = Number((await status.textContent())?.split(' of ').at(-1));
   expect(actualPages).toBeGreaterThanOrEqual(150);
   expect(actualPages).toBeLessThanOrEqual(200);
-  const action = page.getByRole('textbox', { name: 'Action', exact: true }).first();
-  await action.evaluate((field: HTMLTextAreaElement) => {
-    field.focus();
-    field.setSelectionRange(field.value.length, field.value.length);
+  const action = element(page, 'action').first();
+  await action.click();
+  // End moves to the end of the visual line; place the caret at the end of the paragraph.
+  await action.evaluate(node => {
+    const range = node.ownerDocument.createRange();
+    range.selectNodeContents(node);
+    range.collapse(false);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
   });
+  await page.waitForTimeout(50);
   // Sequential trusted keyboard events with two RAFs bound when the current input could be painted.
   await page.evaluate(() => {
     const timings: number[] = [];
     window.swdrKeyFrameTimings = timings;
     globalThis.document.addEventListener('input', event => {
-      if (!event.isTrusted || !(event.target instanceof HTMLTextAreaElement)) return;
+      if (!event.isTrusted || !(event.target instanceof HTMLElement) || !event.target.closest('.swdr-pm')) return;
       const start = event.timeStamp;
       requestAnimationFrame(() => requestAnimationFrame(() => timings.push(performance.now() - start)));
     }, { capture: true });
@@ -138,7 +144,7 @@ test('measures keyboard input to a completed-frame proxy on a 150–200 page dra
     await page.keyboard.press('x');
     await page.waitForFunction(n => (window.swdrKeyFrameTimings?.length ?? 0) >= n, index + 1);
   }
-  expect(await action.inputValue()).toMatch(/x{64}$/);
+  expect(await action.textContent()).toMatch(/x{64}$/);
   const durations = await page.evaluate(() => window.swdrKeyFrameTimings ?? []);
   const sorted = durations.slice().sort((a, b) => a - b);
   const p95 = sorted[Math.ceil(sorted.length * .95) - 1];

@@ -34,7 +34,9 @@ self.addEventListener('fetch', event => {
   if (request.mode === 'navigate' && (url.pathname === '/' || url.pathname === '/team')) {
     event.respondWith(fetch(request).catch(async () => (await caches.open(CURRENT)).match(SHELL)));
   } else if (FILES.has(url.href)) {
-    event.respondWith(caches.open(CURRENT).then(async cache => (await cache.match(request)) || fetch(request)));
+    // Hashed assets are immutable; ignore Vary so crossorigin (Origin-bearing) module and
+    // stylesheet requests match responses cached by cache.addAll without an Origin header.
+    event.respondWith(caches.open(CURRENT).then(async cache => (await cache.match(request, { ignoreVary: true })) || fetch(request)));
   }
 });
 `

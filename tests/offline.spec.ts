@@ -16,5 +16,5 @@ test('reopens a saved screenplay from the production service worker offline', as
   await context.route('**/*', route => route.abort('internetdisconnected'));
   await context.setOffline(true);
   await page.reload();
-  await expect(page.locator('textarea[data-element=scene]').first()).toHaveValue('INT. FERRY OFFICE – NIGHT');
+  await expect(page.locator('.swdr-pm .swdr-el[data-element=scene]').first()).toHaveText('INT. FERRY OFFICE – NIGHT');
 });
