@@ -6,13 +6,14 @@ The benchmark compares writing and production behaviour through official walkthr
 | --- | --- |
 | Celtx, Final Draft, WriterDuet | [Editor, revisions, collaboration and interchange](reference-a.md) |
 | Arc Studio, StudioBinder, OpenDraft | [Planning, production and open-source baseline](reference-b.md) |
-| Pinned OpenDraft baseline | [Source, licence and local boot evidence](opendraft-baseline.md) |
+| Pinned OpenDraft baseline | [Source and licence audit](opendraft-baseline.md) · [Pinned runtime and editor evidence](opendraft-runtime.md) |
+| REA captures for all six products | [Evidence IDs, hashes and access results](rea-captures.md) |
 
 ## REA setup
 
-The official release selected at kickoff was [rea-agents 6.9.0, commit d74549e](https://github.com/morluto/rea/releases/tag/rea-agents-6.9.0). The [browser workflow](https://github.com/morluto/rea/blob/rea-agents-6.9.0/docs/guides/web/browser-observation.md) discovers a clean profile's browser targets before capturing a visible viewport. The checkout's npm registry was unavailable (ENOTFOUND), and the cached package metadata did not include the CLI archive. Direct Chrome startup in the local shell also failed to expose CDP. Each benchmark records its attempted command, scope, fallback and observed evidence. A public help walkthrough is treated as documentation for the covered feature.
+The official release selected at kickoff was [rea-agents 6.9.0, commit d74549e](https://github.com/morluto/rea/releases/tag/rea-agents-6.9.0). Initial local runs hit npm registry DNS and browser process restrictions. The team retried in an isolated Linux sandbox using the [documented exact-origin discovery and screenshot workflow](https://github.com/morluto/rea/blob/rea-agents-6.9.0/docs/guides/web/browser-observation.md). All six references had at least one rendered public viewport. The evidence index records 13 rendered public pages, three access interstitials and two loopback captures from the pinned OpenDraft build.
 
-The lead independently verified OpenDraft's tag to commit mapping and root MIT licence through the GitHub release and pinned source. Both direct Git checkout and GitHub release asset access failed with host-resolution errors in the local shell. The baseline report documents the dependency and format audit and runtime status.
+The pinned source maps OpenDraft v2.13.0 to `41fd8b90c22309729f807f388d36b16d700eea38`. The lead verified the Git tag independently. The benchmark team built it, opened the editor and typed a synthetic script in Chromium. The runtime report describes the boot, keyboard proof and remaining AV, history, collaboration and interchange checks.
 
 ## Visual references
 
