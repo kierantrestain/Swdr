@@ -1,3 +1,6 @@
+import { newBlock, newDocument } from '../model';
+import { pageLines, screenplayFromLines } from './pdf-layout';
+import type { PdfLine } from './pdf-layout';
 import { decodeFountain } from './screenplay';
 import type { ScriptConversion } from './screenplay';
 
@@ -313,6 +316,10 @@ export async function decodePdf(data: Uint8Array, title: string, signal?: AbortS
   if (!pages.length) throw new PdfImportError('unsupported', 'The PDF page structure could not be read. Export DOCX, FDX or plain text from its source application.');
   const cachedFonts = new Map<string, PdfFont>();
   const pageText: string[] = [];
+  const box = pages.map(([, page]) => /\/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\]/.exec(page)).find(Boolean);
+  const width = box ? Number(box[3]) - Number(box[1]) : 612;
+  const height = box ? Number(box[4]) - Number(box[2]) : 792;
+  const geometry: PdfLine[][] = [];
   for (const [, body] of pages) {
     signal?.throwIfAborted();
     const contentIds = references(/\/Contents\s*(\[[^\]]*\]|\d+\s+\d+\s+R\b)/.exec(body)?.[1] ?? '');
@@ -323,12 +330,28 @@ export async function decodePdf(data: Uint8Array, title: string, signal?: AbortS
       if (stream) fragments.push(...textFragments(stream, fonts));
     }
     pageText.push(readLines(fragments));
+    geometry.push(pageLines(fragments, geometry.length, width, height));
   }
   const original = pageText.map((text, index) => text.trim() || '[Page ' + (index + 1) + ' has no extractable text]').join('\n\n');
   if (!pageText.some(text => /\p{L}|\p{N}/u.test(text))) {
     throw new PdfImportError('image-only', 'No editable text was recovered. For a scan, run OCR in your PDF editor, review the result and export DOCX or a searchable PDF.');
   }
-  const conversion = decodeFountain(pageText.join('\n\n'), title, true);
+  // Screenplay PDFs encode elements by indent, so read them from the page layout; fall back to
+  // text-only parsing when the layout is not a screenplay.
+  const laid = screenplayFromLines(geometry);
+  let conversion: ScriptConversion;
+  if (laid) {
+    const document = newDocument(title, 'screenplay');
+    document.blocks = laid.blocks.map(block => newBlock(block.kind, block.text));
+    const lines = laid.title?.filter(Boolean) ?? [];
+    if (lines.length) {
+      const by = lines.findIndex(line => /^(?:written )?by$/i.test(line.trim()));
+      document.titlePage = { title: lines[0], ...(by >= 0 ? { byline: lines[by], author: lines[by + 1] } : {}) };
+    }
+    conversion = { document, original: '', warnings: [], uncertain: [] };
+  } else {
+    conversion = decodeFountain(pageText.join('\n\n'), title, true);
+  }
   const pageBox = pages.map(([, page]) => /\/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\]/.exec(page)).find(Boolean);
   if (pageBox) {
     const [, x1, y1, x2, y2] = pageBox.map(Number);
@@ -337,6 +360,8 @@ export async function decodePdf(data: Uint8Array, title: string, signal?: AbortS
   const emptyPages = pageText.filter(text => !text.trim()).length;
   if (emptyPages) conversion.warnings.push(emptyPages + ' page' + (emptyPages === 1 ? ' has' : 's have') +
     ' no extractable text. Review the original for blank or scanned pages. For missing pages, run OCR or re-export an editable copy before reimporting.');
-  conversion.warnings.push('PDF text is reconstructed in text-stream order. Review reading order, screenplay element types and visual formatting.');
+  conversion.warnings.push(laid
+    ? 'Elements were read from the page layout. Check dual dialogue and any unusual formatting.'
+    : 'PDF text is reconstructed in text-stream order. Review reading order, screenplay element types and visual formatting.');
   return { ...conversion, original, sourcePages: pages.length };
 }

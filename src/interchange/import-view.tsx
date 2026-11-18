@@ -89,7 +89,6 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
   const [selected, setSelected] = useState<string>();
   const [checked, setChecked] = useState<string[]>([]);
   const [page, setPage] = useState(0);
-  const [sourceSlice, setSourceSlice] = useState(0);
   const file = files[index];
   const review: Review | undefined = result?.type === 'archive' ? undefined : result;
   const isAv = draft?.kind === 'av';
@@ -120,7 +119,6 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
     setSelected(undefined);
     setChecked([]);
     setPage(0);
-    setSourceSlice(0);
   }
 
   function openBatch(batch: File[]) {
@@ -246,8 +244,6 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
 
   const block = draft?.blocks.find(item => item.id === selected);
   const visibleBlockIds = new Set(layout[checkedPage]?.lines.filter(line => line.blockId && !line.decoration).map(line => line.blockId));
-  const sourceLines = useMemo(() => review?.type === 'script' ? review.conversion.original.split('\n') : [], [review]);
-  const sourceSliceCount = Math.ceil(sourceLines.length / 100);
   const blocked = unresolved.length > 0 || needsMapping || Boolean(revision?.matches.some(match => match.outcome === 'unmatched') || avRevision?.matches.some(match => match.outcome === 'unmatched'));
   const importedCharacters = new Set(unresolved.map(line => line.blockId));
 
@@ -304,11 +300,8 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
       <div className="import-panels">
         <section className="import-panel">
           <header><div><h2>Original document</h2><p>{describeFile(file)}{review.type === 'script' && review.conversion.sourcePages ? ' · ' + countLabel(review.conversion.sourcePages, 'page') : ''}</p></div>
-            {sourceSliceCount > 1 && <select aria-label="Original text range" value={sourceSlice} onChange={event => setSourceSlice(Number(event.target.value))}>
-              {Array.from({ length: sourceSliceCount }, (_, part) => <option key={part} value={part}>Lines {part * 100 + 1}–{Math.min(sourceLines.length, (part + 1) * 100)}</option>)}
-            </select>}
           </header>
-          {review.type === 'script' ? <pre className="source-text">{sourceLines.slice(sourceSlice * 100, (sourceSlice + 1) * 100).join('\n')}</pre> :
+          {review.type === 'script' ? <pre className="source-text">{review.conversion.original}</pre> :
             <div className="import-preview-scroll"><table className="import-av-table"><thead><tr>{review.table.headers.map((heading, at) => <th key={at}>{heading}</th>)}</tr></thead>
               <tbody>{review.table.records.slice(0, 100).map((row, at) => <tr key={at}>{review.table.headers.map((_, column) => <td key={column}>{row[column] || '—'}</td>)}</tr>)}</tbody>
             </table>{review.table.records.length > 100 && <p>First 100 source rows shown.</p>}</div>}
