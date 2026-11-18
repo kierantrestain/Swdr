@@ -63,3 +63,23 @@ test('a chapter can be cut into a short and any piece becomes AV rows', () => {
   assert.match(rows[2].video, /^CHAPTER — Chapter 1\nB-ROLL: Drone of the route$/);
   assert.equal(rows[2].audio, 'Plan the route twice. Every corner gets a number.');
 });
+
+test('captions and SRT follow the script timing, the calendar runs Monday first, and retention gaps are flagged', async () => {
+  const { captionChunks, monthGrid, srt } = await import('../src/creator/model');
+  const piece = newPiece('tiktok', 'Speed');
+  piece.beats = [{ ...piece.beats[0], spoken: 'one two three four five six seven eight', seconds: 4 }];
+  assert.deepEqual(captionChunks(piece).map(chunk => [chunk.start, chunk.end, chunk.text]), [[0, 2, 'one two three four'], [2, 4, 'five six seven eight']]);
+  assert.equal(srt(piece), '1\n00:00:00,000 --> 00:00:03,500\none two three four five six seven\n\n2\n00:00:03,500 --> 00:00:04,000\neight\n');
+  const november = monthGrid(2026, 10);
+  assert.equal(november[0][0], '2026-10-26');
+  assert.ok(november.flat().includes('2026-11-30'));
+  const video = newPiece('youtube', 'Long');
+  video.beats = video.beats.map(beat => ({ ...beat, seconds: 120, spoken: 'Words.' }));
+  assert.ok(checks(video).some(item => /no B-roll or on-screen text/.test(item.message)));
+  const short = newPiece('shorts', 'Cross');
+  short.beats = short.beats.map(beat => ({ ...beat, seconds: 50, spoken: 'Words.', broll: 'b' }));
+  short.crossPost = ['reels'];
+  assert.ok(checks(short).every(item => !/cross-post/.test(item.message)));
+  short.beats[1].seconds = 200;
+  assert.ok(checks(short).some(item => /Too long to cross-post to Instagram Reels/.test(item.message)));
+});

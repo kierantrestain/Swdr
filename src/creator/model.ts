@@ -78,6 +78,12 @@ export interface Piece {
   wpm: number;
   /** The long-form video a short was cut from. */
   sourceId?: string;
+  /** Alternative titles to test; `title` is the one in use. */
+  titleVariants?: string[];
+  /** Other platforms the same cut is posted to. */
+  crossPost?: Platform[];
+  /** Channel or handle shown in previews. */
+  handle?: string;
   createdAt: string;
 }
 
@@ -203,6 +209,17 @@ export function checks(piece: Piece): CreatorCheck[] {
   }
   for (const item of timed) {
     if (item.kind !== 'hook' && !item.spoken.trim() && !item.onScreen.trim() && !item.broll.trim()) out.push({ level: 'tip', beatId: item.id, message: `“${item.label || BEAT_LABELS[item.kind]}” is still empty.` });
+    // Retention: long stretches with nothing new on screen are where viewers leave.
+    const still = item.end - item.start;
+    const limit = spec.form === 'long' ? 90 : 8;
+    if (still > limit && !item.broll.trim() && !item.onScreen.trim()) {
+      out.push({ level: 'warning', beatId: item.id, message: `“${item.label}” runs ${clock(still)} with no B-roll or on-screen text. Add a visual change at least every ${spec.form === 'long' ? '60–90 seconds' : 'few seconds'}.` });
+    }
+  }
+  for (const platform of piece.crossPost ?? []) {
+    const other = PLATFORMS[platform];
+    if (other.form === spec.form && total > other.maxSeconds) out.push({ level: 'error', message: `Too long to cross-post to ${other.label} (${clock(other.maxSeconds)} maximum).` });
+    if (other.captionLimit && text.length > other.captionLimit) out.push({ level: 'warning', message: `The caption is too long for ${other.label} (${other.captionLimit.toLocaleString()} characters).` });
   }
   return out;
 }
@@ -230,4 +247,75 @@ export function toAvRows(piece: Piece): AVRow[] {
     audio: item.spoken,
     durationSeconds: beatSeconds(item, piece.wpm)
   }));
+}
+
+/** Proven opening patterns. {topic} and {result} are placeholders the writer replaces. */
+export const HOOKS: Array<{ name: string; text: string }> = [
+  { name: 'Result first', text: 'This {result} took me one weekend — here is exactly how.' },
+  { name: 'Stop doing', text: 'Stop doing {topic} like this. Do this instead.' },
+  { name: 'Nobody tells you', text: 'Nobody tells you this about {topic}.' },
+  { name: 'I tried it', text: 'I tried {topic} for 30 days so you don\'t have to.' },
+  { name: 'Mistake', text: 'The biggest mistake I see with {topic} — and the two-minute fix.' },
+  { name: 'Versus', text: '{topic} for £50 versus £5,000. Can you tell which is which?' },
+  { name: 'Question', text: 'Why does every {topic} look the same? It comes down to one choice.' },
+  { name: 'Countdown', text: 'Three {topic} tricks that look expensive and cost nothing.' },
+  { name: 'Story cold open', text: 'Ten minutes before we called action, everything went wrong.' },
+  { name: 'Challenge', text: 'Can you {result} with only a phone? Let\'s find out.' }
+];
+
+export const TITLE_FORMULAS: string[] = [
+  'How I {result} (and what I\'d never do again)',
+  '{topic}: Everything I Wish I Knew Sooner',
+  'I Tried {topic} for 30 Days',
+  '{topic} for £50 vs £5,000',
+  'Stop Making This {topic} Mistake',
+  'The {topic} Trick Nobody Talks About',
+  '3 {topic} Tricks That Look Expensive',
+  'Why Every {topic} Looks the Same'
+];
+
+/** On-screen captions: the spoken words in short chunks, spread across each beat's time. */
+export function captionChunks(piece: Piece, size = 4): Array<{ start: number; end: number; text: string; beatId: string }> {
+  const out: Array<{ start: number; end: number; text: string; beatId: string }> = [];
+  for (const item of timeline(piece)) {
+    const words = item.spoken.trim().split(/\s+/).filter(Boolean);
+    if (!words.length || item.end <= item.start) continue;
+    const per = (item.end - item.start) / words.length;
+    for (let index = 0; index < words.length; index += size) {
+      const group = words.slice(index, index + size);
+      out.push({ start: item.start + index * per, end: item.start + (index + group.length) * per, text: group.join(' '), beatId: item.id });
+    }
+  }
+  return out;
+}
+
+function srtTime(seconds: number): string {
+  const ms = Math.round(seconds * 1000);
+  const pad = (value: number, length = 2) => String(value).padStart(length, '0');
+  return `${pad(Math.floor(ms / 3_600_000))}:${pad(Math.floor(ms / 60_000) % 60)}:${pad(Math.floor(ms / 1000) % 60)},${pad(ms % 1000, 3)}`;
+}
+
+/** SubRip subtitles timed from the script, for upload or as a burn-in guide in the edit. */
+export function srt(piece: Piece): string {
+  return captionChunks(piece, 7).map((chunk, index) => `${index + 1}\n${srtTime(chunk.start)} --> ${srtTime(chunk.end)}\n${chunk.text}\n`).join('\n');
+}
+
+export function beatAt(piece: Piece, seconds: number): TimedBeat | undefined {
+  const timed = timeline(piece);
+  return timed.find(item => seconds >= item.start && seconds < item.end) ?? timed.at(-1);
+}
+
+/** The weeks of a month as ISO dates, Monday first, padded with the neighbouring months. */
+export function monthGrid(year: number, month: number): string[][] {
+  const first = new Date(Date.UTC(year, month, 1));
+  const start = new Date(first);
+  start.setUTCDate(1 - ((first.getUTCDay() + 6) % 7));
+  const weeks: string[][] = [];
+  const cursor = new Date(start);
+  do {
+    const week: string[] = [];
+    for (let day = 0; day < 7; day += 1) { week.push(cursor.toISOString().slice(0, 10)); cursor.setUTCDate(cursor.getUTCDate() + 1); }
+    weeks.push(week);
+  } while (cursor.getUTCMonth() === month);
+  return weeks;
 }

@@ -110,7 +110,26 @@ function creatorDemo(): Project {
   short.beats = short.beats.map(beat => ({ ...beat, seconds: beat.kind === 'hook' ? 2 : beat.kind === 'cut' ? 24 : 4 }));
   short.status = 'scheduled';
   short.title = 'The £0 trick that makes a slow car look fast';
-  return withCreator(channel, { pieces: [video, short] });
+  const day = (offset: number) => { const date = new Date(); date.setUTCDate(date.getUTCDate() + offset); return date.toISOString().slice(0, 10); };
+  video.handle = 'Frame by Frame';
+  video.publishDate = day(5);
+  video.titleVariants = [video.title, 'I Shot a Car Chase for £500 (3-Person Crew)', 'Hollywood Car Chase on a £500 Budget'];
+  short.handle = '@framebyframe';
+  short.publishDate = day(2);
+  short.crossPost = ['reels', 'shorts'];
+  short.description = 'We never drove above 30. The speed is all in the edit.';
+  const lens = newPiece('reels', 'One lens, three looks');
+  lens.status = 'scripting';
+  lens.handle = '@framebyframe';
+  lens.beats[0] = { ...lens.beats[0], spoken: 'Same lens. Same room. Three completely different films.', onScreen: '1 LENS · 3 LOOKS' };
+  const ideas = ['Lighting a night interior with one lamp', 'Why every indie film looks the same', 'I tried shooting a short on a phone for 30 days']
+    .map((title, index) => ({ ...newPiece(index === 1 ? 'youtube' : 'tiktok', title), handle: '@framebyframe' }));
+  const live = newPiece('youtube', 'The sound design trick that sells every fight scene');
+  live.status = 'published';
+  live.publishDate = day(-9);
+  live.thumbnailText = 'FAKE PUNCHES, REAL SOUND';
+  live.beats = live.beats.map(beat => ({ ...beat, seconds: beat.kind === 'hook' ? 7 : beat.kind === 'chapter' ? 190 : 35, spoken: beat.spoken || `${beat.label}.` }));
+  return withCreator(channel, { pieces: [video, short, lens, ...ideas, live] });
 }
 
 export function episodeLabel(episode: Episode | undefined): string {

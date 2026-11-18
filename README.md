@@ -27,13 +27,13 @@ It works offline in the browser, keeps your projects on your device by default, 
 - **Goals**: a daily word goal with progress in the toolbar, a streak and a 14-day chart.
 
 ### Creator studio: social short-form and YouTube long-form
-- **Short-form** for TikTok, Instagram Reels, YouTube Shorts and LinkedIn, built on a **Hook → Cut → Convert** structure.
-- **YouTube long-form** with a cold open, intro, chapters, sponsor read, recap and end screen.
-- **Beat-by-beat scripting**: what you say, on-screen text and B-roll for every beat. Timing is estimated from your speaking pace (or set by hand) and shown on a timeline against the platform's target length.
-- **Checks per platform**: hook timing, maximum and target length, title and caption limits, YouTube chapter rules (at least three chapters, each at least 10 seconds) and the hashtag limit.
-- **Publishing pack**: thumbnail text, description or caption, hashtags and auto-generated YouTube chapters, ready to copy or export.
-- **Repurpose**: cut a short from any YouTube chapter in one click.
-- **Content slate** with status (Idea → Published) and publish dates, a full-screen **teleprompter** paced to your script, and **Send to AV script** for a printable two-column version.
+- **Content board and calendar**: every video moves from Idea → Scripting → Filming → Editing → Scheduled → Published by drag and drop, with a month calendar of publish dates.
+- **Short-form** for TikTok, Instagram Reels, YouTube Shorts and LinkedIn, built on **Hook → Cut → Convert**. **YouTube long-form** runs cold open, intro, chapters, sponsor, recap and end screen.
+- **Live previews while you write**: a 9:16 phone with burned-in captions, the platform's buttons and **safe zones**; and for YouTube, the feed card (thumbnail, title, duration) and the watch page with a chaptered scrubber. Press play to watch the script run in real time; the current beat lights up in the script.
+- **Packaging first**: A/B/C title options previewed in the feed, title formulas, thumbnail text and a **hook library** of proven openings.
+- **Retention and platform checks**: hook timing, visual coverage (flags long stretches with no B-roll or on-screen text), target and maximum length for every cross-posted platform, title and caption limits, YouTube chapter rules and the hashtag limit.
+- **Publishing pack**: description or caption with auto-generated YouTube chapters and hashtags, **.srt captions** timed from the script, cross-posting, and a full export.
+- **Repurpose**: cut a short from any YouTube chapter in one click. Plus a mirrored, pace-matched **teleprompter** and **Send to AV script**.
 
 ### Story development
 - **Outline and beat board** by act, with beats linked to scenes.

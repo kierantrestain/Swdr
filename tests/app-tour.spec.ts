@@ -21,11 +21,27 @@ for (const mode of ['light', 'dark'] as const) {
     await shot('05-creator-overview');
     await nav().getByRole('link', { name: /Creator studio/ }).click();
     await expect(page.getByRole('heading', { name: 'Creator studio' })).toBeVisible();
-    await shot('02-creator');
+    await shot('02-creator-board');
+    await page.getByRole('button', { name: 'Calendar', exact: true }).click();
+    await shot('02b-creator-calendar');
+    await page.getByRole('button', { name: 'Board', exact: true }).click();
+    await page.getByRole('button', { name: /How a 3-person crew/ }).click();
+    await expect(page.getByRole('region', { name: 'YouTube preview' })).toBeVisible();
+    await page.getByRole('button', { name: 'Play preview' }).click();
+    await page.waitForTimeout(1500);
+    await shot('03-creator-youtube');
+    await page.getByRole('tab', { name: 'Packaging' }).click();
+    await shot('03b-creator-packaging');
     await page.getByRole('tab', { name: 'Publish' }).click();
-    await shot('03-creator-publish');
+    await shot('03c-creator-publish');
     await page.getByRole('tab', { name: /Checks/ }).click();
     await shot('04-creator-checks');
+    await page.getByRole('button', { name: 'All videos' }).click();
+    await page.getByRole('button', { name: /The £0 trick/ }).click();
+    await expect(page.getByRole('region', { name: 'Phone preview' })).toBeVisible();
+    await page.getByRole('button', { name: 'Play preview' }).click();
+    await page.waitForTimeout(1200);
+    await shot('04b-creator-phone');
     await page.getByRole('link', { name: 'Projects' }).first().click();
     await page.getByRole('button', { name: 'Open project The North Shore' }).click();
     await nav().getByRole('link', { name: 'Script', exact: true }).click();
@@ -52,6 +68,8 @@ for (const mode of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Open project Frame by Frame' }).click();
     await page.goto(page.url().replace('/project', '/creator'));
     await shot('12-phone-creator');
+    await page.getByRole('button', { name: /The £0 trick/ }).click();
+    await shot('13-phone-creator-short');
     expect(problems).toEqual([]);
   });
 }
