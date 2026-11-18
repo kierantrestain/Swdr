@@ -52,6 +52,23 @@ Both apps were driven with the same steps: a new script; `int. lighthouse - nigh
 | Multi-block paste | Types kept | Types kept, fresh unique block IDs, and its own undo step |
 | Page errors | none | none |
 
+## Owner-provided evidence: authenticated Celtx (18 November 2026)
+
+The product owner shared a screenshot of their own logged-in Celtx project. It is the first authenticated Celtx editor screen in this research. It shows:
+
+- **Element menu:** a "TAB to Switch" header, with Act ⌘0, Scene Heading ⌘1, Action ⌘2, Character ⌘3, Dialogue ⌘4, Parenthetical ⌘5, Transition ⌘6, Shot ⌘7, Text ⌘8.
+- **Project sidebar:** Script, Beat Sheet, Storyboard, Catalog, Cast & Crew, Budget, Schedule, Files & Media.
+- **Tools rail:** Beats, Breakdown, Shot List, Media, Read Through.
+- **Toolbar and status:** bold/italic/underline, 75% zoom, a footer page and word count, and the title page as the first sheet.
+
+SWDR actions from this screen:
+
+- **New:** an element menu with key hints; the title-page sheet; the page and word count; zoom.
+- **In progress:** a project sidebar with an episode switcher.
+- **Planned:** inline text styles.
+
+Note: Celtx lists ⌘+digit. Browsers reserve Ctrl/⌘+digit for switching tabs, so SWDR advertises Ctrl+Alt/⌘⌥+digit (reliable) and also binds ⌘/Ctrl+digit where the browser passes it through. The full capability comparison is in [the feature map](../../feature-map.md).
+
 ## Remaining access blockers
 
 1. **Authenticated editors (Celtx, Final Draft Cloud, WriterDuet, Arc Studio, StudioBinder).** Each needs an account. Accounts were not created with the owner's identity, and verification challenges were not bypassed. The bundle findings come from code each product ships to every visitor before sign-in, so they are **direct evidence of implementation, not observed runtime behaviour**. To close this gap, provide test accounts. The same REA scenarios ([`captures/swdr-writing/steps.md`](captures/swdr-writing/steps.md) shows the format) can then drive each editor.
