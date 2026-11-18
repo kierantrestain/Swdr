@@ -11,11 +11,22 @@ import { Text } from '@astryxdesign/core/Text';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Clapperboard, FileText, FolderOpen, Mic, Plus, Search, ShieldCheck, Sparkles, Theater, Tv, Video } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { PROJECT_KINDS } from './model';
 import type { DocumentModel, Project, ProjectKind } from './model';
 import { episodeLabel } from './demo';
+import { Welcome, welcomeSeen } from './Welcome';
+import { PlansDialog, PRO_PRICE } from './workspace/plans';
+import { accountApi } from './workspace/account-api';
+import type { TeamAccount } from './workspace/team-contract';
+
+/** The plans dialog with the visitor's account when they are signed in. */
+function PlansLoader({ onClose }: { onClose: () => void }) {
+  const [account, setAccount] = useState<TeamAccount | null>();
+  useEffect(() => { void accountApi.session().then(setAccount, () => setAccount(null)); }, []);
+  return account === undefined ? null : <PlansDialog account={account ?? undefined} onClose={onClose} />;
+}
 
 export const PROJECT_LABELS: Record<ProjectKind, string> = {
   film: 'Film', series: 'Television', stage: 'Stage', documentary: 'Documentary', commercial: 'Commercial / AV', creator: 'Social & YouTube'
@@ -117,6 +128,8 @@ export function Home({ projects, recent, open, resume, create, importScript, loa
   const [tab, setTab] = useState<LibraryTab>('recent');
   const [query, setQuery] = useState('');
   const [newKind, setNewKind] = useState<ProjectKind>();
+  const [tour, setTour] = useState(() => !welcomeSeen());
+  const [plans, setPlans] = useState(false);
   const live = projects.filter(project => !project.archivedAt);
   const archived = projects.filter(project => project.archivedAt);
   const sorted = live.slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -136,6 +149,8 @@ export function Home({ projects, recent, open, resume, create, importScript, loa
         <Button label="New project" variant="primary" icon={<Plus size={16} aria-hidden="true" />} onClick={() => setNewKind('film')} />
       </div>
     </header>
+    {tour && <Welcome onDone={() => setTour(false)} onPlans={() => setPlans(true)} />}
+    {plans && <PlansLoader onClose={() => setPlans(false)} />}
     {newKind && <NewProjectDialog initialKind={newKind} onClose={() => setNewKind(undefined)} create={create} />}
 
     {recent && <section className="continue-panel" aria-labelledby="continue-title">
@@ -215,7 +230,11 @@ export function Home({ projects, recent, open, resume, create, importScript, loa
     </section>
     <footer className="home-footer">
       <span><ShieldCheck size={16} aria-hidden="true" /> Projects are saved on this device. <BookOpen size={15} aria-hidden="true" /> Press <Kbd keys="?" /> for shortcuts.</span>
-      <Button variant="ghost" label="Private team workspace" onClick={openTeam} endContent={<ArrowUpRight size={15} aria-hidden="true" />} />
+      <span className="home-footer-links">
+        {!tour && <Button variant="ghost" label="Take the tour" onClick={() => setTour(true)} />}
+        <Button variant="ghost" label={`Plans · Pro ${PRO_PRICE} for life`} onClick={() => setPlans(true)} />
+        <Button variant="ghost" label="Private team workspace" onClick={openTeam} endContent={<ArrowUpRight size={15} aria-hidden="true" />} />
+      </span>
     </footer>
   </div>;
 }

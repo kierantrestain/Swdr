@@ -147,4 +147,28 @@ CREATE TABLE IF NOT EXISTS swdr_ai_usage (
   PRIMARY KEY (email, day)
 );
 
+-- Plans: free or the lifetime Pro upgrade bought through Stripe.
+ALTER TABLE swdr_team_users ADD COLUMN IF NOT EXISTS plan text NOT NULL DEFAULT 'free';
+ALTER TABLE swdr_team_users ADD COLUMN IF NOT EXISTS pro_since timestamptz;
+ALTER TABLE swdr_team_users ADD COLUMN IF NOT EXISTS stripe_session text;
+
+-- Password reset links (digest only), single use, one hour.
+CREATE TABLE IF NOT EXISTS swdr_team_resets (
+  digest text PRIMARY KEY,
+  email text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS swdr_team_resets_email ON swdr_team_resets (email);
+
+-- Personal links for the Claude/ChatGPT connector (digest only); one active link per account.
+CREATE TABLE IF NOT EXISTS swdr_mcp_tokens (
+  digest text PRIMARY KEY,
+  email text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz,
+  revoked_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS swdr_mcp_tokens_email ON swdr_mcp_tokens (email);
+
 COMMIT;

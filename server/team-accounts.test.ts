@@ -155,9 +155,9 @@ test('sessions: expired or unknown digests, removed keys and deleted accounts ar
   row = { email: 'deleted@example.test', method: 'password', registered: false, has_password: false };
   await assert.rejects(ask(), /Sign in/);
   row = { email: 'keyholder@example.test', method: 'access-key', name: null, registered: false, has_password: false };
-  assert.deepEqual((await ask()).data, { email: 'keyholder@example.test', name: '', method: 'access-key', hasPassword: false });
+  assert.deepEqual((await ask()).data, { email: 'keyholder@example.test', name: '', method: 'access-key', hasPassword: false, plan: 'pro', billing: false });
   row = { email: 'writer@example.test', method: 'password', name: 'Wren', registered: true, has_password: true };
-  assert.deepEqual((await ask()).data, { email: 'writer@example.test', name: 'Wren', method: 'password', hasPassword: true });
+  assert.deepEqual((await ask()).data, { email: 'writer@example.test', name: 'Wren', method: 'password', hasPassword: true, plan: 'pro', billing: false });
   assert.ok(calls.some(call => call.sql.startsWith('UPDATE swdr_team_users SET last_active_at')));
 });
 

@@ -133,6 +133,10 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
   useEffect(() => {
     let cancelled = false;
     const start = async () => {
+      if (/[?&]upgraded=1/.test(window.location.hash)) {
+        setMessage('Payment received — thank you. SWDR Pro unlocks within a minute.');
+        window.history.replaceState(window.history.state, '', '#team');
+      }
       void accountApi.config().then(value => { if (!cancelled) setConfig(value); }, () => undefined);
       const token = readInviteToken();
       if (token) {

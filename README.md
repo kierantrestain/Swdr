@@ -17,6 +17,13 @@ It works offline in the browser, keeps your projects on your device by default, 
 - **Users' own accounts**: Connect OpenRouter in one click, or paste their own Claude, GPT, Gemini, Groq or Mistral key, kept only in their browser.
 - **Your own fine-tuned model**: export your scenes as training data, fine-tune an open model, and connect it. See [docs/ai.md](docs/ai.md).
 
+### Plans
+- **Free forever** on your device: every writing, story, production and Creator studio feature, plus one cloud team project and 10 AI requests a day.
+- **SWDR Pro — £99 once, for life**: unlimited team projects, 150 AI requests a day and the Claude and ChatGPT connector. Payments by Stripe. See [docs/plans.md](docs/plans.md).
+
+### Claude and ChatGPT connector
+- Add SWDR to Claude or ChatGPT as a connector and work on your scripts from there with your own subscription: list projects, read scenes and outlines, add beats and scenes.
+
 ### Smart, on your device
 - **Project pulse**: the Overview shows words written, today's goal, script health, how much of the shoot is scheduled, the next shoot day, budget spent, videos live and the next publish date. A **Next up** list ranks what needs attention — formatting problems, schedule conflicts, unscheduled scenes, budget overruns, videos publishing soon with problems — with one click to each.
 - **Search every line**: press `Ctrl/⌘+K` and type three letters to search the text of every script in the project, alongside sections, scenes, episodes and projects.
@@ -68,7 +75,7 @@ Everything above is calculated in the browser from your own project. Nothing is 
 - **Script change tracking**: production flags scenes whose script changed since the issued draft and lets you review them before relinking.
 
 ### Accounts and collaboration
-- **Sign up and sign in** with email and password, from **Sign in** in the top bar.
+- **Sign up and sign in** with email and password, from **Sign in** in the top bar, with **password reset by email** (Resend).
 - **Private team workspaces**: share a project, invite people by link, and assign a role (Owner, Writer, Reviewer, Viewer) for the whole project or selected episodes.
 - **Review links**: expiring, read-only links to an issued script.
 - **Live co-writing**: see who is in the project, who is typing and where, with each person's named cursor in the script. Click an avatar to jump to them.
@@ -164,3 +171,4 @@ docs/            Feature guides
 - [Interchange](docs/interchange.md): import and export formats
 - [Workspace](docs/workspace.md): local storage, accounts and teams
 - [AI partner](docs/ai.md): providers, free options and fine-tuning
+- [Plans and payments](docs/plans.md): Stripe, Resend password reset and the connector

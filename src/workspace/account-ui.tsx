@@ -11,8 +11,9 @@ import { HStack, Layout, LayoutContent, LayoutFooter, VStack } from '@astryxdesi
 import { Tab, TabList } from '@astryxdesign/core/TabList';
 import { Text } from '@astryxdesign/core/Text';
 import { TextInput } from '@astryxdesign/core/TextInput';
-import { KeyRound, LogOut, MailOpen, ShieldCheck, Users, WifiOff } from 'lucide-react';
-import { accountApi, hasUnsyncedTeamEdits, roleDescriptions, roleLabels } from './account-api';
+import { Crown, KeyRound, LogOut, MailOpen, Plug, ShieldCheck, Users, WifiOff } from 'lucide-react';
+import { ConnectorDialog, PlansDialog, PRO_PRICE } from './plans';
+import { accountApi, readResetToken, hasUnsyncedTeamEdits, roleDescriptions, roleLabels } from './account-api';
 import { errorMessage, TeamRequestError } from './team-client';
 import type { TeamAccount, TeamConfig, TeamInvitePreview, TeamSignedIn } from './team-contract';
 import './team.css';
@@ -99,6 +100,8 @@ export function TeamAuthPage({ config, invite, inviteToken, inviteError, onSigne
   const [useKey, setUseKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [resetToken] = useState(readResetToken);
+  const [recovery, setRecovery] = useState<'forgot' | 'sent' | 'reset' | undefined>(resetToken ? 'reset' : undefined);
 
   useEffect(() => {
     if (!invite) return;
@@ -137,6 +140,42 @@ export function TeamAuthPage({ config, invite, inviteToken, inviteError, onSigne
   };
 
   const lockedEmail = !!invite && !useKey;
+  const recover = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    const work = recovery === 'reset' && resetToken
+      ? accountApi.resetPassword(resetToken, password).then(async ({ email: address }) => {
+        window.history.replaceState(window.history.state, '', '#team');
+        return onSignedIn(await accountApi.signIn(address, password));
+      })
+      : accountApi.requestReset(email).then(() => setRecovery('sent'));
+    void work.catch((cause: unknown) => setError(errorMessage(cause))).finally(() => setBusy(false));
+  };
+  if (recovery) return <main className="team-ax team-auth-page" id="main-content">
+    <section className="team-auth-intro" aria-label="About team workspaces"><Explainer config={config} invited={false} /></section>
+    <section className="team-auth-card" aria-label={recovery === 'reset' ? 'Choose a new password' : 'Reset your password'}>
+      <Card padding={6} elevation="low">
+        <VStack gap={4}>
+          <Heading level={2}>{recovery === 'reset' ? 'Choose a new password' : 'Reset your password'}</Heading>
+          {recovery === 'sent' ? <Banner status="success" title="Check your email" collapsible={false}
+            description={`If ${email} has an SWDR account, a reset link is on its way. It works once, for one hour.`} />
+            : <form className="team-ax-form" onSubmit={recover} noValidate>
+              <VStack gap={3}>
+                {recovery === 'reset'
+                  ? <TextInput label="New password" type="password" value={password} onChange={setPassword} autoComplete="new-password" isRequired
+                    description="At least 10 characters. Signing in elsewhere ends when you change it." />
+                  : <TextInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" isRequired
+                    description="We'll email a link to choose a new password." />}
+                {error && <Banner status="error" title={error} collapsible={false} />}
+                <Button type="submit" variant="primary" isLoading={busy} width="100%" label={recovery === 'reset' ? 'Save and sign in' : 'Send reset link'} />
+              </VStack>
+            </form>}
+          <Button variant="ghost" label="Back to sign in" onClick={() => { setRecovery(undefined); setError(undefined); if (resetToken) window.history.replaceState(window.history.state, '', '#team'); }} />
+        </VStack>
+      </Card>
+    </section>
+  </main>;
   return <main className="team-ax team-auth-page" id="main-content">
     <section className="team-auth-intro" aria-label="About team workspaces"><Explainer config={config} invited={!!invite} /></section>
     <section className="team-auth-card" aria-label={tab === 'create' ? 'Create account' : 'Sign in'}>
@@ -167,6 +206,7 @@ export function TeamAuthPage({ config, invite, inviteToken, inviteError, onSigne
                   label={useKey ? 'Sign in' : tab === 'create' ? (invite?.projectTitle ? 'Create account and join' : 'Create account') : (invite?.projectTitle ? 'Sign in and join' : 'Sign in')} />
               </VStack>
             </form>}
+          {tab === 'sign-in' && !useKey && <Button variant="ghost" label="Forgot your password?" onClick={() => { setRecovery('forgot'); setError(undefined); }} />}
           {config?.accessKeys && <Button variant="ghost" icon={<KeyRound size={16} aria-hidden />}
             label={useKey ? 'Use email and password instead' : 'Use a team access key'}
             onClick={() => { setUseKey(!useKey); setError(undefined); }} />}
@@ -241,6 +281,7 @@ export function AccountMenu({ account, onSignOut, onAccountChange }: {
   onAccountChange?: (account: TeamAccount) => void;
 }) {
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [panel, setPanel] = useState<'plans' | 'connector'>();
   return <>
     <DropdownMenu
       button={{ label: displayName(account), variant: 'secondary', size: 'sm' }}
@@ -249,13 +290,17 @@ export function AccountMenu({ account, onSignOut, onAccountChange }: {
       header={<VStack gap={0.5} padding={2}>
         <Text weight="semibold">{displayName(account)}</Text>
         <Text type="supporting">{account.email}</Text>
-        <HStack gap={1}><Badge label={account.method === 'password' ? 'Password' : 'Access key'} /></HStack>
+        <HStack gap={1}><Badge label={account.method === 'password' ? 'Password' : 'Access key'} />{account.billing && <Badge variant={account.plan === 'pro' ? 'success' : 'neutral'} label={account.plan === 'pro' ? 'Pro for life' : 'Free'} />}</HStack>
       </VStack>}
       items={[
         ...(!account.hasPassword && onAccountChange ? [{ label: 'Add a password', icon: <KeyRound size={16} aria-hidden />, onClick: () => setPasswordOpen(true) }] : []),
+        ...(account.billing && account.plan !== 'pro' ? [{ label: `Upgrade to Pro — ${PRO_PRICE} for life`, icon: <Crown size={16} aria-hidden />, onClick: () => setPanel('plans') }] : [{ label: 'Plans', icon: <Crown size={16} aria-hidden />, onClick: () => setPanel('plans') }]),
+        { label: 'Claude & ChatGPT connector', icon: <Plug size={16} aria-hidden />, onClick: () => setPanel('connector') },
         { label: 'Sign out', icon: <LogOut size={16} aria-hidden />, onClick: onSignOut }
       ]}
     />
+    {panel === 'plans' && <PlansDialog account={account} onClose={() => setPanel(undefined)} />}
+    {panel === 'connector' && <ConnectorDialog account={account} onClose={() => setPanel(undefined)} />}
     {passwordOpen && onAccountChange && <SetPasswordDialog account={account} isOpen onClose={() => setPasswordOpen(false)}
       onSaved={next => { setPasswordOpen(false); onAccountChange(next); }} />}
   </>;

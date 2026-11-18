@@ -82,6 +82,10 @@ export interface TeamAccount {
   name: string;
   method: 'password' | 'access-key';
   hasPassword: boolean;
+  /** The plan in force: Pro for everyone while billing is not set up. */
+  plan?: 'free' | 'pro';
+  /** Whether upgrades can be bought on this workspace. */
+  billing?: boolean;
 }
 
 export interface TeamMember extends TeamGrant {

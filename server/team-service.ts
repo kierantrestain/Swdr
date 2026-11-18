@@ -13,6 +13,7 @@ import {
   acceptInvitation, createInvitation, episodeScope, listInvitations, listMembers, lockInvitation, previewInvitation,
   reissueInvitation, revokeInvitation, roleField
 } from './team-invitations.js';
+import { billingEnabled, effectivePlan, LIMITS, requirePro } from './team-billing.js';
 import {
   applyProjection, asObject, canReadEpisode, canWrite, currentBlock, emailField, idField,
   integerField, mergeTeamProjects, preserveSnapshots, TeamFault, textField, toVisibleProject,
@@ -200,6 +201,7 @@ async function signUp(pool: Pool, accounts: TeamAccounts, request: Body, context
 }
 
 interface SessionRow {
+  plan?: string | null;
   email: string;
   method?: TeamAccount['method'];
   name?: string | null;
@@ -210,7 +212,7 @@ interface SessionRow {
 export async function requireAccount(db: Pool, accounts: TeamAccounts, session?: string): Promise<TeamAccount> {
   if (!session || !TOKEN.test(session)) throw new TeamFault(401, 'Sign in to the private workspace.');
   const result = await db.query<SessionRow>(
-    `SELECT s.email, s.method, u.name, u.email IS NOT NULL AS registered, c.email IS NOT NULL AS has_password
+    `SELECT s.email, s.method, u.name, u.plan, u.email IS NOT NULL AS registered, c.email IS NOT NULL AS has_password
      FROM swdr_team_sessions s
      LEFT JOIN swdr_team_users u ON u.email = s.email
      LEFT JOIN swdr_team_credentials c ON c.email = s.email
@@ -229,7 +231,7 @@ export async function requireAccount(db: Pool, accounts: TeamAccounts, session?:
       [row.email]
     );
   }
-  return { email: row.email, name: row.name ?? '', method, hasPassword: row.has_password === true };
+  return { email: row.email, name: row.name ?? '', method, hasPassword: row.has_password === true, plan: effectivePlan(row.plan), billing: billingEnabled() };
 }
 
 /** Lets someone signed in with an access key add a password, so the operator can later retire the key. */
@@ -696,8 +698,15 @@ export async function runTeamAction(
       };
     case 'list':
       return { data: await listProjects(pool, email) };
-    case 'create':
+    case 'create': {
+      // Free accounts keep one cloud team project; Pro is unlimited.
+      if (account.plan === 'free') {
+        const owned = await pool.query<{ count: string }>("SELECT count(*) FROM swdr_team_grants WHERE email = $1 AND role = 'owner'", [email]);
+        const existing = await pool.query('SELECT 1 FROM swdr_team_projects WHERE id = $1', [asObject(request.project, 'project').id]);
+        if (Number(owned.rows[0].count) >= LIMITS.free.teamProjects && !existing.rows[0]) requirePro('free', 'More than one cloud team project');
+      }
       return { data: await transaction(pool, db => createProject(db, email, request)) };
+    }
   }
   if (request.action === 'presence') return { data: await presence(pool, email, request) };
   const id = idField(request.projectId, 'project ID');
@@ -750,5 +759,92 @@ export async function runTeamAction(
       default:
         throw new TeamFault(400, 'Unknown action.');
     }
+  });
+}
+
+/* ---------- Claude/ChatGPT connector (MCP) tools, run with the same access rules as the app ---------- */
+
+export interface ConnectorTool { name: string; description: string; inputSchema: Record<string, unknown>; readOnly: boolean }
+
+const projectArg = { projectId: { type: 'string', description: 'Project ID from list_projects' } };
+const documentArg = { documentId: { type: 'string', description: 'Script ID from read_project' } };
+
+export const CONNECTOR_TOOLS: ConnectorTool[] = [
+  { name: 'list_projects', readOnly: true, description: 'List the SWDR projects shared to this account (cloud team projects), with your role in each.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'read_project', readOnly: true, description: 'A project overview: title, format, synopsis, episodes and its scripts with scene counts.', inputSchema: { type: 'object', properties: projectArg, required: ['projectId'] } },
+  { name: 'read_script', readOnly: true, description: 'Read a script as Fountain screenplay text: the whole script, or one scene by its number.', inputSchema: { type: 'object', properties: { ...projectArg, ...documentArg, scene: { type: 'string', description: 'Optional scene number' } }, required: ['projectId', 'documentId'] } },
+  { name: 'read_outline', readOnly: true, description: 'Read a script\'s outline beats by act.', inputSchema: { type: 'object', properties: { ...projectArg, ...documentArg }, required: ['projectId', 'documentId'] } },
+  { name: 'add_beat', readOnly: false, description: 'Add a beat to a script\'s outline.', inputSchema: { type: 'object', properties: { ...projectArg, ...documentArg, act: { type: 'integer', enum: [1, 2, 3] }, title: { type: 'string' }, notes: { type: 'string' } }, required: ['projectId', 'documentId', 'act', 'title'] } },
+  { name: 'add_to_script', readOnly: false, description: 'Insert Fountain screenplay text into a script, after a given scene or at the end. The writer sees it in SWDR and can undo it from line history.', inputSchema: { type: 'object', properties: { ...projectArg, ...documentArg, fountain: { type: 'string', description: 'Screenplay text in Fountain format' }, afterScene: { type: 'string', description: 'Optional scene number to insert after; default is the end' } }, required: ['projectId', 'documentId', 'fountain'] } }
+];
+
+function fountainOf(blocks: DocumentModel['blocks']): string {
+  return blocks.filter(block => block.kind !== 'note' && block.text.trim()).map(block => {
+    const text = block.text.trim();
+    if (block.kind === 'scene' || block.kind === 'character') return `\n${text.toUpperCase()}`;
+    if (block.kind === 'transition') return `\n> ${text.toUpperCase()}`;
+    if (block.kind === 'dialogue' || block.kind === 'parenthetical') return text;
+    return `\n${text}`;
+  }).join('\n').trim();
+}
+
+/** Runs one connector tool for the account. Text in, text out; writes go through the normal save path. */
+export async function runConnectorTool(pool: Pool, email: string, name: string, args: Record<string, unknown>,
+  decode: (fountain: string) => DocumentModel['blocks']): Promise<string> {
+  if (name === 'list_projects') {
+    const projects = await listProjects(pool, email);
+    return projects.length ? projects.map(item => `${item.title} (${item.kind}) — id ${item.id}, you are ${item.role === 'editor' ? 'a writer' : `the ${item.role}`}`).join('\n')
+      : 'No projects are shared to this account yet. In SWDR, open Private team and choose Create private copy for a project.';
+  }
+  const id = idField(args.projectId, 'project ID');
+  return transaction(pool, async db => {
+    const stored = await requireProject(db, id, email);
+    const grant = access(stored, email);
+    const project = toVisibleProject(stored.body, grant);
+    if (name === 'read_project') {
+      return [`${project.title} (${project.kind})`, project.synopsis && `Synopsis: ${project.synopsis}`,
+        project.episodes.length && `Episodes: ${project.episodes.map(item => `S${item.season}E${item.number} ${item.title}`).join('; ')}`,
+        `Scripts:\n${project.documents.map(item => `- ${item.title} — id ${item.id}, ${item.kind}, ${item.blocks.filter(block => block.kind === 'scene').length} scenes, ${item.beats.length} beats`).join('\n')}`]
+        .filter(Boolean).join('\n\n');
+    }
+    const document = visibleDocument(project, grant, idField(args.documentId, 'document ID'));
+    if (name === 'read_script') {
+      if (args.scene === undefined || args.scene === '') return fountainOf(document.blocks).slice(0, 200_000) || '(The script is empty.)';
+      const scenes = document.blocks.map((block, index) => block.kind === 'scene' ? index : -1).filter(index => index >= 0);
+      const at = scenes.findIndex((start, order) => (document.blocks[start].sceneNumber ?? String(order + 1)) === String(args.scene));
+      if (at < 0) throw new TeamFault(404, `There is no scene ${String(args.scene)}.`);
+      return fountainOf(document.blocks.slice(scenes[at], scenes[at + 1] ?? document.blocks.length));
+    }
+    if (name === 'read_outline') {
+      return [1, 2, 3].map(act => {
+        const beats = document.beats.filter(beat => (beat.act ?? 1) === act);
+        return beats.length ? `Act ${['I', 'II', 'III'][act - 1]}\n${beats.map(beat => `- ${beat.title}${beat.notes ? `: ${beat.notes}` : ''}`).join('\n')}` : '';
+      }).filter(Boolean).join('\n\n') || '(No outline beats yet.)';
+    }
+    let next: DocumentModel;
+    if (name === 'add_beat') {
+      const act = integerField(args.act, 'act', 1, 3) as 1 | 2 | 3;
+      const title = textField(args.title, 'beat title', 200);
+      const notes = args.notes === undefined ? '' : textField(args.notes, 'notes', 4000, true);
+      next = { ...document, beats: [...document.beats, { id: randomBytes(16).toString('hex'), title, notes, act }] };
+    } else if (name === 'add_to_script') {
+      const blocks = decode(textField(args.fountain, 'screenplay text', 60_000)).filter(block => block.text.trim()).map(block => ({ ...block, sceneNumber: undefined }));
+      if (!blocks.length) throw new TeamFault(400, 'There was no screenplay text to add.');
+      let index = document.blocks.length;
+      if (args.afterScene !== undefined && args.afterScene !== '') {
+        const starts = document.blocks.map((block, at) => block.kind === 'scene' ? at : -1).filter(at => at >= 0);
+        const order = starts.findIndex((start, position) => (document.blocks[start].sceneNumber ?? String(position + 1)) === String(args.afterScene));
+        if (order < 0) throw new TeamFault(404, `There is no scene ${String(args.afterScene)}.`);
+        index = starts[order + 1] ?? document.blocks.length;
+      }
+      next = { ...document, blocks: [...document.blocks.slice(0, index), ...blocks, ...document.blocks.slice(index)] };
+    } else {
+      throw new TeamFault(404, `Unknown tool ${name}.`);
+    }
+    const changed = { ...project, documents: project.documents.map(item => item.id === document.id ? next : item), updatedAt: new Date().toISOString() };
+    await saveProject(db, stored, grant, {
+      project: changed, version: stored.version, operationId: randomBytes(16).toString('hex'), expectedRole: grant.role, expectedEpisodeIds: grant.episodeIds
+    });
+    return name === 'add_beat' ? `Added the beat to ${document.title}.` : `Added ${next.blocks.length - document.blocks.length} lines to ${document.title}. The writer can review them in SWDR's line history.`;
   });
 }

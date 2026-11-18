@@ -6,9 +6,19 @@
     "api/team.ts": {
       "includeFiles": "server/team-schema.sql",
       "maxDuration": 120
+    },
+    "api/mcp.ts": {
+      "includeFiles": "server/team-schema.sql"
+    },
+    "api/stripe-webhook.ts": {
+      "includeFiles": "server/team-schema.sql"
     }
   },
   "rewrites": [
+    {
+      "source": "/mcp/:token",
+      "destination": "/api/mcp?token=:token"
+    },
     {
       "source": "/team",
       "destination": "/index.html"

@@ -1,0 +1,19 @@
+.plans, .connector { display: grid; gap: var(--spacing-4); }
+.connector p { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.plans-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.plans-table th, .plans-table td { padding: var(--spacing-2-5, 10px) var(--spacing-3); border-bottom: 1px solid var(--color-border); text-align: center; }
+.plans-table tbody th { font-weight: 500; text-align: start; }
+.plans-table thead th { font-size: var(--font-size-base); }
+.plans-table thead small { display: block; color: var(--color-text-secondary); font-size: var(--font-size-xs); font-weight: 500; }
+.plans-table .plans-pro { background: var(--color-accent-muted); }
+.plans-yes { color: var(--color-text-success, var(--color-success)); }
+.plans-no { color: var(--color-text-secondary); }
+.plans-cta { display: flex; align-items: center; gap: var(--spacing-3); flex-wrap: wrap; }
+.plans-cta small, .plans-note { margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-xs); display: inline-flex; align-items: center; gap: var(--spacing-1); }
+.plans-owned { display: flex; align-items: center; gap: var(--spacing-2); margin: 0; font-weight: 600; color: var(--color-text-success, var(--color-text-primary)); }
+.plans-error { margin: 0; color: var(--color-text-error, var(--color-error)); font-size: var(--font-size-sm); }
+.connector-link { display: grid; gap: var(--spacing-1); font-size: var(--font-size-xs); font-weight: 600; color: var(--color-text-secondary); }
+.connector-link span { display: flex; gap: var(--spacing-2); }
+.connector-link input { flex: 1; min-width: 0; font-family: var(--font-family-code, monospace); font-size: var(--font-size-xs); color: var(--color-text-primary); }
+.connector-link small { font-weight: 400; }
+.connector-steps { display: grid; gap: var(--spacing-2); margin: 0; padding-inline-start: var(--spacing-5); font-size: var(--font-size-sm); }

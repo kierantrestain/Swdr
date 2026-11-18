@@ -25,6 +25,8 @@ export const accountApi = {
   signUp: (fields: { name: string; email: string; password: string; invite?: string }) =>
     teamRequest<TeamSignedIn>('sign-up', fields),
   signOut: () => teamRequest<null>('logout'),
+  requestReset: (email: string) => teamRequest<{ sent: true }>('request-reset', { email }),
+  resetPassword: (token: string, password: string) => teamRequest<{ email: string }>('reset-password', { token, password }),
   setPassword: (password: string, name?: string) => teamRequest<TeamAccount>('set-password', { password, name }),
   previewInvite: (token: string) => teamRequest<TeamInvitePreview>('invitation', { token }),
   acceptInvite: (token: string) => teamRequest<TeamSignedIn>('accept-invite', { token }),
@@ -46,6 +48,13 @@ export function inviteLink(token: string): string {
 }
 
 /** Reads an invitation token from `#team?invite=…` or `/team?invite=…`. */
+/** A password reset token from a #team?reset=… link. */
+export function readResetToken(): string | undefined {
+  const [path, query = ''] = window.location.hash.slice(1).split('?');
+  const token = path === 'team' ? new URLSearchParams(query).get('reset') : null;
+  return token && /^[A-Za-z0-9_-]{43}$/.test(token) ? token : undefined;
+}
+
 export function readInviteToken(): string | undefined {
   const [path, query = ''] = window.location.hash.slice(1).split('?');
   const fromHash = path === 'team' ? new URLSearchParams(query).get('invite') : null;

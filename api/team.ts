@@ -1,8 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { Pool } from 'pg';
 import { readSignupMode } from '../server/team-auth.js';
-import { ensureSchema, teamDatabaseUrl } from '../server/team-migrate.js';
+import { ensureSchema } from '../server/team-migrate.js';
+import { getPool } from '../server/team-db.js';
 import { asObject, TeamFault } from '../server/team-model.js';
+import { aiAllowance, createCheckout, requirePro } from '../server/team-billing.js';
+import { connectorStatus, createConnectorLink, revokeConnectorLinks } from '../server/team-mcp.js';
+import { completeReset, requestReset } from '../server/team-reset.js';
 import { aiModels, chargeAi, openRouterKey, readAiRequest, readKeys, streamAi } from '../server/team-ai.js';
 import { conflictDetails, readAccounts, requireAccount, runTeamAction } from '../server/team-service.js';
 
@@ -20,24 +23,6 @@ function clientAddress(req: IncomingMessage): string {
 
 const MAX_BYTES = 4_000_000;
 type TeamRequest = IncomingMessage & { body?: unknown };
-let pool: Pool | undefined;
-let poolUrl: string | undefined;
-
-function getPool(): Pool {
-  const connectionString = teamDatabaseUrl();
-  if (!connectionString) throw new TeamFault(503, 'Private team access is not configured.');
-  // A changed connection string (a rotated credential or a new database) gets a fresh pool.
-  if (pool && poolUrl !== connectionString) {
-    void pool.end().catch(() => undefined);
-    pool = undefined;
-  }
-  if (!pool) {
-    poolUrl = connectionString;
-    pool = new Pool({ connectionString, max: 4, idleTimeoutMillis: 10000, connectionTimeoutMillis: 5000 });
-    pool.on('error', () => console.error('SWDR team database connection failed'));
-  }
-  return pool;
-}
 
 function assertSameOrigin(req: TeamRequest) {
   const origin = req.headers.origin;
@@ -101,6 +86,26 @@ export default async function handler(req: TeamRequest, res: ServerResponse): Pr
     const signup = readSignupMode(process.env.SWDR_TEAM_SIGNUP);
     const database = getPool();
     await ensureSchema(database);
+    const origin = req.headers.origin!;
+    if (request.action === 'request-reset') {
+      res.end(JSON.stringify({ data: await requestReset(database, request, origin, clientAddress(req)) }));
+      return;
+    }
+    if (request.action === 'reset-password') {
+      const email = await completeReset(database, request);
+      res.end(JSON.stringify({ data: { email } }));
+      return;
+    }
+    if (request.action === 'checkout' || request.action === 'connector' || request.action === 'connector-create' || request.action === 'connector-revoke') {
+      const account = await requireAccount(database, accounts, cookie);
+      let data: unknown;
+      if (request.action === 'checkout') data = await createCheckout(account.email, origin);
+      else if (request.action === 'connector') data = { ...await connectorStatus(database, account.email), allowed: account.plan === 'pro' };
+      else if (request.action === 'connector-create') { requirePro(account.plan ?? 'free', 'The Claude and ChatGPT connector'); data = await createConnectorLink(database, account.email, origin); }
+      else { await revokeConnectorLinks(database, account.email); data = { active: false }; }
+      res.end(JSON.stringify({ data }));
+      return;
+    }
     if (request.action === 'openrouter-key') {
       // The OpenRouter sign-in hands back a code; exchanging it here keeps the browser's CSP to this origin.
       res.end(JSON.stringify({ data: await openRouterKey(request) }));
@@ -116,7 +121,7 @@ export default async function handler(req: TeamRequest, res: ServerResponse): Pr
       const account = await requireAccount(database, accounts, cookie);
       const ask = readAiRequest(request);
       // Requests on the user's own key cost the workspace nothing; a higher ceiling still stops misuse.
-      await chargeAi(database, account.email, ask.model?.startsWith('mine-') ? 500 : undefined);
+      await chargeAi(database, account.email, ask.model?.startsWith('mine-') ? 500 : aiAllowance(account.plan ?? 'free'));
       const abort = new AbortController();
       req.on('close', () => abort.abort());
       let started = false;

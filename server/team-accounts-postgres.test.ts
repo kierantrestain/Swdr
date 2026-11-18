@@ -237,7 +237,7 @@ test('accounts, invitations and membership against PostgreSQL over HTTP', { skip
 
   await t.test('operator access keys still work and can add a password', async () => {
     await call('keys', 'login', keyHolder);
-    assert.deepEqual((await call<TeamAccount>('keys', 'session')).data, { email: keyHolder.email, name: '', method: 'access-key', hasPassword: false });
+    assert.deepEqual((await call<TeamAccount>('keys', 'session')).data, { email: keyHolder.email, name: '', method: 'access-key', hasPassword: false, plan: 'pro', billing: false });
     await call('owner', 'grant', { projectId, email: keyHolder.email, role: 'reviewer', episodeIds: null });
     assert.equal((await call<TeamProject>('keys', 'open', { projectId })).data?.grant.role, 'reviewer');
     await call('keys', 'set-password', { password: 'short' }, 400);

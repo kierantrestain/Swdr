@@ -307,3 +307,18 @@ button.workspace-card:hover { border-color: color-mix(in srgb, var(--color-accen
 .crash-detail { padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-element); background: var(--color-background-muted); font-family: var(--font-family-code, monospace); font-size: var(--font-size-xs); }
 .crash-actions { display: flex; gap: var(--spacing-2); }
 .page-loading { display: flex; align-items: center; justify-content: center; gap: var(--spacing-2); min-height: 40vh; color: var(--color-text-secondary); }
+
+/* Welcome tour */
+.welcome { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--spacing-4); margin-bottom: var(--spacing-6); padding: var(--spacing-5) var(--spacing-6); border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border)); border-radius: var(--radius-container); background: linear-gradient(135deg, var(--color-accent-muted), var(--color-background-surface) 60%); }
+.welcome-icon { display: inline-grid; place-items: center; width: 3rem; height: 3rem; border-radius: 50%; background: var(--color-accent); color: var(--color-on-accent, #fff); }
+.welcome-body { display: grid; gap: var(--spacing-1); max-width: 70ch; }
+.welcome-body small { color: var(--color-text-secondary); font-size: var(--font-size-xs); font-weight: 600; }
+.welcome-body h2 { margin: 0; font-size: var(--font-size-xl); }
+.welcome-body p { margin: 0 0 var(--spacing-2); color: var(--color-text-secondary); }
+.welcome-actions { display: flex; align-items: center; gap: var(--spacing-2); flex-wrap: wrap; }
+.welcome-dots { display: inline-flex; gap: 5px; margin-inline-start: var(--spacing-2); }
+.welcome-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--color-border-emphasized); }
+.welcome-dots i.is-on { background: var(--color-accent); }
+.welcome-close { position: absolute; top: var(--spacing-3); right: var(--spacing-3); min-height: 0; padding: var(--spacing-1); border-color: transparent; background: transparent; color: var(--color-text-secondary); }
+@media (max-width: 640px) { .welcome { grid-template-columns: 1fr; padding: var(--spacing-4); } }
+.home-footer-links { display: inline-flex; flex-wrap: wrap; gap: var(--spacing-1); }
