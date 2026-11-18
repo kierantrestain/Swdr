@@ -12,6 +12,9 @@ if (!root) throw new Error('SWDR could not open its workspace.');
 // App wraps itself in the SWDR Astryx theme (src/astryx-themes.ts) so it can switch light and dark.
 createRoot(root).render(<ErrorBoundary><App /></ErrorBoundary>);
 
+// Ask the browser to keep SWDR's storage under pressure instead of clearing it, so local projects survive.
+void navigator.storage?.persist?.().catch(() => undefined);
+
 if (import.meta.env.PROD && 'serviceWorker' in navigator && location.protocol !== 'file:') {
   void navigator.serviceWorker.register('/sw.js').catch(() => {
     // IndexedDB remains available if the browser cannot cache the application shell.

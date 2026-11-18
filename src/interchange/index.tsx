@@ -60,6 +60,7 @@ export function ExportActions({ project, document, onStatus, includeProject = tr
         return;
       }
       download(fileBase(format.project ? project.title : document.title) + '.' + format.extension, format.type, format.content());
+      if (format.project) { try { localStorage.setItem(`swdr-backup:${project.id}`, new Date().toISOString()); } catch { /* reminder only */ } }
       onStatus(format.label + ' export downloaded.');
     } catch (error) {
       onStatus(error instanceof Error ? error.message : 'The export could not be created.');

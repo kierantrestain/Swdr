@@ -1,0 +1,194 @@
+import { Button } from '@astryxdesign/core/Button';
+import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
+import { Layout, LayoutContent } from '@astryxdesign/core/Layout';
+import { Copy, Database, LogIn, Send, Sparkles, Square, TextCursorInput } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { decodeFountain } from '../interchange/screenplay';
+import type { DocumentModel, Project, WorkspaceViewProps } from '../model';
+import { aiContext } from './context';
+import { trainingExamples, trainingJsonl } from './dataset';
+import './ai.css';
+
+type Mode = 'brainstorm' | 'plot' | 'continue' | 'dialogue' | 'notes' | 'logline' | 'creator' | 'ask';
+interface Model { id: string; label: string; provider: string; free: boolean }
+interface Turn { role: 'user' | 'assistant'; content: string }
+
+const MODES: Array<{ id: Mode; label: string; hint: string; writes?: boolean }> = [
+  { id: 'brainstorm', label: 'Ideas', hint: 'Six options for what could happen next, from safe to bold.' },
+  { id: 'plot', label: 'Plot', hint: 'Diagnose the structure and suggest beats to fix it.' },
+  { id: 'continue', label: 'Continue', hint: 'Draft the next half page of this scene in your voice.', writes: true },
+  { id: 'dialogue', label: 'Dialogue', hint: 'Sharpen the selected dialogue: more distinct voices, more subtext.', writes: true },
+  { id: 'notes', label: 'Notes', hint: 'Development notes on the current scene, with specific fixes.' },
+  { id: 'logline', label: 'Loglines', hint: 'Five loglines in different tones.' },
+  { id: 'creator', label: 'Hooks', hint: 'Hooks, titles and tighter beats for a short or YouTube video.' },
+  { id: 'ask', label: 'Ask', hint: 'Ask anything about the project.' }
+];
+
+const MODEL_KEY = 'swdr-ai-model';
+
+function editorCaret(): { blockId?: string; selection?: string } {
+  const selection = window.getSelection();
+  const node = selection?.focusNode;
+  const line = node && (node instanceof Element ? node : node.parentElement)?.closest<HTMLElement>('.swdr-pm [data-block-id]');
+  return { blockId: line?.dataset.blockId, selection: selection && !selection.isCollapsed ? selection.toString() : undefined };
+}
+
+function download(name: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/jsonl' }));
+  const anchor = window.document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** The AI writing partner: a toolbar button that opens a streaming, project-aware assistant. */
+export function AiPartner({ project, document, onDocumentChange, onStatus, readOnly, mode: initial = 'brainstorm', extraContext, label = 'AI partner' }: {
+  project: Project; document?: DocumentModel; onDocumentChange?: WorkspaceViewProps['onDocumentChange']; onStatus: (message: string) => void;
+  readOnly?: boolean; mode?: Mode; extraContext?: string; label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const caret = useRef<{ blockId?: string; selection?: string }>({});
+  return <>
+    <button type="button" className="swdr-w-button ai-trigger" onMouseDown={() => { caret.current = editorCaret(); }} onClick={() => setOpen(true)}>
+      <Sparkles size={15} aria-hidden="true" /> {label}
+    </button>
+    {open && <AiDialog project={project} document={document} onDocumentChange={readOnly ? undefined : onDocumentChange} onStatus={onStatus}
+      initial={initial} caret={caret.current} extraContext={extraContext} onClose={() => setOpen(false)} />}
+  </>;
+}
+
+function AiDialog({ project, document, onDocumentChange, onStatus, initial, caret, extraContext, onClose }: {
+  project: Project; document?: DocumentModel; onDocumentChange?: WorkspaceViewProps['onDocumentChange']; onStatus: (message: string) => void;
+  initial: Mode; caret: { blockId?: string; selection?: string }; extraContext?: string; onClose: () => void;
+}) {
+  const [mode, setMode] = useState<Mode>(initial);
+  const [prompt, setPrompt] = useState('');
+  const [output, setOutput] = useState('');
+  const [history, setHistory] = useState<Turn[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<{ status: number; message: string }>();
+  const [models, setModels] = useState<Model[]>();
+  const [model, setModel] = useState(() => { try { return localStorage.getItem(MODEL_KEY) ?? ''; } catch { return ''; } });
+  const abort = useRef<AbortController | null>(null);
+  const spec = MODES.find(item => item.id === mode)!;
+
+  useEffect(() => {
+    let live = true;
+    void fetch('/api/team', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ai-models' }) })
+      .then(async response => {
+        const body = await response.json().catch(() => ({})) as { data?: { models: Model[]; defaultModel?: string }; error?: string };
+        if (!live) return;
+        if (!response.ok) { setProblem({ status: response.status, message: body.error ?? 'The AI partner is unavailable.' }); setModels([]); return; }
+        setModels(body.data?.models ?? []);
+        setModel(current => body.data?.models.some(item => item.id === current) ? current : body.data?.defaultModel ?? '');
+        if (!body.data?.models.length) setProblem({ status: 503, message: 'No AI models are connected yet. An owner adds a provider key in the hosting settings.' });
+      })
+      .catch(() => { if (live) { setModels([]); setProblem({ status: 0, message: 'The AI partner needs a connection.' }); } });
+    return () => { live = false; abort.current?.abort(); };
+  }, []);
+
+  async function run(followUp?: string) {
+    const ask = followUp ?? prompt;
+    if (mode === 'ask' && !ask.trim()) return;
+    setBusy(true);
+    setProblem(undefined);
+    const previous = followUp ? [...history, { role: 'assistant' as const, content: output }] : [];
+    const turns: Turn[] = followUp ? [...previous] : [];
+    setOutput('');
+    abort.current = new AbortController();
+    let text = '';
+    try {
+      const response = await fetch('/api/team', {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, signal: abort.current.signal,
+        body: JSON.stringify({ action: 'ai', model: model || undefined, mode: followUp ? 'ask' : mode, prompt: ask, history: turns,
+          context: aiContext(project, document, { ...caret, extra: extraContext }) })
+      });
+      if (!response.ok || !response.body || response.headers.get('content-type')?.includes('application/json')) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        setProblem({ status: response.status, message: body.error ?? 'The AI partner could not answer.' });
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+        setOutput(text);
+      }
+      setHistory([...turns, { role: 'user', content: followUp ? ask : `${spec.label}${ask ? `: ${ask}` : ''}` }]);
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') setProblem({ status: 0, message: 'The connection dropped. Try again.' });
+    } finally {
+      setBusy(false);
+      if (followUp !== undefined) setPrompt('');
+    }
+  }
+
+  function insert() {
+    if (!onDocumentChange || !document) return;
+    const blocks = decodeFountain(output.replace(/```\w*/g, ''), 'AI draft').document.blocks.filter(block => block.text.trim())
+      .map(block => ({ ...block, sceneNumber: undefined }));
+    if (!blocks.length) return;
+    onDocumentChange(current => {
+      const at = caret.blockId ? current.blocks.findIndex(block => block.id === caret.blockId) : -1;
+      const index = at >= 0 ? at + 1 : current.blocks.length;
+      return { ...current, blocks: [...current.blocks.slice(0, index), ...blocks, ...current.blocks.slice(index)] };
+    });
+    onStatus(`${blocks.length} lines from the AI partner inserted. Undo with Ctrl/⌘+Z.`);
+    onClose();
+  }
+
+  const examples = trainingExamples([project]).length;
+  return <Dialog isOpen onOpenChange={value => { if (!value) onClose(); }} width={820}>
+    <Layout
+      header={<DialogHeader title="AI partner" subtitle={`Works from ${project.title}'s outline, characters and the scene you are in.`} onOpenChange={value => { if (!value) onClose(); }} />}
+      content={<LayoutContent>
+        <div className="ai">
+          <div className="ai-top">
+            <div className="ai-modes" role="group" aria-label="What do you want help with">
+              {MODES.map(item => <button key={item.id} type="button" aria-pressed={mode === item.id} onClick={() => setMode(item.id)}>{item.label}</button>)}
+            </div>
+            {models && models.length > 0 && <label className="ai-model">Model
+              <select value={model} onChange={event => { setModel(event.target.value); try { localStorage.setItem(MODEL_KEY, event.target.value); } catch { /* optional */ } }}>
+                {[...new Set(models.map(item => item.provider))].map(provider => <optgroup key={provider} label={provider}>
+                  {models.filter(item => item.provider === provider).map(item => <option key={item.id} value={item.id}>{item.label}{item.free ? ' · free' : ''}</option>)}
+                </optgroup>)}
+              </select></label>}
+          </div>
+          <p className="ai-hint">{spec.hint}{caret.selection ? ' Using your selected text.' : ''}</p>
+          <form className="ai-ask" onSubmit={event => { event.preventDefault(); void run(); }}>
+            <textarea rows={2} value={prompt} onChange={event => setPrompt(event.target.value)} aria-label="Direction for the AI partner"
+              placeholder={mode === 'ask' ? 'Ask about your story…' : 'Optional direction — “darker”, “Nora should lie here”, “more comedy”…'}
+              onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void run(); } }} />
+            {busy ? <Button label="Stop" variant="secondary" icon={<Square size={14} aria-hidden="true" />} onClick={() => abort.current?.abort()} />
+              : <Button label="Generate" variant="primary" type="submit" icon={<Sparkles size={14} aria-hidden="true" />} isDisabled={models !== undefined && !models.length} />}
+          </form>
+          {problem && <div className="ai-problem" role="alert">
+            <span>{problem.status === 401 ? 'Sign in to use the AI partner. It runs on the hosted workspace so your keys stay on the server.' : problem.message}</span>
+            {problem.status === 401 && <Button label="Sign in" size="sm" variant="secondary" icon={<LogIn size={14} aria-hidden="true" />} onClick={() => { window.location.hash = '#team'; }} />}
+          </div>}
+          {(output || busy) && <section className="ai-output" aria-label="AI partner response" aria-busy={busy}>
+            <pre className={spec.writes ? 'is-script' : undefined}>{output || 'Thinking…'}</pre>
+            {!busy && output && <div className="ai-actions">
+              <Button label="Copy" size="sm" variant="secondary" icon={<Copy size={14} aria-hidden="true" />} onClick={() => { void navigator.clipboard?.writeText(output); onStatus('Copied.'); }} />
+              {spec.writes && onDocumentChange && document?.kind !== 'av' && <Button label="Insert into script" size="sm" variant="primary" icon={<TextCursorInput size={14} aria-hidden="true" />} onClick={insert} />}
+              <Button label="Try again" size="sm" variant="ghost" onClick={() => void run()} />
+            </div>}
+            {!busy && output && <form className="ai-ask ai-follow" onSubmit={event => { event.preventDefault(); const ask = new FormData(event.currentTarget).get('follow'); if (ask) void run(String(ask)); event.currentTarget.reset(); }}>
+              <input name="follow" aria-label="Follow-up" placeholder="Follow up — “make option 3 funnier”, “what if she already knows?”" />
+              <Button label="Send" size="sm" variant="secondary" type="submit" icon={<Send size={14} aria-hidden="true" />} />
+            </form>}
+          </section>}
+          <footer className="ai-foot">
+            <span>The AI partner reads this project to help; nothing is saved on the AI provider by SWDR. Suggestions are yours to keep, change or ignore.</span>
+            <button type="button" className="ai-dataset" disabled={!examples} onClick={() => { download(`${project.title || 'swdr'} - training data.jsonl`, trainingJsonl([project])); onStatus(`${examples} training examples exported.`); }}
+              title="Your scenes as fine-tuning examples, for training an open model on your voice">
+              <Database size={14} aria-hidden="true" /> Export training data ({examples})</button>
+          </footer>
+        </div>
+      </LayoutContent>}
+    />
+  </Dialog>;
+}

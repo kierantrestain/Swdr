@@ -3,7 +3,8 @@ import { Pool } from 'pg';
 import { readSignupMode } from '../server/team-auth.js';
 import { ensureSchema, teamDatabaseUrl } from '../server/team-migrate.js';
 import { asObject, TeamFault } from '../server/team-model.js';
-import { conflictDetails, readAccounts, runTeamAction } from '../server/team-service.js';
+import { aiModels, chargeAi, readAiRequest, streamAi } from '../server/team-ai.js';
+import { conflictDetails, readAccounts, requireAccount, runTeamAction } from '../server/team-service.js';
 
 /**
  * The caller's address for sign-in throttling. Vercel's edge sets x-real-ip and x-forwarded-for and
@@ -100,6 +101,38 @@ export default async function handler(req: TeamRequest, res: ServerResponse): Pr
     const signup = readSignupMode(process.env.SWDR_TEAM_SIGNUP);
     const database = getPool();
     await ensureSchema(database);
+    if (request.action === 'ai-models') {
+      await requireAccount(database, accounts, cookie);
+      res.end(JSON.stringify({ data: await aiModels() }));
+      return;
+    }
+    if (request.action === 'ai') {
+      // The AI partner streams plain text; everything up to the first byte can still fail as JSON.
+      const account = await requireAccount(database, accounts, cookie);
+      const ask = readAiRequest(request);
+      await chargeAi(database, account.email);
+      const abort = new AbortController();
+      req.on('close', () => abort.abort());
+      let started = false;
+      try {
+        await streamAi(ask, text => {
+          if (!started) {
+            started = true;
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('X-Accel-Buffering', 'no');
+            res.statusCode = 200;
+          }
+          res.write(text);
+        }, abort.signal);
+        if (!started) res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      } catch (error) {
+        if (!started) throw error;
+        console.error('SWDR AI stream stopped');
+        res.write('\n\n(The AI partner was interrupted. Try again.)');
+      }
+      res.end();
+      return;
+    }
     const result = await runTeamAction(database, accounts, request, cookie, { signup, address: clientAddress(req) });
     if (result.cookie) res.setHeader('Set-Cookie', result.cookie);
     res.end(JSON.stringify({ data: result.data }));

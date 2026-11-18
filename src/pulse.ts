@@ -94,6 +94,12 @@ export function projectPulse(project: Project, current: DocumentModel | undefine
     else if (ideas >= 3) steps.push({ id: 'ideas', tone: 'info', text: `${ideas} ideas are waiting. Move the strongest one into scripting.`, action: 'Open the board', target: 'creator' });
   }
 
+  // Projects live in this browser: remind people to keep a copy once there is real work in it.
+  let backedUp: string | null = null;
+  try { backedUp = globalThis.localStorage?.getItem(`swdr-backup:${project.id}`) ?? null; } catch { /* storage unavailable */ }
+  const stale = !backedUp || now.getTime() - Date.parse(backedUp) > 14 * DAY;
+  if (totalWords > 500 && stale) steps.push({ id: 'backup', tone: 'warn', text: backedUp ? 'Your last backup of this project is over two weeks old.' : 'This project has never been backed up outside this browser.', action: 'Export a project archive', target: writeTarget });
+
   const unused = project.assets.filter(asset => !JSON.stringify(project.modules).includes(asset.id)
     && !project.documents.some(item => JSON.stringify(item).includes(asset.id)));
   const bytes = project.assets.reduce((sum, asset) => sum + Math.round(asset.dataUrl.length * 0.75), 0);

@@ -15,6 +15,7 @@ import {
 } from './model';
 import type { Beat, BeatKind, Piece, Platform, Status } from './model';
 import { PhonePreview, YouTubePreview } from './Preview';
+import { AiPartner } from '../ai/AiPartner';
 import type { Playback } from './Preview';
 import './creator.css';
 
@@ -54,7 +55,7 @@ export function CreatorStudio({ project, onProjectChange, onStatus, readOnly }: 
     setOpenId(next.id);
   };
 
-  if (piece) return <PieceEditor key={piece.id} piece={piece} readOnly={readOnly} onStatus={onStatus} onBack={() => setOpenId('')}
+  if (piece) return <PieceEditor key={piece.id} project={project} piece={piece} readOnly={readOnly} onStatus={onStatus} onBack={() => setOpenId('')}
     save={save} open={setOpenId} addDocument={(title, rows) => {
       const document = newDocument(title, 'av');
       document.avRows = rows;
@@ -170,8 +171,8 @@ function usePlayback(total: number): Playback {
   return { time, playing, setTime: value => setTime(Math.max(0, Math.min(total, value))), toggle: () => { if (time >= total) setTime(0); setPlaying(value => !value); } };
 }
 
-function PieceEditor({ piece, save, open, onBack, onStatus, addDocument, readOnly }: {
-  piece: Piece; save: (change: (pieces: Piece[]) => Piece[], message?: string) => void; open: (id: string) => void; onBack: () => void;
+function PieceEditor({ project, piece, save, open, onBack, onStatus, addDocument, readOnly }: {
+  project: Props['project']; piece: Piece; save: (change: (pieces: Piece[]) => Piece[], message?: string) => void; open: (id: string) => void; onBack: () => void;
   onStatus: (message: string) => void; addDocument: (title: string, rows: ReturnType<typeof toAvRows>) => void; readOnly?: boolean;
 }) {
   const [tab, setTab] = useState<PieceTab>('script');
@@ -194,6 +195,8 @@ function PieceEditor({ piece, save, open, onBack, onStatus, addDocument, readOnl
           {spec.titleLimit && <span className={piece.title.length > spec.titleLimit ? 'is-over' : undefined}>{piece.title.length}/{spec.titleLimit} characters</span>}</div>
       </div>
       <div className="creator-actions">
+        <AiPartner project={project} onStatus={onStatus} readOnly={readOnly} mode="creator" label="AI hooks & titles"
+          extraContext={`Current video (${PLATFORMS[piece.platform].label}, ${clock(total)}): ${piece.title}\n${timeline(piece).map(item => `[${clock(item.start)}] ${item.label}: ${item.spoken}${item.onScreen ? ` | ON SCREEN: ${item.onScreen}` : ''}`).join('\n')}`} />
         <Button label="Teleprompter" variant="secondary" size="sm" icon={<Play size={14} aria-hidden="true" />} onClick={() => setPrompter(true)} />
         {!readOnly && <Button label="Send to AV script" variant="secondary" size="sm" icon={<FileVideo size={14} aria-hidden="true" />} onClick={() => addDocument(piece.title || 'Untitled video', toAvRows(piece))} />}
         {!readOnly && <Button label="Delete" variant="ghost" size="sm" icon={<Trash2 size={14} aria-hidden="true" />} onClick={() => {

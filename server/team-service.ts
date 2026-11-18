@@ -207,7 +207,7 @@ interface SessionRow {
   has_password?: boolean;
 }
 
-async function requireAccount(db: Pool, accounts: TeamAccounts, session?: string): Promise<TeamAccount> {
+export async function requireAccount(db: Pool, accounts: TeamAccounts, session?: string): Promise<TeamAccount> {
   if (!session || !TOKEN.test(session)) throw new TeamFault(401, 'Sign in to the private workspace.');
   const result = await db.query<SessionRow>(
     `SELECT s.email, s.method, u.name, u.email IS NOT NULL AS registered, c.email IS NOT NULL AS has_password

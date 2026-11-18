@@ -4,7 +4,8 @@
   "outputDirectory": "dist",
   "functions": {
     "api/team.ts": {
-      "includeFiles": "server/team-schema.sql"
+      "includeFiles": "server/team-schema.sql",
+      "maxDuration": 120
     }
   },
   "rewrites": [

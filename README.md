@@ -10,6 +10,11 @@ It works offline in the browser, keeps your projects on your device by default, 
 
 ## Features
 
+### AI partner
+- **A writing partner that knows your project**: ideas, plot structure, continue a scene in your voice, sharpen dialogue, development notes, loglines and creator hooks — grounded in your outline, characters and the scene you are in, streamed as it writes, and inserted into the script with one click.
+- **Any model**: Claude, plus every model on OpenRouter, Groq, Google Gemini, Mistral and OpenAI, or your own. Free models are marked in the picker.
+- **Your own fine-tuned model**: export your scenes as training data, fine-tune an open model, and connect it. See [docs/ai.md](docs/ai.md).
+
 ### Smart, on your device
 - **Project pulse**: the Overview shows words written, today's goal, script health, how much of the shoot is scheduled, the next shoot day, budget spent, videos live and the next publish date. A **Next up** list ranks what needs attention — formatting problems, schedule conflicts, unscheduled scenes, budget overruns, videos publishing soon with problems — with one click to each.
 - **Search every line**: press `Ctrl/⌘+K` and type three letters to search the text of every script in the project, alongside sections, scenes, episodes and projects.
@@ -156,3 +161,4 @@ docs/            Feature guides
 - [Story](docs/story.md): series planning and editorial tools
 - [Interchange](docs/interchange.md): import and export formats
 - [Workspace](docs/workspace.md): local storage, accounts and teams
+- [AI partner](docs/ai.md): providers, free options and fine-tuning

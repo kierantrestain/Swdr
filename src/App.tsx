@@ -12,6 +12,7 @@ import { AVView, OutlineView, WritingView } from './writing';
 import type { TeamRenderProps } from './workspace/team-ui';
 import { PresenceBar, RemoteCursors, usePresence } from './workspace/presence';
 import { ScriptTools } from './ScriptTools';
+import { AiPartner } from './ai/AiPartner';
 import { ExportActions } from './interchange';
 
 // Pages people open less often load on demand, so the first screen arrives quickly. The service worker
@@ -320,10 +321,10 @@ export function App() {
   else if (route.view === 'write' && shared && hasRequestedRevision) page = <div className="script-stage" id="main-content">
     <WritingView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} onFocusChange={setFocus}
       onOpenOutline={() => openProject(shared.project, 'outline', shared.document)}
-      toolbarEnd={<><ScriptTools {...shared} /><ExportActions {...shared} /></>} />
+      toolbarEnd={<><AiPartner {...shared} /><ScriptTools {...shared} /><ExportActions {...shared} /></>} />
   </div>;
-  else if (route.view === 'outline' && shared) page = <OutlineView key={shared.project.id} {...shared} onSelectDocument={selectDocument} />;
-  else if (route.view === 'av' && shared && hasRequestedRevision) page = <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} toolbarEnd={<ExportActions {...shared} />} />;
+  else if (route.view === 'outline' && shared) page = <OutlineView key={shared.project.id} {...shared} onSelectDocument={selectDocument} toolbarEnd={<AiPartner {...shared} mode="plot" />} />;
+  else if (route.view === 'av' && shared && hasRequestedRevision) page = <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} toolbarEnd={<><AiPartner {...shared} /><ExportActions {...shared} /></>} />;
   else if (route.view === 'production' && shared) page = <ProductionView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} />;
   else if (route.view === 'story' && shared) page = <SeriesView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} />;
   else if (route.view === 'media' && shared) page = <MediaLibrary key={shared.project.id} {...shared} />;
@@ -369,7 +370,7 @@ function TeamDocument({ view }: { view: TeamRenderProps }) {
   const currentMode = fullScope || mode === 'outline' ? mode : 'write';
   const props = { ...view, onOpenSource: (source: SourceRef) => { setMode('write'); view.onOpenSource(source); } };
   const canExport = view.grant.role === 'owner' || view.grant.role === 'editor';
-  const exporter = canExport ? <ExportActions {...view} includeProject={fullScope} /> : <></>;
+  const exporter = <><AiPartner {...view} />{canExport && <ExportActions {...view} includeProject={fullScope} />}</>;
 
   return <>
     <nav className="team-workspaces-nav" aria-label="Project workspaces">

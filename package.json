@@ -15,6 +15,7 @@
     "test:browser": "playwright test"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.10.0",
     "@astryxdesign/core": "0.7.16",
     "@astryxdesign/theme-neutral": "0.7.16",
     "@astryxdesign/theme-stone": "0.7.16",
