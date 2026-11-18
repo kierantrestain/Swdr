@@ -1,5 +1,5 @@
 import type { Block, DocumentModel, Project } from '../src/model.js';
-import { BLOCK_KINDS, DOCUMENT_KINDS, PROJECT_KINDS } from '../src/model.js';
+import { BLOCK_KINDS, DOCUMENT_KINDS, PROJECT_KINDS, TEXT_STYLES } from '../src/model.js';
 import type { TeamGrant } from '../src/workspace/team-contract.js';
 
 export class TeamFault extends Error {
@@ -73,6 +73,27 @@ function verifyBlock(row: JsonRecord): void {
   if (row.sceneNumber !== undefined) textField(row.sceneNumber, 'scene number', 24);
   if (row.dual !== undefined) memberOf(row.dual, ['left', 'right'], 'dialogue side');
   if (row.alternate !== undefined) array(row.alternate, 'alternative lines', 100).forEach(line => textField(line, 'alternative line', 40000, true));
+  if (row.styles !== undefined) {
+    const length = typeof row.text === 'string' ? row.text.length : 0;
+    array(row.styles, 'text styles', 5000).forEach(item => {
+      const range = asObject(item, 'text style');
+      memberOf(range.style, TEXT_STYLES, 'text style');
+      const from = integerField(range.from, 'text style start', 0, length);
+      integerField(range.to, 'text style end', from + 1, length);
+    });
+  }
+}
+
+function verifyComment(row: JsonRecord): void {
+  idField(row.blockId, 'comment block ID');
+  const from = integerField(row.from, 'comment start', 0, 200000);
+  integerField(row.to, 'comment end', from, 200000);
+  textField(row.quote, 'comment quote', 4000, true);
+  textField(row.text, 'comment', 20000, true);
+  if (row.author !== undefined) textField(row.author, 'comment author', 200, true);
+  textField(row.createdAt, 'comment date', 40);
+  if (row.resolved !== undefined && typeof row.resolved !== 'boolean') throw new TeamFault(400, 'Invalid comment state.');
+  if (row.detached !== undefined && typeof row.detached !== 'boolean') throw new TeamFault(400, 'Invalid comment state.');
 }
 
 function verifyDocument(document: JsonRecord, episodeIds: Set<string>): void {
@@ -93,6 +114,7 @@ function verifyDocument(document: JsonRecord, episodeIds: Set<string>): void {
     }
     if (row.storyboardAssetId !== undefined) idField(row.storyboardAssetId, 'storyboard asset ID');
   });
+  if (document.comments !== undefined) records(document.comments, 'comments', 5000).forEach(verifyComment);
   records(document.beats, 'beats', 24000).forEach(row => {
     textField(row.title, 'beat title', 250, true);
     textField(row.notes, 'beat notes', 40000, true);

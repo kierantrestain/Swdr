@@ -218,3 +218,24 @@ test('HTTP rejects wrong method and origin before any store is touched', async (
   assert.equal(crossSite.status, 403);
   assert.equal(crossSite.headers.get('Cache-Control'), 'private, no-store');
 });
+
+
+test('team documents accept valid inline styles and comments and reject malformed ones', () => {
+  const project = createProject('Styled', 'film');
+  const document = newDocument('Draft', 'screenplay');
+  const line = { ...newBlock('action', 'A desk lamp burns.'), styles: [{ from: 2, to: 11, style: 'bold' as const }] };
+  document.blocks = [line];
+  document.comments = [{ id: crypto.randomUUID(), blockId: line.id, from: 2, to: 11, quote: 'desk lamp', text: 'Earlier?', createdAt: new Date().toISOString() }];
+  project.documents = [document];
+  validateProject(project);
+
+  const bad = (change: (copy: Project) => void) => {
+    const copy = structuredClone(project);
+    change(copy);
+    assert.throws(() => validateProject(copy), /Invalid|Duplicate/);
+  };
+  bad(copy => { copy.documents[0].blocks[0].styles = [{ from: 2, to: 99, style: 'bold' }]; });
+  bad(copy => { copy.documents[0].blocks[0].styles = [{ from: 0, to: 2, style: 'blink' as never }]; });
+  bad(copy => { copy.documents[0].comments![0].text = 'x'.repeat(20001); });
+  bad(copy => { copy.documents[0].comments![0].resolved = 'yes' as never; });
+});
