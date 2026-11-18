@@ -78,7 +78,7 @@ export function useTeamDraft() {
   const [localStatus, setLocalStatus] = useState<TeamLocalStatus>('saved');
   const [serverStatus, setServerStatus] = useState<TeamServerStatus>('synced');
   const [message, setMessage] = useState<string>();
-  const cache = useRef<TeamCache>();
+  const cache = useRef<TeamCache | undefined>(undefined);
   const writes = useRef(Promise.resolve());
   const busy = useRef(false);
   const generation = useRef(0);

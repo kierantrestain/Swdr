@@ -50,6 +50,11 @@ export default defineConfig({
   build: {
     target: 'es2022',
     rollupOptions: {
+      // Astryx ships Next.js "use client" directives; Vite has no server components, so they are inert.
+      onwarn(warning, warn) {
+        if (warning.code === 'MODULE_LEVEL_DIRECTIVE' && /use client/.test(warning.message)) return;
+        warn(warning);
+      },
       output: {
         manualChunks(id) {
           if (/[/]node_modules[/](react|react-dom|scheduler)[/]/.test(id)) return 'react';

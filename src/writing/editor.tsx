@@ -263,6 +263,9 @@ export function WritingView(props: WritingProps) {
           editor.focus();
           return true;
         },
+        // Copy and cut read the editor selection; adopt the browser's first (see syncSelection).
+        copy: () => { syncSelection(editor); return false; },
+        cut: () => { syncSelection(editor); return false; },
         focus: () => { refreshUi(editor.state, editor); return false; },
         blur: () => { window.setTimeout(() => { if (!editor.hasFocus() && popoverRef.current?.mode === 'suggest') setPopover(null); }, 120); return false; }
       }
@@ -423,6 +426,8 @@ export function WritingView(props: WritingProps) {
     }
     editor.dispatch(tr);
     setCaption(all ? `Replaced ${targets.length}` : 'Replaced 1');
+    // Replacing can disable the focused button (no matches left); keep focus in the find bar.
+    requestAnimationFrame(() => globalThis.document.querySelector<HTMLInputElement>('#swdr-find-input')?.focus());
   }
 
   function shellKeys(event: ReactKeyboardEvent<HTMLElement>) {
@@ -534,17 +539,25 @@ export function WritingView(props: WritingProps) {
 }
 
 /**
- * The browser reports selection changes asynchronously. If a key arrives while the
- * editor still holds a wider selection than the DOM shows (e.g. select-all, then
- * Ctrl+End, then Enter in quick succession), adopt the DOM caret first so the key can
- * never act on a stale range.
+ * The browser reports selection changes asynchronously. If a key, copy or cut arrives
+ * before the editor has read the latest browser selection (select-all then Ctrl+End then
+ * Enter, or Shift+Arrow then Ctrl+C in quick succession), adopt the browser's anchor and
+ * head first so the action never applies to a stale range.
  */
 function syncSelection(editor: EditorView) {
   const dom = (editor.root as Document).getSelection?.();
-  if (!dom || !dom.isCollapsed || editor.state.selection.empty || !dom.focusNode || !editor.dom.contains(dom.focusNode)) return;
+  if (!dom || !dom.anchorNode || !dom.focusNode || !editor.dom.contains(dom.anchorNode) || !editor.dom.contains(dom.focusNode)) return;
   try {
-    const pos = editor.posAtDOM(dom.focusNode, dom.focusOffset);
-    editor.dispatch(editor.state.tr.setSelection(Selection.near(editor.state.doc.resolve(pos))));
+    const anchor = editor.posAtDOM(dom.anchorNode, dom.anchorOffset);
+    const head = editor.posAtDOM(dom.focusNode, dom.focusOffset);
+    const { selection } = editor.state;
+    if (selection.anchor === anchor && selection.head === head) return;
+    const $anchor = editor.state.doc.resolve(anchor);
+    const $head = editor.state.doc.resolve(head);
+    const next = $anchor.parent.inlineContent && $head.parent.inlineContent
+      ? TextSelection.create(editor.state.doc, anchor, head)
+      : Selection.near($head);
+    editor.dispatch(editor.state.tr.setSelection(next));
   } catch {
     // A focus node inside a widget has no document position; keep the editor's selection.
   }

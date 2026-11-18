@@ -70,7 +70,7 @@ function patchBlock(block: Block, text: string, kind: BlockKind): Block {
 
 export function ImportView({ project, document, onImportDocument, onRestoreProject, onStatus, onCancel }: Props) {
   const chooser = useRef<HTMLInputElement>(null);
-  const current = useRef<AbortController>();
+  const current = useRef<AbortController | undefined>(undefined);
   const [mode, setMode] = useState<ImportMode>(document?.kind === 'av' ? 'av' : 'screenplay');
   const [files, setFiles] = useState<File[]>([]);
   const [index, setIndex] = useState(0);
