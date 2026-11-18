@@ -1,6 +1,6 @@
 import { Theme } from '@astryxdesign/core/theme';
 import { LoaderCircle } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { themes, defaultThemeSlug } from './astryx-themes';
 import { Home } from './Home';
 import { ProjectView } from './ProjectView';
@@ -9,15 +9,21 @@ import type { Asset, DocumentModel, Project, ProjectKind, SourceRef, WorkspaceVi
 import { sourceFor } from './model';
 import { createProject, resolveSource, snapshotDocument, useWorkspace } from './workspace';
 import { AVView, OutlineView, WritingView } from './writing';
-import { ReviewWorkspace, TeamWorkspace } from './workspace/team-ui';
 import type { TeamRenderProps } from './workspace/team-ui';
-import { CreatorStudio } from './creator/CreatorStudio';
 import { PresenceBar, RemoteCursors, usePresence } from './workspace/presence';
-import { MediaLibrary } from './workspace/MediaLibrary';
 import { ScriptTools } from './ScriptTools';
-import { ProductionView } from './production';
-import { EditorialView, SeriesView } from './story';
-import { ExportActions, ImportView } from './interchange';
+import { ExportActions } from './interchange';
+
+// Pages people open less often load on demand, so the first screen arrives quickly. The service worker
+// still precaches every chunk, so they open offline too.
+const ProductionView = lazy(() => import('./production/ProductionView').then(module => ({ default: module.ProductionView })));
+const SeriesView = lazy(() => import('./story/SeriesView').then(module => ({ default: module.SeriesView })));
+const EditorialView = lazy(() => import('./story/EditorialView').then(module => ({ default: module.EditorialView })));
+const CreatorStudio = lazy(() => import('./creator/CreatorStudio').then(module => ({ default: module.CreatorStudio })));
+const MediaLibrary = lazy(() => import('./workspace/MediaLibrary').then(module => ({ default: module.MediaLibrary })));
+const TeamWorkspace = lazy(() => import('./workspace/team-ui').then(module => ({ default: module.TeamWorkspace })));
+const ReviewWorkspace = lazy(() => import('./workspace/team-ui').then(module => ({ default: module.ReviewWorkspace })));
+const ImportView = lazy(() => import('./interchange/import-view').then(module => ({ default: module.ImportView })));
 import { CommandMenu } from './shell/CommandMenu';
 import type { CommandAction } from './shell/CommandMenu';
 import { Shell } from './shell/Shell';
@@ -328,13 +334,14 @@ export function App() {
   </div></div>;
   // The manuscript stays paper-white in every appearance (writing.css); its chrome follows the theme.
 
+  const loading = <div className="swdr-page page-loading" role="status"><LoaderCircle size={18} className="spinner" aria-hidden="true" /> Loading</div>;
   return <Theme theme={themes[defaultThemeSlug]} mode={mode}>
     <div className={`app${focus ? ' is-focused' : ''}`} data-view={route.view}>
-      {route.view === 'team' || route.view === 'review' ? page : <Shell
+      {route.view === 'team' || route.view === 'review' ? <Suspense fallback={loading}>{page}</Suspense> : <Shell
         route={route} project={isProjectView ? active : undefined} document={head} episode={episode} navigate={navigate} onBack={back}
         onPalette={() => setPalette(true)} onShortcuts={() => setShortcuts(true)} switchEpisode={switchEpisode} stepEpisode={stepEpisode}
         sidebarCollapsed={collapsed} onSidebarCollapsedChange={setCollapsed} mode={mode} onModeChange={setMode}>
-        {page}
+        <Suspense fallback={loading}>{page}</Suspense>
       </Shell>}
       {palette && <CommandMenu isOpen={palette} onOpenChange={setPalette} projects={projects} project={isProjectView ? active : undefined} document={head}
         navigate={navigate} openScene={openScene} switchEpisode={switchEpisode} actions={actions}
@@ -347,10 +354,11 @@ export function App() {
 }
 
 
-type TeamView = 'write' | 'outline' | 'story' | 'editorial' | 'production';
+type TeamView = 'write' | 'outline' | 'story' | 'editorial' | 'production' | 'creator' | 'media';
 const teamDestinations: { id: TeamView; label: string }[] = [
   { id: 'write', label: 'Write' }, { id: 'outline', label: 'Outline' }, { id: 'story', label: 'Series Intelligence' },
-  { id: 'editorial', label: 'Editorial' }, { id: 'production', label: 'Production' }
+  { id: 'editorial', label: 'Editorial' }, { id: 'production', label: 'Production' }, { id: 'creator', label: 'Creator studio' },
+  { id: 'media', label: 'Files & media' }
 ];
 
 function TeamDocument({ view }: { view: TeamRenderProps }) {
@@ -365,7 +373,9 @@ function TeamDocument({ view }: { view: TeamRenderProps }) {
 
   return <>
     <nav className="team-workspaces-nav" aria-label="Project workspaces">
-      {teamDestinations.slice(0, fullScope ? teamDestinations.length : 2).map(destination =>
+      {teamDestinations.filter((destination, index) => (fullScope || index < 2) && (destination.id !== 'creator' || ['creator', 'commercial'].includes(view.project.kind))
+        && (destination.id !== 'production' || !['creator', 'commercial'].includes(view.project.kind)) && (destination.id !== 'story' || view.project.kind === 'series')
+        && (destination.id !== 'editorial' || ['documentary', 'commercial'].includes(view.project.kind))).map(destination =>
         <button key={destination.id} type="button" aria-pressed={destination.id === currentMode} className="selectable"
           onClick={() => setMode(destination.id)}>{destination.label}</button>)}
       <PresenceBar peers={peers} documentTitle={id => view.project.documents.find(item => item.id === id)?.title}
@@ -381,6 +391,8 @@ function TeamDocument({ view }: { view: TeamRenderProps }) {
       : currentMode === 'story' ? <SeriesView {...props} />
       : currentMode === 'editorial' ? <EditorialView key={view.document.id} {...props} />
       : currentMode === 'production' ? <ProductionView key={view.document.id} {...props} />
+      : currentMode === 'creator' ? <CreatorStudio {...props} />
+      : currentMode === 'media' ? <MediaLibrary {...props} />
       : view.document.kind === 'av' ? <AVView key={view.document.id} {...props} target={view.selectedSource} toolbarEnd={exporter} />
       : <div className="team-script-stage" id="main-content" ref={stage}><WritingView key={view.document.id} {...props}
         target={view.selectedSource} toolbarEnd={exporter} onOpenOutline={() => setMode('outline')} />

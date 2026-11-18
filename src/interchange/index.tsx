@@ -7,7 +7,6 @@ import { exportFdx, exportFountain } from './screenplay';
 import { exportAvCsv, exportAvXlsx, exportAvYaml } from './tabular';
 import './interchange.css';
 
-export { ImportView } from './import-view';
 export { exportArchive, importArchive } from './archive';
 export { readImport } from './intake';
 export { acceptAvRevision, acceptRevision, reviewAvRevision, reviewRevision } from './reconcile';

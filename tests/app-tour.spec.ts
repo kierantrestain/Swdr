@@ -85,6 +85,12 @@ for (const mode of ['light', 'dark'] as const) {
     await shot('12-phone-creator');
     await page.getByRole('button', { name: /The £0 trick/ }).click();
     await shot('13-phone-creator-short');
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open project The North Shore' }).click();
+    await expect(page.getByRole('region', { name: 'Project pulse' })).toBeVisible();
+    await shot('14-phone-pulse');
+    await page.goto(page.url().replace('/project', '/media'));
+    await shot('15-phone-media');
     expect(problems).toEqual([]);
   });
 }

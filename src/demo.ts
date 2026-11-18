@@ -1,8 +1,8 @@
 import { newBlock, newDocument, newId } from './model';
 import type { DocumentModel, Episode, Project } from './model';
 import { createProject } from './workspace';
-import { seedProduction } from './production';
-import { seedEditorial, seedSeries } from './story';
+import { seedProduction } from './production/seed';
+import { seedEditorial, seedSeries } from './story/seed';
 import { cutShort, newPiece, withCreator } from './creator/model';
 
 const episodeNames = [
