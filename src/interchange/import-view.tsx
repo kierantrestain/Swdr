@@ -251,7 +251,7 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
   const blocked = unresolved.length > 0 || needsMapping || Boolean(revision?.matches.some(match => match.outcome === 'unmatched') || avRevision?.matches.some(match => match.outcome === 'unmatched'));
   const importedCharacters = new Set(unresolved.map(line => line.blockId));
 
-  return <main className="swdr-page interchange-page" id="main-content">
+  return <div className="swdr-page interchange-page" id="main-content">
     <div className="page-heading interchange-heading">
       <div>
         <h1>{result?.type === 'archive' ? 'Restore project archive' : draft ? 'Review script import' : 'Import script'}</h1>
@@ -442,7 +442,20 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
         </button>}
       </div>
     </footer>
-  </main>;
+
+    {!file && project && <section className="import-files" aria-labelledby="project-files-heading">
+      <div className="section-heading"><h2 id="project-files-heading">Files in {project.title}</h2></div>
+      {project.assets.length ? <div className="table-frame"><table className="import-files-table">
+        <thead><tr><th>File</th><th>Type</th><th>Added</th><th><span className="sr-only">Download</span></th></tr></thead>
+        <tbody>{project.assets.slice().sort((a, b) => b.addedAt.localeCompare(a.addedAt)).map(asset => <tr key={asset.id}>
+          <td><span className="project-cell"><span className="document-icon" aria-hidden="true"><FileText size={16} /></span><strong>{asset.name}</strong></span></td>
+          <td className="row-meta">{asset.mime || 'File'}</td>
+          <td className="row-meta">{asset.addedAt.slice(0, 10)}</td>
+          <td className="row-actions"><a href={asset.dataUrl} download={asset.name}>Download</a></td>
+        </tr>)}</tbody>
+      </table></div> : <p className="empty-block">Imported drafts, storyboard frames and source documents appear here.</p>}
+    </section>}
+  </div>;
 }
 
 function EditLine({ block, close, apply }: { block: Block; close: () => void; apply: (kind: BlockKind, value: string) => void }) {

@@ -59,13 +59,39 @@ function OutputPreview({ issue, output }: { issue: EditorialIssue; output: Outpu
   </article>;
 }
 
-export function EditorialView({ project, document, onProjectChange, onOpenSource, onStatus, readOnly }: WorkspaceViewProps) {
+const paneSlug = (pane: Pane) => pane.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+export function EditorialView({ project, document, onProjectChange, onOpenSource, onStatus, readOnly, tab, onTabChange, onSelectDocument }: WorkspaceViewProps & {
+  /** The editorial pane named in the address, e.g. claims. */
+  tab?: string;
+  onTabChange?: (tab: string) => void;
+  /** Called when the writer opens another document here, so the address and shell follow it. */
+  onSelectDocument?: (documentId: string) => void;
+}) {
   const episodes = orderedEpisodes(project);
-  const [selectedDocumentId, setSelectedDocumentId] = useState(document.id);
+  const [selectedDocumentId, setSelectedState] = useState(document.id);
+  const [segmentId, setSegmentId] = useState('');
+  const [shownDocument, setShownDocument] = useState(document.id);
+  if (shownDocument !== document.id) {
+    // Another episode was chosen in the shell: show it from its first segment.
+    setShownDocument(document.id);
+    if (document.id !== selectedDocumentId) {
+      setSelectedState(document.id);
+      setSegmentId('');
+    }
+  }
+  const setSelectedDocumentId = (id: string) => {
+    setSelectedState(id);
+    onSelectDocument?.(id);
+  };
   const current = project.documents.find(item => item.id === selectedDocumentId) ?? document;
   const episode = episodes.find(item => item.id === current.episodeId);
-  const [pane, setPane] = useState<Pane>('Segments');
-  const [segmentId, setSegmentId] = useState('');
+  const [localPane, setLocalPane] = useState<Pane>(() => panes.find(item => paneSlug(item) === tab) ?? 'Segments');
+  const pane = onTabChange ? panes.find(item => paneSlug(item) === tab) ?? 'Segments' : localPane;
+  const setPane = (next: Pane) => {
+    setLocalPane(next);
+    onTabChange?.(paneSlug(next));
+  };
   const [research, setResearch] = useState(true);
   const [focus, setFocus] = useState(false);
   const [form, setForm] = useState<FormState>();
@@ -143,7 +169,7 @@ export function EditorialView({ project, document, onProjectChange, onOpenSource
   const close = () => setForm(undefined);
   const canEdit = !readOnly;
   const isSegmentPane = focus || pane === 'Segments';
-  return <main className={`swdr-page swdr-story-page swdr-editorial-page${focus ? ' swdr-editorial-focus' : ''}`} id="main-content">
+  return <div className={`swdr-page swdr-story-page swdr-editorial-page${focus ? ' swdr-editorial-focus' : ''}`} id="main-content">
     <header className="page-heading swdr-story-heading">
       <div><h1>{current.title}</h1><p>{[docLabel, episode && episodeCode(episode), runtime > 0 && `${minutes}-minute outline`].filter(Boolean).join(' · ')}</p></div>
       <div className="actions swdr-story-filters">
@@ -312,5 +338,5 @@ export function EditorialView({ project, document, onProjectChange, onOpenSource
           </> : <p className="swdr-story-muted">Connect client copy, deliverables and approvals to an AV revision.</p>}
         </section>}
     </div>}
-  </main>;
+  </div>;
 }

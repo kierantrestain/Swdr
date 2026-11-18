@@ -49,11 +49,12 @@ test('rejects an image-only scan and invalid source, then cancels and retries in
     { name: 'scan.pdf', mimeType: 'application/pdf', buffer: Buffer.from(rasterPdf(false)) },
     { name: 'unsupported.invalid', mimeType: 'application/octet-stream', buffer: Buffer.from('synthetic fixture') }
   ]);
-  await expect(page.getByRole('alert')).toContainText('OCR');
+  // The design system keeps a shared, empty assertive live region on the page; the intake alert is the one in the main content.
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('OCR');
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('OCR');
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('OCR');
   await page.getByRole('button', { name: 'Skip file', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Choose a supported file');
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('Choose a supported file');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
   const retry = await openImport(page);

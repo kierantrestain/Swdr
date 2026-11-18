@@ -16,6 +16,8 @@ const acts: { id: Act; title: string }[] = [
 interface OutlineProps extends WorkspaceViewProps {
   toolbarEnd?: ReactNode;
   saveLabel?: string;
+  /** Called when the writer picks another episode here, so the app can open that episode's document. */
+  onSelectDocument?: (documentId: string) => void;
 }
 
 function defaultAct(beat: BoardBeat, position: number, length: number): Act {
@@ -23,8 +25,19 @@ function defaultAct(beat: BoardBeat, position: number, length: number): Act {
   return position < Math.ceil(length / 3) ? 1 : position < Math.ceil(length * 2 / 3) ? 2 : 3;
 }
 
-export function OutlineView({ project, document, onProjectChange, onStatus, onOpenSource, readOnly, toolbarEnd }: OutlineProps) {
-  const [episodeId, setEpisodeId] = useState(document.episodeId ?? '');
+export function OutlineView({ project, document, onProjectChange, onStatus, onOpenSource, readOnly, toolbarEnd, onSelectDocument }: OutlineProps) {
+  const [episodeId, setEpisodeState] = useState(document.episodeId ?? '');
+  const [shownDocument, setShownDocument] = useState(document.id);
+  if (shownDocument !== document.id) {
+    // The episode changed elsewhere (the shell's episode switcher or the address bar).
+    setShownDocument(document.id);
+    setEpisodeState(document.episodeId ?? '');
+  }
+  function setEpisodeId(id: string) {
+    setEpisodeState(id);
+    const next = project.documents.find(item => item.episodeId === id && item.kind !== 'av');
+    if (next) onSelectDocument?.(next.id);
+  }
   const [view, setView] = useState<'board' | 'list' | 'scenes'>('board');
   const [expanded, setExpanded] = useState('');
   const [dragging, setDragging] = useState('');
@@ -116,6 +129,7 @@ export function OutlineView({ project, document, onProjectChange, onStatus, onOp
       {!readOnly && <button type="button" className="swdr-w-button" onClick={() => {
         const next = newDocument(episode?.title ?? project.title, 'screenplay', episode?.id);
         onProjectChange(current => ({ ...current, documents: [...current.documents, next] }));
+        onSelectDocument?.(next.id);
       }}>Create episode script</button>}
     </div>}
     {selected && view === 'scenes' && <div className="swdr-scene-cards">

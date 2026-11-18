@@ -218,14 +218,25 @@ function Section({ title, actions, children }: { title: string; actions?: ReactN
   return <section className="swdr-story-card"><div className="swdr-story-card-head"><h2>{title}</h2>{actions}</div>{children}</section>;
 }
 
-export function SeriesView({ project, document, onProjectChange, onOpenSource, onStatus, readOnly }: WorkspaceViewProps) {
+const viewSlug = (pane: View) => pane.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+export function SeriesView({ project, document, onProjectChange, onOpenSource, onStatus, readOnly, tab, onTabChange }: WorkspaceViewProps & {
+  /** The series workspace named in the address, e.g. story-map. */
+  tab?: string;
+  onTabChange?: (tab: string) => void;
+}) {
   const episodes = orderedEpisodes(project);
   const current = episodes.find(item => item.id === document.episodeId);
   const [season, setSeason] = useState(current?.season ?? 0);
   const [exact, setExact] = useState('');
   const [asOf, setAsOf] = useState(current?.id ?? '');
   const [version, setVersion] = useState('');
-  const [view, setView] = useState<View>('Relationship web');
+  const [localView, setLocalView] = useState<View>(() => panes.find(pane => viewSlug(pane) === tab) ?? 'Relationship web');
+  const view = onTabChange ? panes.find(pane => viewSlug(pane) === tab) ?? 'Relationship web' : localView;
+  const setView = (next: View) => {
+    setLocalView(next);
+    onTabChange?.(viewSlug(next));
+  };
   const [focusedPerson, setFocusedPerson] = useState('');
   const [dossier, setDossier] = useState(false);
   const [dossierPane, setDossierPane] = useState<DossierPane>('Overview');
@@ -280,7 +291,7 @@ export function SeriesView({ project, document, onProjectChange, onOpenSource, o
     onStatus('Visible story records exported.');
   }
 
-  return <main className="swdr-page swdr-story-page" id="main-content">
+  return <div className="swdr-page swdr-story-page" id="main-content">
     <header className="page-heading swdr-story-heading">
       <div>
         <h1>{displayDossier ? person.name : 'Series Intelligence'}</h1>
@@ -417,5 +428,5 @@ export function SeriesView({ project, document, onProjectChange, onOpenSource, o
         </div>
       </div>}
     </>}
-  </main>;
+  </div>;
 }
