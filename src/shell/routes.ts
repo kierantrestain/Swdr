@@ -2,7 +2,7 @@ import type { DocumentModel, Project } from '../model';
 export { episodeCode, orderedEpisodes } from '../story/source';
 
 /** Every view that belongs to an open project. */
-export type ProjectSection = 'project' | 'write' | 'outline' | 'av' | 'story' | 'editorial' | 'production' | 'creator' | 'import';
+export type ProjectSection = 'project' | 'write' | 'outline' | 'av' | 'story' | 'editorial' | 'production' | 'creator' | 'media' | 'import';
 export type Destination = 'home' | 'team' | 'review' | ProjectSection;
 
 export interface Route {
@@ -18,7 +18,7 @@ export interface Route {
   tab?: string;
 }
 
-const projectViews = new Set<Destination>(['project', 'write', 'outline', 'av', 'story', 'editorial', 'production', 'creator', 'import']);
+const projectViews = new Set<Destination>(['project', 'write', 'outline', 'av', 'story', 'editorial', 'production', 'creator', 'media', 'import']);
 
 export function parseRoute(location: Pick<Location, 'hash' | 'pathname'> = window.location): Route {
   const [path, query = ''] = location.hash.slice(1).split('?');
@@ -50,7 +50,7 @@ export function encodeRoute(route: Route): string {
 
 export const SECTION_LABELS: Record<Destination, string> = {
   home: 'Projects', team: 'Team', review: 'Review', project: 'Overview', write: 'Script', outline: 'Outline',
-  av: 'AV script', story: 'Series Intelligence', editorial: 'Editorial', production: 'Production', creator: 'Creator studio', import: 'Import & files'
+  av: 'AV script', story: 'Series Intelligence', editorial: 'Editorial', production: 'Production', creator: 'Creator studio', media: 'Files & media', import: 'Import'
 };
 
 /** Production panes, in the order the workspace shows them, with their URL slugs. */

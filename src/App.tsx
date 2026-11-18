@@ -12,6 +12,7 @@ import { AVView, OutlineView, WritingView } from './writing';
 import { ReviewWorkspace, TeamWorkspace } from './workspace/team-ui';
 import type { TeamRenderProps } from './workspace/team-ui';
 import { CreatorStudio } from './creator/CreatorStudio';
+import { MediaLibrary } from './workspace/MediaLibrary';
 import { ScriptTools } from './ScriptTools';
 import { ProductionView } from './production';
 import { EditorialView, SeriesView } from './story';
@@ -318,6 +319,7 @@ export function App() {
   else if (route.view === 'av' && shared && hasRequestedRevision) page = <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} toolbarEnd={<ExportActions {...shared} />} />;
   else if (route.view === 'production' && shared) page = <ProductionView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} />;
   else if (route.view === 'story' && shared) page = <SeriesView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} />;
+  else if (route.view === 'media' && shared) page = <MediaLibrary key={shared.project.id} {...shared} />;
   else if (route.view === 'creator' && shared) page = <CreatorStudio key={shared.project.id} {...shared} />;
   else if (route.view === 'editorial' && shared) page = <EditorialView key={shared.project.id} {...shared} tab={route.tab} onTabChange={setTab} onSelectDocument={selectDocument} />;
   else page = <div className="swdr-page" id="main-content"><div className="empty-block">
@@ -334,7 +336,8 @@ export function App() {
         {page}
       </Shell>}
       {palette && <CommandMenu isOpen={palette} onOpenChange={setPalette} projects={projects} project={isProjectView ? active : undefined} document={head}
-        navigate={navigate} openScene={openScene} switchEpisode={switchEpisode} actions={actions} />}
+        navigate={navigate} openScene={openScene} switchEpisode={switchEpisode} actions={actions}
+        openLine={(documentId, blockId) => { const doc = active?.documents.find(item => item.id === documentId); if (active && doc) openSource(sourceFor(active, doc, { blockId })); }} />}
       {shortcuts && <ShortcutsDialog isOpen={shortcuts} onOpenChange={setShortcuts} />}
       {error && ready && <aside className="save-error" role="alert">{error}<button onClick={retrySave}>Retry save</button></aside>}
       {message && <div className="status-toast" role="status">{message}</div>}

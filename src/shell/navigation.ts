@@ -1,4 +1,4 @@
-import { BookOpen, CalendarRange, Camera, ClipboardList, Clapperboard, FileStack, FileText, FolderInput, LayoutGrid, LayoutDashboard, Mic, PiggyBank, ScrollText, Users, Video } from 'lucide-react';
+import { BookOpen, CalendarRange, Camera, ClipboardList, Clapperboard, FileStack, FileText, FolderInput, LayoutGrid, LayoutDashboard, Mic, PiggyBank, ScrollText, Users, Video, Images } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 import type { DocumentModel, Project } from '../model';
 import { getProductionPlan, scheduleConflicts } from '../production/model';
@@ -52,7 +52,8 @@ export function projectNavigation(project: Project, document: DocumentModel | un
   })) : [];
   const projectEntries: NavEntry[] = [
     { id: 'project', label: 'Overview', key: 'p', icon: icon(LayoutDashboard), route: { ...base, view: 'project' }, count: project.documents.length },
-    { id: 'import', label: 'Import & files', key: 'm', icon: icon(FolderInput), route: { ...base, view: 'import' } },
+    { id: 'media', label: 'Files & media', key: 'f', icon: icon(Images), route: { ...base, view: 'media' }, count: project.assets.length || undefined },
+    { id: 'import', label: 'Import', key: 'm', icon: icon(FolderInput), route: { ...base, view: 'import' } },
     { id: 'team', label: 'Team & sharing', key: 't', icon: icon(Users), route: { view: 'team' } }
   ];
   return [

@@ -25,7 +25,8 @@ export const GO_KEYS: { key: string; label: string; target: string }[] = [
   { key: 'd', label: 'Sides', target: 'production-sides' },
   { key: 'c', label: 'Call sheets', target: 'production-call-sheets' },
   { key: 'r', label: 'Reports', target: 'production-reports' },
-  { key: 'm', label: 'Import & files', target: 'import' },
+  { key: 'f', label: 'Files & media', target: 'media' },
+  { key: 'm', label: 'Import', target: 'import' },
   { key: 't', label: 'Team & sharing', target: 'team' }
 ];
 

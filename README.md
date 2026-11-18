@@ -10,6 +10,14 @@ It works offline in the browser, keeps your projects on your device by default, 
 
 ## Features
 
+### Smart, on your device
+- **Project pulse**: the Overview shows words written, today's goal, script health, how much of the shoot is scheduled, the next shoot day, budget spent, videos live and the next publish date. A **Next up** list ranks what needs attention — formatting problems, schedule conflicts, unscheduled scenes, budget overruns, videos publishing soon with problems — with one click to each.
+- **Search every line**: press `Ctrl/⌘+K` and type three letters to search the text of every script in the project, alongside sections, scenes, episodes and projects.
+- **Pitch one-sheet**: a printable one-page pitch built from the project — logline, key characters with their share of dialogue, length, scenes, locations, interior/exterior split, comparable titles and contact. Print, save as PDF or copy as text.
+- **Files & media**: every photo, storyboard frame, recce image, imported script and reference file in one library, with where each is used, storage size, drag-and-drop upload, download and safe deletion of unused files.
+
+Everything above is calculated in the browser from your own project. Nothing is sent to a server or an AI service.
+
 ### Writing
 - **Script editor**: one continuous document with Final Draft–style Enter/Tab element flow, an element menu (`Ctrl+E`) and shortcuts (`Ctrl+Alt+1…9`).
 - **Auto-format and SmartType**: `INT.`/`EXT.` becomes a scene heading, `(` a parenthetical, `TO:` a transition. Characters, locations, times of day and extensions autocomplete from the script itself.

@@ -2,7 +2,8 @@ import { CommandPalette, CommandPaletteInput } from '@astryxdesign/core/CommandP
 import { Kbd } from '@astryxdesign/core/Kbd';
 import { Text } from '@astryxdesign/core/Text';
 import { createStaticSource } from '@astryxdesign/core/Typeahead';
-import { useEffect, useMemo } from 'react';
+import type { SearchSource } from '@astryxdesign/core/Typeahead';
+import { useEffect, useMemo, useRef } from 'react';
 import type { DocumentModel, Project } from '../model';
 import { sceneList } from '../model';
 import { projectNavigation, workspaceTabs } from './navigation';
@@ -23,11 +24,13 @@ interface Props {
   document?: DocumentModel;
   navigate: (route: Route) => void;
   openScene: (sceneId: string, blockId: string) => void;
+  /** Opens a line in any script of the current project. */
+  openLine?: (documentId: string, blockId: string) => void;
   switchEpisode: (episodeId: string) => void;
   actions: CommandAction[];
 }
 
-export function CommandMenu({ isOpen, onOpenChange, projects, project, document, navigate, openScene, switchEpisode, actions }: Props) {
+export function CommandMenu({ isOpen, onOpenChange, projects, project, document, navigate, openScene, openLine, switchEpisode, actions }: Props) {
   const items = useMemo(() => {
     const list: CommandAction[] = [];
     if (project) {
@@ -62,7 +65,31 @@ export function CommandMenu({ isOpen, onOpenChange, projects, project, document,
     });
     return list;
   }, [actions, document, navigate, openScene, project, projects, switchEpisode]);
-  const source = useMemo(() => createStaticSource(items, { keywords: item => item.auxiliaryData.keywords ?? [item.auxiliaryData.group] }), [items]);
+  const lines = useRef<CommandAction[]>([]);
+  const source = useMemo((): SearchSource<CommandAction> => {
+    const base = createStaticSource(items, { keywords: item => item.auxiliaryData.keywords ?? [item.auxiliaryData.group] });
+    return {
+      bootstrap: () => base.bootstrap(),
+      // After three characters, every line of every script in the project is searchable too.
+      search: async query => {
+        const found = await base.search(query);
+        const needle = query.trim().toLocaleLowerCase('en-GB');
+        if (!project || !openLine || needle.length < 3) return found;
+        const matches: CommandAction[] = [];
+        for (const doc of project.documents) {
+          const rows = doc.kind === 'av' ? doc.avRows.map(row => ({ id: row.id, text: `${row.video} ${row.audio}`.trim() })) : doc.blocks.map(block => ({ id: block.id, text: block.text }));
+          for (const row of rows) {
+            if (matches.length >= 25) break;
+            if (!row.text.toLocaleLowerCase('en-GB').includes(needle)) continue;
+            matches.push({ id: `line-${doc.id}-${row.id}`, label: row.text.length > 110 ? `${row.text.slice(0, 107)}…` : row.text,
+              auxiliaryData: { group: 'Lines in scripts', hint: doc.title, keywords: [row.text], run: () => openLine(doc.id, row.id) } });
+          }
+        }
+        lines.current = matches;
+        return [...found, ...matches];
+      }
+    };
+  }, [items, openLine, project]);
 
   // Enter runs the top result when nothing has been highlighted with the arrow keys yet.
   useEffect(() => {
@@ -73,7 +100,7 @@ export function CommandMenu({ isOpen, onOpenChange, projects, project, document,
       if (input.getAttribute('aria-activedescendant')) return;
       const list = window.document.getElementById(input.getAttribute('aria-controls') ?? '');
       const first = list?.querySelector<HTMLElement>('[role="option"][data-value]:not([aria-disabled="true"])');
-      const item = first && items.find(entry => entry.id === first.dataset.value);
+      const item = first && [...items, ...lines.current].find(entry => entry.id === first.dataset.value);
       if (!item) return;
       event.preventDefault();
       event.stopPropagation();
@@ -90,8 +117,8 @@ export function CommandMenu({ isOpen, onOpenChange, projects, project, document,
     label="Command palette"
     searchSource={source}
     width={680}
-    input={<CommandPaletteInput placeholder="Jump to a section, episode, scene or project…" label="Search commands" />}
-    onValueChange={value => items.find(item => item.id === value)?.auxiliaryData.run()}
+    input={<CommandPaletteInput placeholder="Jump to a section, scene or project — or search every line of your scripts…" label="Search commands" />}
+    onValueChange={value => [...items, ...lines.current].find(item => item.id === value)?.auxiliaryData.run()}
     renderItem={item => <span className="shell-command-row">
       <Text type="body" maxLines={1}>{item.label}</Text>
       {item.auxiliaryData.hint && <Text type="supporting">{item.auxiliaryData.hint}</Text>}

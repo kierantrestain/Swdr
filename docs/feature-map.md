@@ -70,7 +70,10 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 | Day out of days, sides, shot lists | Celtx print types (Bundle) | ✅ |
 | Budget | Celtx "Budget" (Owner), StudioBinder (Docs) | ✅ Top sheet with account codes, contingency, fringes (UK NI, holiday pay, pension presets), spend bars, over-budget flags, one-dialog cost entry, CSV |
 | Cast & Crew directory | Celtx (Owner), StudioBinder (Docs) | ✅ Breakdown → Cast & crew, with photos and cast IDs; call sheets list cast by name |
-| Files & Media | Celtx (Owner) | 🟡 Project assets and imports; no media browser yet |
+| Files & Media | Celtx (Owner) | ✅ Media library with usage, storage size, filters, upload, download and safe deletion |
+| Project dashboard and next steps | (SWDR original) | ✅ Project pulse on the Overview with a ranked Next up list |
+| Search across every script line | (SWDR original) | ✅ Command palette searches all script text in the project |
+| Pitch one-sheet | (SWDR original) | ✅ Generated from the script; print, PDF or text |
 | Script revision impact on schedule | StudioBinder (Docs) | ✅ Script-change flags and review |
 
 ## 5. Projects, navigation and accounts
@@ -96,7 +99,7 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 
 1. **Real-time co-writing in the editor** (Yjs on the team service). This is the largest gap against WriterDuet.
 2. ~~Inline styles~~ shipped in this round.
-3. ~~Cast & Crew directory~~ shipped; **Files & Media browser** remains.
+3. ~~Cast & Crew directory~~ and ~~Files & Media~~ shipped.
 4. ~~Budget account codes and fringes~~ shipped in this round.
 5. ~~Alternate-dialogue cycling~~ shipped in this round.
 6. ~~Per-character voices~~, reports, formatting checks and writing goals shipped in this round.

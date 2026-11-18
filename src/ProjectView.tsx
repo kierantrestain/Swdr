@@ -8,8 +8,8 @@ import { Selector } from '@astryxdesign/core/Selector';
 import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from '@astryxdesign/core/Table';
 import { Text } from '@astryxdesign/core/Text';
 import { TextInput } from '@astryxdesign/core/TextInput';
-import { Archive, BookOpen, Clapperboard, FileText, LayoutGrid, Mic, Plus, Rows3, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { Archive, ArrowRight, BookOpen, CircleAlert, Clapperboard, FileText, Images, Info, LayoutGrid, Mic, Plus, Presentation, Rows3, TriangleAlert, Upload, Video } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { DocumentKind, DocumentModel, Project } from './model';
 import { newDocument, newId, sceneList } from './model';
@@ -17,8 +17,10 @@ import { PROJECT_LABELS } from './Home';
 import { episodeLabel } from './demo';
 import { getProductionPlan } from './production/model';
 import { sectionsFor } from './shell/routes';
+import { PitchSheet } from './PitchSheet';
+import { projectPulse } from './pulse';
 
-export type ProjectDestination = 'write' | 'outline' | 'av' | 'story' | 'editorial' | 'production' | 'import';
+export type ProjectDestination = 'write' | 'outline' | 'av' | 'story' | 'editorial' | 'production' | 'creator' | 'media' | 'import';
 
 interface Props {
   project: Project;
@@ -67,6 +69,8 @@ function NewDocumentDialog({ project, form, close, submit }: {
 
 export function ProjectView({ project, current, open, update, archive }: Props) {
   const [form, setForm] = useState<'episode' | 'document'>();
+  const [pitch, setPitch] = useState(false);
+  const pulse = useMemo(() => projectPulse(project, current), [project, current]);
   const [search, setSearch] = useState('');
   const seasons = [...new Set(project.episodes.map(episode => episode.season))].sort((a, b) => a - b);
   const currentEpisode = project.episodes.find(episode => episode.id === current?.episodeId);
@@ -93,11 +97,13 @@ export function ProjectView({ project, current, open, update, archive }: Props) 
   }
 
   const cards: { id: ProjectDestination; label: string; text: string; icon: typeof FileText }[] = [
-    { id: project.kind === 'commercial' ? 'av' : 'write', label: 'Write', text: 'Open the current manuscript.', icon: FileText },
+    ...(sections.creator ? [{ id: 'creator' as const, label: 'Creator studio', text: 'Board, previews, packaging and publishing.', icon: Video }] : []),
+    { id: project.kind === 'commercial' || project.kind === 'creator' ? 'av' : 'write', label: 'Write', text: 'Open the current manuscript.', icon: FileText },
     { id: 'outline', label: 'Outline', text: 'Build beats and jump to scenes.', icon: LayoutGrid },
     ...(sections.series ? [{ id: 'story' as const, label: 'Series Intelligence', text: 'Characters, canon and the event ledger.', icon: BookOpen }] : []),
     ...(sections.editorial ? [{ id: 'editorial' as const, label: 'Editorial', text: 'Segments, evidence and producer outputs.', icon: Mic }] : []),
-    ...(sections.production ? [{ id: 'production' as const, label: 'Production', text: 'From released script to shooting schedule.', icon: Clapperboard }] : [])
+    ...(sections.production ? [{ id: 'production' as const, label: 'Production', text: 'From released script to shooting schedule.', icon: Clapperboard }] : []),
+    { id: 'media', label: 'Files & media', text: 'Photos, storyboards, imports and references.', icon: Images }
   ];
 
   return <div className="swdr-page project-page" id="main-content">
@@ -108,12 +114,30 @@ export function ProjectView({ project, current, open, update, archive }: Props) 
         {project.synopsis && <Text type="supporting" as="p">{project.synopsis}</Text>}
       </div>
       <div className="page-actions">
+        <Button label="Pitch one-sheet" icon={<Presentation size={16} aria-hidden="true" />} onClick={() => setPitch(true)} />
         <Button label="Import draft" icon={<Upload size={16} aria-hidden="true" />} onClick={() => open('import')} />
         {(project.kind === 'series' || project.kind === 'documentary') && <Button label="New episode" icon={<Plus size={16} aria-hidden="true" />} onClick={() => setForm('episode')} />}
         <Button label="New document" variant="primary" icon={<Plus size={16} aria-hidden="true" />} onClick={() => setForm('document')} />
       </div>
     </header>
     {form && <NewDocumentDialog project={project} form={form} close={() => setForm(undefined)} submit={submit} />}
+    {pitch && <PitchSheet project={project} document={current} update={update} onClose={() => setPitch(false)} />}
+
+    <section className="pulse" aria-label="Project pulse">
+      <div className="pulse-tiles">{pulse.tiles.map(tile => <button key={tile.id} type="button" className={`pulse-tile${tile.tone ? ` is-${tile.tone}` : ''}`}
+        onClick={() => tile.target && open(tile.target === 'write' && current?.kind === 'av' ? 'av' : tile.target)}>
+        <small>{tile.label}</small><strong>{tile.value}</strong><span>{tile.detail}</span>
+        {tile.progress !== undefined && <i className="pulse-progress" aria-hidden="true"><b style={{ width: `${tile.progress}%` }} /></i>}
+      </button>)}</div>
+      {pulse.steps.length > 0 && <div className="pulse-steps">
+        <h2>Next up</h2>
+        <ul>{pulse.steps.map(step => <li key={step.id} className={`is-${step.tone}`}>
+          {step.tone === 'bad' ? <CircleAlert size={16} aria-hidden="true" /> : step.tone === 'warn' ? <TriangleAlert size={16} aria-hidden="true" /> : <Info size={16} aria-hidden="true" />}
+          <span>{step.text}</span>
+          <button type="button" onClick={() => open(step.target)}>{step.action} <ArrowRight size={14} aria-hidden="true" /></button>
+        </li>)}</ul>
+      </div>}
+    </section>
 
     {current && <section className="current-strip" aria-label="Current document">
       <div className="current-strip-title">
