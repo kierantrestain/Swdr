@@ -14,7 +14,7 @@ import { Sides } from './Sides';
 import { Stripboard } from './Stripboard';
 import {
   applyRevision, getProductionPlan, issueProductionOutput, issueScriptSnapshot, previewRevision, releasedScript,
-  scheduleCsv, setProductionPlan, startProduction
+  scheduleCsv, scriptChanges, setProductionPlan, startProduction
 } from './model';
 import type { ProductionOutput, RevisionPreview } from './model';
 import './production.css';
@@ -96,8 +96,10 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
     }
   }
 
+  const openRevisions = () => { setReleasePanel(true); setTarget(''); setError(''); };
   const paneProps: PaneProps | undefined = plan && snapshot ? {
-    project, plan, snapshot, source: sourceFor(project, snapshot.document), readOnly, update, onOpenSource, onProjectChange, onStatus, issueOutput
+    project, plan, snapshot, source: sourceFor(project, snapshot.document), readOnly, update, onOpenSource, onProjectChange, onStatus, issueOutput,
+    changes: scriptChanges(project, plan, document), reviewScript: readOnly ? undefined : openRevisions
   } : undefined;
 
   return <main id="main-content" className="swdr-page production-workspace" aria-label="Production workspace">
@@ -135,8 +137,8 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
             {label}
           </button>)}
         </nav>
-        {!readOnly && <button type="button" className="production-button production-compact" onClick={() => { setReleasePanel(true); setTarget(''); setError(''); }}>
-          <GitCompareArrows size={16} /> Script revisions
+        {!readOnly && <button type="button" className="production-button production-compact" onClick={openRevisions}>
+          <GitCompareArrows size={16} /> Script revisions{paneProps.changes.length > 0 && <span className="production-count" aria-hidden="true">{paneProps.changes.length}</span>}
         </button>}
       </div>
       {pane === 'Stripboard' && <Stripboard {...paneProps} />}

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { newId } from '../model';
-import { Dialog, Empty, SourceButton } from './components';
+import { Dialog, Empty, SourceButton, displayDate } from './components';
 import type { PaneProps } from './components';
-import { CATALOGUE_CATEGORIES, isShootDate, scriptTargets } from './model';
-import type { BreakdownTag, CatalogueCategory, Location, Person, ProductionScene } from './model';
+import { CATALOGUE_CATEGORIES, castNumbers, eighthsLabel, estimateEighths, isShootDate, orderedDays, scriptTargets, settingLabel } from './model';
+import type { BreakdownTag, CatalogueCategory, CatalogueItem, Location, Person, ProductionScene } from './model';
+import { ScriptChangeBadge, ScriptChangeBanner, ScriptChangeDialog } from './ScriptChanges';
 
 type Section = 'Scene tags' | 'Catalogue' | 'Cast & crew' | 'Locations';
 
@@ -12,20 +13,40 @@ function field(form: FormData, key: string): string {
   return String(form.get(key) ?? '').trim();
 }
 
+export function CategoryChip({ category }: { category: CatalogueCategory | string }) {
+  return <span className={`production-category production-cat-${category.toLowerCase().replace(/[^a-z]+/g, '-')}`}>{category}</span>;
+}
+
+function itemLabel(item: CatalogueItem | undefined, ids: Map<string, number>): string {
+  if (!item) return 'Unknown item';
+  const id = item.category === 'Cast' && item.personId ? ids.get(item.personId) : undefined;
+  return id ? `${id}. ${item.name}` : item.name;
+}
+
 function dateList(value: string): string[] {
   return [...new Set(value.split(/[\s,]+/).filter(Boolean))].sort();
 }
 
-export function Breakdown({ plan, project, snapshot, source, readOnly, update, onOpenSource }: PaneProps) {
+export function Breakdown({ plan, project, snapshot, source, readOnly, update, onOpenSource, changes, reviewScript }: PaneProps) {
   const [section, setSection] = useState<Section>('Scene tags');
   const [sceneId, setSceneId] = useState('');
   const [editingPerson, setEditingPerson] = useState<Person>();
   const [editingLocation, setEditingLocation] = useState<Location>();
   const [reviewing, setReviewing] = useState<BreakdownTag>();
   const [error, setError] = useState('');
+  const [changeFocus, setChangeFocus] = useState<string>();
+  const castIds = castNumbers(plan);
   const scene = plan.scenes.find(item => item.id === sceneId) ?? plan.scenes.find(item => item.status === 'active');
   const target = scriptTargets(project, snapshot.document).find(item => item.id === (scene?.source.sceneId ?? scene?.source.shotId));
   const tagBlocks = target?.source.sceneId ? target.blocks.filter(block => block.text.trim() && block.kind !== 'note') : [];
+  const change = scene && changes.find(item => item.sceneId === scene.id);
+  const sceneTags = scene ? plan.tags.filter(tag => tag.sceneId === scene.id) : [];
+  const categoryOf = (tag: BreakdownTag) => plan.catalogue.find(entry => entry.id === tag.itemId)?.category ?? 'Other';
+  const days = orderedDays(plan);
+  const placements = scene ? plan.strips.filter(strip => strip.sceneId === scene.id).flatMap(strip => {
+    const index = days.findIndex(day => day.id === strip.dayId);
+    return index < 0 ? [] : [`Day ${index + 1} · ${displayDate(days[index].date)}`];
+  }) : [];
 
   function addPerson(event: FormEvent<HTMLFormElement>, editing?: Person) {
     event.preventDefault();
@@ -96,6 +117,9 @@ export function Breakdown({ plan, project, snapshot, source, readOnly, update, o
       >{label}</button>)}
     </div>
     {section === 'Scene tags' && <>
+      <ScriptChangeBanner changes={changes} release={snapshot.label} onOpen={() => setChangeFocus('')} />
+      {changeFocus !== undefined && <ScriptChangeDialog plan={plan} changes={changes} focus={changeFocus || undefined} release={snapshot.label}
+        onClose={() => setChangeFocus(undefined)} onReview={reviewScript} />}
       {!scene && <Empty>The released script has no scenes available for breakdown.</Empty>}
       {scene && <div className="production-two-columns">
         <div className="production-card">
@@ -103,19 +127,27 @@ export function Breakdown({ plan, project, snapshot, source, readOnly, update, o
             {plan.scenes.map(item => <option key={item.id} value={item.id}>{item.number} · {item.heading || 'Untitled scene'}{item.status === 'omitted' ? ' (omitted)' : ''}</option>)}
           </select></label>
           <div className="production-section-heading"><h3>{scene.heading || 'Untitled scene'}</h3><SourceButton source={scene.source} onOpenSource={onOpenSource} /></div>
+          <p className="production-scene-meta">
+            {[settingLabel(scene.heading), target && `Est. ${eighthsLabel(estimateEighths(target.blocks))} pages`, placements.length ? placements.join(', ') : 'Not scheduled']
+              .filter(Boolean).join(' · ')}
+            {change && <ScriptChangeBadge change={change} onOpen={() => setChangeFocus(change.sceneId)} />}
+          </p>
           <div className="production-passage" aria-label="Released script excerpt">
             {target?.blocks.filter(block => block.kind !== 'note' && block.kind !== 'scene').map(block => <p key={block.id} className={`production-script-${block.kind}`}>{block.text}</p>)}
             {scene.status === 'omitted' && <p>Omitted from the active release. Open Source to read the original snapshot.</p>}
           </div>
         </div>
         <section className="production-card">
-          <h3>Breakdown tags</h3>
-          {!plan.tags.some(tag => tag.sceneId === scene.id) && <p className="production-muted">No tags on this scene.</p>}
-          {plan.tags.filter(tag => tag.sceneId === scene.id).map(tag => {
+          <div className="production-section-heading"><h3>Breakdown sheet</h3>
+            <span className="production-muted">{sceneTags.length} {sceneTags.length === 1 ? 'element' : 'elements'}</span></div>
+          {!sceneTags.length && <p className="production-muted">No tags on this scene.</p>}
+          {CATALOGUE_CATEGORIES.filter(category => sceneTags.some(tag => categoryOf(tag) === category)).map(category => <div className="production-breakdown-group" key={category}>
+            <h4><CategoryChip category={category} /></h4>
+          {sceneTags.filter(tag => categoryOf(tag) === category).map(tag => {
             const item = plan.catalogue.find(entry => entry.id === tag.itemId);
             return <div className="production-list-row" key={tag.id}><div>
-              <strong>{item?.name ?? 'Unknown item'}</strong>
-              <small>{item?.category}{tag.notes && ` · ${tag.notes}`}{tag.reviewed === false && ' · Source review required'}</small>
+              <strong>{itemLabel(item, castIds)}</strong>
+              {(tag.notes || tag.reviewed === false) && <small>{tag.notes}{tag.notes && tag.reviewed === false && ' · '}{tag.reviewed === false && 'Source review required'}</small>}
             </div><div className="production-actions">
               <SourceButton source={tag.source} onOpenSource={onOpenSource} />
               {!readOnly && scene.status === 'active' && tag.reviewed === false && <button type="button" className="production-link" onClick={() => {
@@ -126,8 +158,9 @@ export function Breakdown({ plan, project, snapshot, source, readOnly, update, o
               }), 'Tag removed.')} aria-label={`Remove ${item?.name ?? 'breakdown'} tag`}>Remove</button>}
             </div></div>;
           })}
+          </div>)}
           {!readOnly && scene.status === 'active' && (plan.catalogue.length ? <form className="production-form" onSubmit={event => attachTag(event, scene)}>
-            <label>Catalogue item<select name="item" required>{plan.catalogue.map(item => <option key={item.id} value={item.id}>{item.name} · {item.category}</option>)}</select></label>
+            <label>Catalogue item<select name="item" required>{plan.catalogue.map(item => <option key={item.id} value={item.id}>{itemLabel(item, castIds)} · {item.category}</option>)}</select></label>
             <label>Source line<select name="block"><option value="">Whole scene</option>{tagBlocks.map(block => <option key={block.id} value={block.id}>{block.text.slice(0, 120)}</option>)}</select></label>
             <label>Notes<input name="notes" /></label>
             {error && <p className="production-form-error" role="alert">{error}</p>}
@@ -149,7 +182,7 @@ export function Breakdown({ plan, project, snapshot, source, readOnly, update, o
         <h3>Catalogue</h3>
         {!plan.catalogue.length && <p className="production-muted">Add an item to tag it in the released script.</p>}
         {plan.catalogue.map(item => <div className="production-list-row" key={item.id}>
-          <div><strong>{item.name}</strong><small>{item.category}{item.notes && ` · ${item.notes}`}</small></div>
+          <div><strong>{itemLabel(item, castIds)}</strong><small><CategoryChip category={item.category} />{item.notes && ` ${item.notes}`}</small></div>
           <SourceButton source={item.source} onOpenSource={onOpenSource} />
         </div>)}
       </section>
@@ -186,7 +219,7 @@ export function Breakdown({ plan, project, snapshot, source, readOnly, update, o
         <h3>Cast & crew</h3>
         {!plan.people.length && <p className="production-muted">Add a cast or crew member to build the production directory.</p>}
         {plan.people.map(person => <div className="production-list-row" key={person.id}>
-          <div><strong>{person.name}</strong><small>{person.type}{person.role && ` · ${person.role}`}</small>
+          <div><strong>{castIds.has(person.id) && <span className="production-cast-id">{castIds.get(person.id)}</span>}{person.name}</strong><small>{person.type}{person.role && ` · ${person.role}`}</small>
             {person.unavailable.length > 0 && <small>Unavailable {person.unavailable.join(', ')}</small>}
           </div>
           {!readOnly && <button className="production-link" type="button" onClick={() => { setEditingPerson(person); setError(''); }} aria-label={`Edit ${person.name}`}>Edit</button>}

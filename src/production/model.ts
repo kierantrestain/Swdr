@@ -1,7 +1,10 @@
 import { newId, sceneList, sourceFor } from '../model';
 import type { Block, DocumentModel, Project, Snapshot, SourceRef } from '../model';
 
-export const CATALOGUE_CATEGORIES = ['Cast', 'Prop', 'Wardrobe', 'Hair and make-up', 'Set dressing', 'Equipment', 'Vehicle', 'Sound', 'VFX', 'Other'] as const;
+export const CATALOGUE_CATEGORIES = [
+  'Cast', 'Extras', 'Prop', 'Wardrobe', 'Hair and make-up', 'Set dressing', 'Equipment', 'Vehicle',
+  'Stunts', 'Special effects', 'Animals', 'Sound', 'VFX', 'Other'
+] as const;
 export type CatalogueCategory = (typeof CATALOGUE_CATEGORIES)[number];
 
 interface SourcedRecord {
@@ -67,6 +70,9 @@ export interface ShootDay extends SourcedRecord {
   label: string;
   callTime: string;
   notes: string;
+  weather?: string;
+  hospital?: string;
+  parking?: string;
 }
 
 export interface Strip extends SourcedRecord {
@@ -93,6 +99,9 @@ export interface CallSheetScene {
   source: SourceRef;
   location?: { name: string; address: string };
   cast: string[];
+  castIds?: number[];
+  setting?: string;
+  eighths?: number;
   startTime: string;
   minutes: number;
 }
@@ -110,8 +119,13 @@ export interface CallSheet extends SourcedRecord {
   label: string;
   callTime: string;
   notes: string;
+  weather?: string;
+  hospital?: string;
+  parking?: string;
+  dayNumber?: number;
+  dayCount?: number;
   scenes: CallSheetScene[];
-  recipients: Array<{ id: string; name: string; role: string; callTime: string }>;
+  recipients: Array<{ id: string; name: string; role: string; callTime: string; type?: Person['type']; castId?: number }>;
 }
 
 export interface CallSheetDelivery {
@@ -532,6 +546,8 @@ function buildCallSheet(project: Project, plan: ProductionPlan, dayId: string, i
   if (!strips.length) throw new Error('Schedule at least one scene for this day.');
   const previous = plan.callSheets.filter(sheet => sheet.dayId === dayId).sort((a, b) => b.version - a.version)[0];
   const firstByCast = new Map<string, string>();
+  const castIds = castNumbers(plan);
+  const ordered = orderedDays(plan);
   const scenes = strips.map((strip): CallSheetScene => {
     const scene = plan.scenes.find(item => item.id === strip.sceneId)!;
     const location = plan.locations.find(item => item.id === strip.locationId);
@@ -542,16 +558,19 @@ function buildCallSheet(project: Project, plan: ProductionPlan, dayId: string, i
     return {
       id: scene.id, number: scene.number, heading: scene.heading, source: { ...scene.source },
       location: location ? { name: location.name, address: location.address } : undefined,
-      cast: cast.map(person => person.name), startTime: strip.startTime, minutes: strip.minutes
+      cast: cast.map(person => person.name), castIds: cast.map(person => castIds.get(person.id) ?? 0),
+      setting: settingLabel(scene.heading), eighths: strip.eighths, startTime: strip.startTime, minutes: strip.minutes
     };
   });
   return {
     id, source: sourceFor(project, snapshot.document), dayId, date: day.date,
     unit: unit.name, projectTitle: project.title, documentTitle: snapshot.document.title, draft: snapshot.label,
     version: (previous?.version ?? 0) + 1, supersedesId: previous?.id, issuedAt, label: day.label,
-    callTime: day.callTime, notes: day.notes, scenes,
+    callTime: day.callTime, notes: day.notes, weather: day.weather, hospital: day.hospital, parking: day.parking,
+    dayNumber: ordered.findIndex(item => item.id === day.id) + 1, dayCount: ordered.length, scenes,
     recipients: plan.people.filter(person => person.type === 'Crew' || firstByCast.has(person.id)).map(person => ({
-      id: person.id, name: person.name, role: person.role || person.type, callTime: person.type === 'Crew' ? day.callTime : firstByCast.get(person.id)!
+      id: person.id, name: person.name, role: person.role || person.type, type: person.type, castId: castIds.get(person.id),
+      callTime: person.type === 'Crew' ? day.callTime : firstByCast.get(person.id)!
     }))
   };
 }
@@ -639,8 +658,8 @@ export function doodCsv(project: Project, plan: ProductionPlan): string {
   const { dates, rows } = dayOutOfDays(plan);
   const source = activeProductionSource(project, plan);
   return reportCsv([
-    ['Cast', ...dates, 'Days worked', 'Source revision'],
-    ...rows.map(row => [row.person.name, ...row.codes, row.worked, source.revisionId])
+    ['ID', 'Cast', ...dates, 'Days worked', 'Source revision'],
+    ...rows.map((row, index) => [index + 1, row.person.name, ...row.codes, row.worked, source.revisionId])
   ]);
 }
 
@@ -660,4 +679,194 @@ export function productionManifest(project: Project, plan: ProductionPlan, kind:
     dayOutOfDays: dayOutOfDays(plan), budget: plan.budget, totals: budgetTotals(plan),
     callSheets: plan.callSheets, ...(kind === 'wrap' ? { deliveries: plan.deliveries } : {})
   }, null, 2);
+}
+
+export type StripTone = 'int-day' | 'ext-day' | 'int-night' | 'ext-night';
+
+export interface SceneSetting {
+  interior: 'INT' | 'EXT' | 'INT/EXT' | '';
+  time: string;
+  set: string;
+  tone: StripTone;
+}
+
+const NIGHT_TIMES = /\b(NIGHT|DUSK|EVENING|SUNSET|MIDNIGHT)\b/;
+
+/** Splits a scene heading into the parts a stripboard shows: INT/EXT, set and time of day. */
+export function sceneSetting(heading: string): SceneSetting {
+  const text = heading.normalize('NFKC').trim().replace(/\s+/g, ' ');
+  const prefix = /^(INT\.?\s*\/\s*EXT\.?|EXT\.?\s*\/\s*INT\.?|I\s*\/\s*E\.?|INT\.?|EXT\.?|EST\.?)(?=\s|$)\s*/i.exec(text);
+  const marker = prefix?.[1].toUpperCase().replace(/\s+/g, '') ?? '';
+  const interior: SceneSetting['interior'] = !marker ? '' : marker.includes('/') ? 'INT/EXT' : marker.startsWith('INT') ? 'INT' : 'EXT';
+  const rest = prefix ? text.slice(prefix[0].length) : text;
+  const split = /\s+[-–—]\s+(?!.*\s[-–—]\s)/.exec(rest);
+  const time = split ? rest.slice(split.index + split[0].length).trim().toUpperCase() : '';
+  const set = (split ? rest.slice(0, split.index) : rest).trim();
+  const night = NIGHT_TIMES.test(time);
+  const exterior = interior === 'EXT' || interior === 'INT/EXT';
+  return { interior, time, set: set || text, tone: `${exterior ? 'ext' : 'int'}-${night ? 'night' : 'day'}` };
+}
+
+export function settingLabel(heading: string): string {
+  const { interior, time } = sceneSetting(heading);
+  return [interior, time].filter(Boolean).join(' · ');
+}
+
+/** Stable cast ID numbers, in the order cast appear in the production directory. */
+export function castNumbers(plan: Pick<ProductionPlan, 'people'>): Map<string, number> {
+  return new Map(plan.people.filter(person => person.type === 'Cast').map((person, index) => [person.id, index + 1]));
+}
+
+const LINES_PER_PAGE = 54;
+const BLOCK_WIDTH: Partial<Record<Block['kind'], number>> = { dialogue: 35, parenthetical: 25, character: 38 };
+
+/** Estimates a scene's length in page eighths from its screenplay blocks (one page is about 54 lines). */
+export function estimateEighths(blocks: readonly Block[]): number {
+  let lines = 0;
+  let previous: Block['kind'] | undefined;
+  for (const block of blocks) {
+    if (block.kind === 'note') continue;
+    const width = BLOCK_WIDTH[block.kind] ?? 61;
+    const textLines = block.text.split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / width)), 0);
+    const tight = (block.kind === 'dialogue' || block.kind === 'parenthetical') &&
+      (previous === 'character' || previous === 'parenthetical' || previous === 'dialogue');
+    lines += textLines + (previous && !tight ? 1 : 0);
+    previous = block.kind;
+  }
+  return lines ? Math.max(1, Math.round(lines / LINES_PER_PAGE * 8)) : 0;
+}
+
+/** A first-pass shooting duration: roughly an hour per page, in quarter-hour steps. */
+export function defaultStripMinutes(eighths: number): number {
+  return Math.max(15, Math.ceil(eighths * 8 / 15) * 15);
+}
+
+function clockLabel(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
+/** The first start on a day before a move: its earliest strip, else the crew call, else 08:00. */
+function dayAnchor(plan: ProductionPlan, day: ShootDay): number {
+  const starts = dayStrips(plan, day.id).map(strip => minutesAfterMidnight(strip.startTime)).filter(Number.isFinite);
+  const call = minutesAfterMidnight(day.callTime);
+  return starts.length ? Math.min(...starts) : Number.isFinite(call) ? call : 8 * 60;
+}
+
+function runBackToBack(order: Strip[], start: number, day: ShootDay, into: Map<string, Strip>) {
+  let clock = start;
+  for (const strip of order) {
+    if (clock + strip.minutes > 1440) throw new Error(`${day.label || 'This shoot day'} cannot fit this running order before midnight.`);
+    into.set(strip.id, { ...strip, dayId: day.id, startTime: clockLabel(clock) });
+    clock += strip.minutes;
+  }
+}
+
+/**
+ * Moves a strip (or schedules an unscheduled scene) to a position on a shoot day, or returns it to
+ * the unscheduled pool when `dayId` is null. Strip order sets the running order, so each affected
+ * day runs back-to-back from its existing first start (or the crew call), keeping strip durations.
+ */
+export function placeStrip(
+  plan: ProductionPlan,
+  item: { stripId?: string; sceneId: string },
+  dayId: string | null,
+  index: number,
+  eighths = 1
+): ProductionPlan {
+  const existing = item.stripId ? plan.strips.find(strip => strip.id === item.stripId) : undefined;
+  if (item.stripId && !existing) throw new Error('This strip is no longer on the schedule.');
+  const retimed = new Map<string, Strip>();
+  const from = existing && existing.dayId !== dayId ? plan.days.find(day => day.id === existing.dayId) : undefined;
+  if (from) {
+    runBackToBack(dayStrips(plan, from.id).filter(strip => strip.id !== existing?.id), dayAnchor(plan, from), from, retimed);
+  }
+  if (dayId === null) {
+    if (!existing) return plan;
+    return { ...plan, strips: plan.strips.filter(strip => strip.id !== existing.id).map(strip => retimed.get(strip.id) ?? strip) };
+  }
+  const day = plan.days.find(candidate => candidate.id === dayId);
+  const scene = plan.scenes.find(candidate => candidate.id === (existing?.sceneId ?? item.sceneId) && candidate.status === 'active');
+  if (!day || !scene) throw new Error('Choose an active scene and an existing shoot day.');
+  const others = dayStrips(plan, dayId).filter(strip => strip.id !== existing?.id);
+  const moved: Strip = existing ? { ...existing, dayId } : {
+    id: newId(), sceneId: scene.id, dayId, startTime: '', minutes: defaultStripMinutes(eighths),
+    eighths: Math.max(0, Math.round(eighths)), source: scene.source
+  };
+  const position = Math.max(0, Math.min(Math.round(index), others.length));
+  runBackToBack([...others.slice(0, position), moved, ...others.slice(position)], dayAnchor(plan, day), day, retimed);
+  return {
+    ...plan,
+    strips: [...plan.strips.map(strip => retimed.get(strip.id) ?? strip), ...(existing ? [] : [retimed.get(moved.id)!])]
+  };
+}
+
+export interface ScriptChange {
+  sceneId: string;
+  number: string;
+  heading: string;
+  status: 'edited' | 'removed';
+  headingAfter?: string;
+  eighthsBefore: number;
+  eighthsAfter?: number;
+  charactersAdded: string[];
+  charactersRemoved: string[];
+}
+
+function speakingRoles(blocks: readonly Block[]): Set<string> {
+  return new Set(blocks.filter(block => block.kind === 'character')
+    .map(block => block.text.replace(/\(.*?\)/g, '').replace(/\^/g, '').trim().toLocaleUpperCase('en-GB'))
+    .filter(Boolean));
+}
+
+/**
+ * Compares the live writing draft with the issued snapshot the production plan uses, so scheduled
+ * and broken-down scenes whose script has changed since release are flagged before the next issue.
+ */
+export function scriptChanges(project: Project, plan: ProductionPlan, draft: DocumentModel): ScriptChange[] {
+  const snapshot = releasedScript(project, plan.documentId, plan.activeSnapshotId);
+  if (!snapshot || draft.id !== plan.documentId || draft.kind !== snapshot.document.kind) return [];
+  const released = new Map(scriptTargets(project, snapshot.document).map(target => [target.id, target]));
+  const live = new Map(scriptTargets(project, draft).map(target => [target.id, target]));
+  return plan.scenes.flatMap((scene): ScriptChange[] => {
+    const id = scene.source.sceneId ?? scene.source.shotId;
+    const before = scene.status === 'active' && id ? released.get(id) : undefined;
+    if (!before) return [];
+    const after = live.get(before.id);
+    const base = { sceneId: scene.id, number: scene.number, heading: scene.heading, eighthsBefore: estimateEighths(before.blocks) };
+    if (!after) return [{ ...base, status: 'removed', charactersAdded: [], charactersRemoved: [] }];
+    if (targetText(before) === targetText(after)) return [];
+    const was = speakingRoles(before.blocks);
+    const now = speakingRoles(after.blocks);
+    return [{
+      ...base, status: 'edited',
+      headingAfter: after.heading !== before.heading ? after.heading : undefined,
+      eighthsAfter: estimateEighths(after.blocks),
+      charactersAdded: [...now].filter(name => !was.has(name)),
+      charactersRemoved: [...was].filter(name => !now.has(name))
+    }];
+  });
+}
+
+export function callSheetCsv(sheet: CallSheet): string {
+  const day = sheet.dayNumber ? `Day ${sheet.dayNumber}${sheet.dayCount ? ` of ${sheet.dayCount}` : ''}` : '';
+  return reportCsv([
+    ['Call sheet', sheet.projectTitle, sheet.documentTitle, sheet.draft, `V${sheet.version}`],
+    ['Date', sheet.date, day, sheet.unit, sheet.label],
+    ['Crew call', sheet.callTime],
+    ['Weather', sheet.weather ?? ''],
+    ['Nearest hospital', sheet.hospital ?? ''],
+    ['Parking and basecamp', sheet.parking ?? ''],
+    ['Notes', sheet.notes],
+    [],
+    ['Time', 'Scene', 'Heading', 'Setting', 'Pages', 'Cast IDs', 'Location', 'Address'],
+    ...sheet.scenes.map(scene => [
+      scene.startTime, scene.number, scene.heading, scene.setting ?? '', scene.eighths === undefined ? '' : eighthsLabel(scene.eighths),
+      (scene.castIds ?? []).join(' '), scene.location?.name ?? '', scene.location?.address ?? ''
+    ]),
+    [],
+    ['ID', 'Name', 'Role', 'Call'],
+    ...sheet.recipients.map(person => [person.castId ?? '', person.name, person.role, person.callTime]),
+    [],
+    ['Source revision', sheet.source.revisionId]
+  ]);
 }

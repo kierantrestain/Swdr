@@ -2,9 +2,13 @@ import { ArrowUpRight, X } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 import type { PropsWithChildren, ReactNode } from 'react';
 import type { Project, Snapshot, SourceRef, WorkspaceViewProps } from '../model';
-import type { ProductionOutput, ProductionPlan } from './model';
+import type { ProductionOutput, ProductionPlan, ScriptChange } from './model';
 
 export interface PaneProps {
+  /** Scenes whose writing draft differs from the issued snapshot used by production. */
+  changes: ScriptChange[];
+  /** Opens the release flow to issue the latest draft and review its production links. */
+  reviewScript?: () => void;
   project: Project;
   plan: ProductionPlan;
   snapshot: Snapshot;

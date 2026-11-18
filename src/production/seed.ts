@@ -30,8 +30,14 @@ export function seedProduction(project: Project, documentId: string): Project {
     { id: newId(), source, name: 'Harbour wall', address: 'North harbour path', notes: 'Access from the harbour gate.' }
   ];
   const days: ShootDay[] = [
-    { id: newId(), source, date: firstDate, unitId: plan.units[0].id, label: 'Ferry terminal', callTime: '14:00', notes: 'Crew meet at the terminal office.' },
-    { id: newId(), source, date: secondDate, unitId: plan.units[0].id, label: 'Harbour wall', callTime: '07:00', notes: 'Crew meet at the harbour gate.' }
+    {
+      id: newId(), source, date: firstDate, unitId: plan.units[0].id, label: 'Ferry terminal', callTime: '14:00', notes: 'Crew meet at the terminal office.',
+      weather: 'Rain showers, 7 °C · sunset 16:20', hospital: 'North Shore General, Harbour Road (A&E, 8 min)', parking: 'Unit base in the terminal long-stay car park'
+    },
+    {
+      id: newId(), source, date: secondDate, unitId: plan.units[0].id, label: 'Harbour wall', callTime: '07:00', notes: 'Crew meet at the harbour gate.',
+      weather: 'Clear, 4 °C · sunrise 08:05', hospital: 'North Shore General, Harbour Road (A&E, 12 min)', parking: 'Harbour gate lay-by, crew minibus from base'
+    }
   ];
 
   const [office, terminal, harbour] = plan.scenes;

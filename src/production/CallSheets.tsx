@@ -1,9 +1,9 @@
-import { Check, FileCheck2, Printer } from 'lucide-react';
+import { Check, CloudSun, Download, FileCheck2, Hospital, MapPin, Printer } from 'lucide-react';
 import { useState } from 'react';
 import { newId } from '../model';
-import { Dialog, Empty, SourceButton, displayDate } from './components';
+import { Dialog, Empty, SourceButton, displayDate, downloadText } from './components';
 import type { PaneProps } from './components';
-import { acknowledgeTestDelivery, dayStrips, issueCallSheet, orderedDays, previewCallSheet, recordTestDelivery, scheduleConflicts } from './model';
+import { acknowledgeTestDelivery, callSheetCsv, dayStrips, eighthsLabel, issueCallSheet, orderedDays, previewCallSheet, recordTestDelivery, scheduleConflicts } from './model';
 import type { CallSheet } from './model';
 
 export function CallSheets({ project, plan, readOnly, update, onOpenSource }: PaneProps) {
@@ -48,7 +48,7 @@ export function CallSheets({ project, plan, readOnly, update, onOpenSource }: Pa
           {!preview && <p className="production-muted">Schedule at least one scene on this shoot day.</p>}
           {preview && <div className="production-list-row"><div>
             <strong>{preview.label} · V{preview.version}</strong>
-            <small>{displayDate(preview.date)} · {preview.scenes.length} scenes · Crew call {preview.callTime}</small>
+            <small>{displayDate(preview.date)} · {preview.scenes.length} {preview.scenes.length === 1 ? 'scene' : 'scenes'} · Crew call {preview.callTime}</small>
           </div>
             <button type="button" className="production-button production-primary" onClick={() => { setSheetId(''); setShow(true); }}>Preview call sheet</button>
           </div>}
@@ -68,34 +68,13 @@ export function CallSheets({ project, plan, readOnly, update, onOpenSource }: Pa
         </section>
       </div>}
     {show && visible && <Dialog title={currentSheet ? `Issued call sheet V${visible.version}` : `Preview call sheet V${visible.version}`} onClose={() => setShow(false)} print>
-      <article className="production-print-document">
-        <header className="production-call-sheet-heading">
-          <div><h2>{visible.projectTitle}</h2><p>{visible.documentTitle} · {visible.draft}</p></div>
-          <div><strong>{displayDate(visible.date)}</strong><p>{visible.unit} · V{visible.version}{superseded && ' · Superseded'}</p></div>
-        </header>
-        <h3>{visible.label}</h3>
-        <p><strong>General crew call {visible.callTime}</strong></p>
-        {visible.notes && <p className="production-pre-line">{visible.notes}</p>}
-        <h3>Scheduled scenes</h3>
-        <div className="production-table-scroll"><table className="production-table">
-          <thead><tr><th>Time</th><th>Scene</th><th>Location</th><th>Cast</th></tr></thead>
-          <tbody>{visible.scenes.map((scene, index) => <tr key={`${scene.id}-${index}`}>
-            <td>{scene.startTime}<small>{scene.minutes} min</small></td>
-            <td><strong>{scene.number} · {scene.heading}</strong></td>
-            <td>{scene.location?.name ?? '—'}<small>{scene.location?.address}</small></td>
-            <td>{scene.cast.join(', ') || '—'}</td>
-          </tr>)}</tbody>
-        </table></div>
-        {visible.recipients.length > 0 && <><h3>Personnel calls</h3>
-          <div className="production-table-scroll"><table className="production-table">
-            <thead><tr><th>Name</th><th>Role</th><th>Call</th></tr></thead>
-            <tbody>{visible.recipients.map(person => <tr key={person.id}><td>{person.name}</td><td>{person.role}</td><td>{person.callTime}</td></tr>)}</tbody>
-          </table></div></>}
-        <p className="production-revision-meta">Source revision {visible.source.revisionId}{currentSheet && ` · Issued ${visible.issuedAt}`}</p>
-      </article>
+      <CallSheetDocument sheet={visible} superseded={Boolean(superseded)} issued={Boolean(currentSheet)} />
       <div className="production-actions production-screen-only">
         <SourceButton source={visible.source} onOpenSource={onOpenSource}>Open issued script</SourceButton>
         <button type="button" className="production-button" onClick={() => window.print()}><Printer size={16} /> Print call sheet</button>
+        <button type="button" className="production-button" onClick={() => downloadText(
+          `swdr-call-sheet-${visible.date}-v${visible.version}.csv`, callSheetCsv(visible)
+        )}><Download size={16} /> Download CSV</button>
         {!currentSheet && !readOnly && <button type="button" className="production-button production-primary" onClick={issue} disabled={blockingConflicts.length > 0}><FileCheck2 size={16} />{visible.version > 1 ? 'Reissue call sheet' : 'Issue call sheet'}</button>}
       </div>
       {blockingConflicts.length > 0 && <section className="production-test-delivery production-screen-only" aria-label="Conflicts preventing issue">
@@ -121,4 +100,64 @@ export function CallSheets({ project, plan, readOnly, update, onOpenSource }: Pa
       </section>}
     </Dialog>}
   </>;
+}
+
+function CallSheetDocument({ sheet, superseded, issued }: { sheet: CallSheet; superseded: boolean; issued: boolean }) {
+  // Sheets issued before cast and crew were recorded separately keep one combined personnel list.
+  const legacy = sheet.recipients.every(person => !person.type);
+  const cast = legacy ? [] : sheet.recipients.filter(person => person.type === 'Cast');
+  const crew = sheet.recipients.filter(person => !cast.includes(person));
+  const pages = sheet.scenes.reduce((sum, scene) => sum + (scene.eighths ?? 0), 0);
+  const hasPages = sheet.scenes.some(scene => scene.eighths !== undefined);
+  const details = [
+    { icon: CloudSun, label: 'Weather', value: sheet.weather },
+    { icon: Hospital, label: 'Nearest hospital', value: sheet.hospital },
+    { icon: MapPin, label: 'Parking and basecamp', value: sheet.parking }
+  ];
+  return <article className="production-print-document production-call-sheet">
+    <header className="production-call-sheet-heading">
+      <div>
+        <p className="production-call-sheet-kicker">Call sheet{sheet.dayNumber ? ` · Day ${sheet.dayNumber}${sheet.dayCount ? ` of ${sheet.dayCount}` : ''}` : ''}</p>
+        <h2>{sheet.projectTitle}</h2>
+        <p>{sheet.documentTitle} · {sheet.draft}</p>
+      </div>
+      <div className="production-call-time">
+        <small>General crew call</small>
+        <strong>{sheet.callTime}</strong>
+        <span>{displayDate(sheet.date)}</span>
+        <span>{sheet.unit} · V{sheet.version}{superseded && ' · Superseded'}</span>
+      </div>
+    </header>
+    <h3>{sheet.label}</h3>
+    {(sheet.weather || sheet.hospital || sheet.parking) && <dl className="production-call-details">
+      {details.filter(detail => detail.value).map(({ icon: Icon, label, value }) => <div key={label}>
+        <dt><Icon size={14} aria-hidden="true" /> {label}</dt><dd>{value}</dd>
+      </div>)}
+    </dl>}
+    {sheet.notes && <p className="production-pre-line production-call-notes">{sheet.notes}</p>}
+    <h3>Scheduled scenes</h3>
+    <div className="production-table-scroll"><table className="production-table">
+      <thead><tr><th>Time</th><th>Scene</th><th>Set and setting</th>{hasPages && <th>Pages</th>}<th>Cast</th><th>Location</th></tr></thead>
+      <tbody>{sheet.scenes.map((scene, index) => <tr key={`${scene.id}-${index}`}>
+        <td>{scene.startTime}<small>{scene.minutes} min</small></td>
+        <td><strong>{scene.number}</strong></td>
+        <td><strong>{scene.heading}</strong>{scene.setting && <small>{scene.setting}</small>}</td>
+        {hasPages && <td>{scene.eighths === undefined ? '—' : eighthsLabel(scene.eighths)}</td>}
+        <td>{scene.castIds?.length ? scene.castIds.join(', ') : scene.cast.join(', ') || '—'}</td>
+        <td>{scene.location?.name ?? '—'}<small>{scene.location?.address}</small></td>
+      </tr>)}</tbody>
+      {hasPages && <tfoot><tr><td colSpan={3}>{sheet.scenes.length} {sheet.scenes.length === 1 ? 'scene' : 'scenes'}</td><td>{eighthsLabel(pages)}</td><td colSpan={2} /></tr></tfoot>}
+    </table></div>
+    {cast.length > 0 && <><h3>Cast</h3>
+      <div className="production-table-scroll"><table className="production-table">
+        <thead><tr><th>ID</th><th>Name</th><th>Character</th><th>Call</th></tr></thead>
+        <tbody>{cast.map(person => <tr key={person.id}><td>{person.castId ?? '—'}</td><td>{person.name}</td><td>{person.role}</td><td><strong>{person.callTime}</strong></td></tr>)}</tbody>
+      </table></div></>}
+    {crew.length > 0 && <><h3>{legacy ? 'Personnel calls' : 'Crew'}</h3>
+      <div className="production-table-scroll"><table className="production-table">
+        <thead><tr><th>Name</th><th>Role</th><th>Call</th></tr></thead>
+        <tbody>{crew.map(person => <tr key={person.id}><td>{person.name}</td><td>{person.role}</td><td>{person.callTime}</td></tr>)}</tbody>
+      </table></div></>}
+    <p className="production-revision-meta">Source revision {sheet.source.revisionId}{issued && ` · Issued ${sheet.issuedAt}`}</p>
+  </article>;
 }
