@@ -170,6 +170,18 @@ export const clipboardProps = {
   transformPasted(slice: Slice): Slice {
     return new Slice(stripIds(slice.content), slice.openStart, slice.openEnd);
   },
+  /** Pasting whole elements into an empty line keeps the first pasted element's type. */
+  handlePaste(view: EditorView, _event: ClipboardEvent, slice: Slice): boolean {
+    const { $from, empty } = view.state.selection;
+    const first = slice.content.firstChild;
+    if (!empty || $from.parent.type !== schema.nodes.element || $from.parent.content.size || !first || first.type !== schema.nodes.element || slice.content.childCount < 2) return false;
+    const start = $from.before();
+    const tr = view.state.tr.replaceSelection(slice);
+    const node = tr.doc.nodeAt(start);
+    if (node?.type === schema.nodes.element) tr.setNodeMarkup(start, undefined, { ...node.attrs, kind: first.attrs.kind, sceneId: first.attrs.kind === 'scene' ? null : node.attrs.sceneId });
+    view.dispatch(tr.setMeta('uiEvent', 'paste').scrollIntoView());
+    return true;
+  },
   clipboardTextParser(text: string): Slice {
     const normalised = text.replace(/\r\n?/g, '\n');
     if (!normalised.includes('\n')) return new Slice(Fragment.from(schema.nodes.element.create({ kind: 'action' }, normalised ? schema.text(normalised) : null)), 1, 1);

@@ -523,7 +523,7 @@ export function WritingView(props: WritingProps) {
       {!focused && drawer === 'notes' && activeBlock && <WritingContext {...props} active={activeBlock} onClose={() => setDrawer(null)} onDocumentChange={commit} onResetHistory={() => undefined} onPrint={print.requestPrint} />}
 
       <footer className="swdr-write-footer">
-        <span className="swdr-w-page-control">Page {Math.min(page, pageCount) || 1} of {pageCount || 1}<span aria-hidden="true"> · </span><span className="swdr-w-element-name">{ELEMENTS[active.kind]?.label}</span></span>
+        <span className="swdr-w-page-control"><span>Page {Math.min(page, pageCount) || 1} of {pageCount || 1}</span><span aria-hidden="true">·</span><span className="swdr-w-element-name">{ELEMENTS[active.kind]?.label}</span></span>
         <span className="swdr-sr" role="status">{caption}</span>
         <span>{focused ? <><span>{saveLabel || 'Local draft'}</span><button type="button" className="swdr-w-quiet" onClick={() => setFocus(false)}>Esc to exit focus</button></>
           : <>{readOnly ? 'Read only' : document.revisionLabel || 'Draft'} <span aria-hidden="true">·</span> {document.paper === 'a4' ? 'A4' : 'Letter'}<span aria-hidden="true"> · </span><button type="button" className="swdr-w-link-quiet" onClick={openElementMenu} disabled={readOnly}>Elements {shortcutLabel('scene').replace(/1$/, '1–9')}</button></>}</span>

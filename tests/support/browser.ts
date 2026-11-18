@@ -73,3 +73,32 @@ export async function loadDemo(page: Page): Promise<void> {
 }
 
 export { expect };
+
+/** The manuscript is one ProseMirror document; each screenplay element is a paragraph. */
+export function manuscript(page: Page) {
+  return page.getByRole('textbox', { name: /manuscript$/ });
+}
+
+export function element(page: Page, kind: string) {
+  return page.locator(`.swdr-pm .swdr-el[data-element="${kind}"]`);
+}
+
+export async function elementKinds(page: Page): Promise<string[]> {
+  return page.locator('.swdr-pm .swdr-el').evaluateAll(nodes => nodes.map(node => `${(node as HTMLElement).dataset.element}:${(node as HTMLElement).innerText.replace(/\n.*$/s, '')}`));
+}
+
+/** Caret inside a manuscript element, as offsets within that element's text. */
+export async function caretIn(locator: import('@playwright/test').Locator) {
+  return locator.evaluate(node => {
+    const selection = getSelection();
+    if (!selection?.rangeCount || !node.contains(selection.anchorNode)) return null;
+    const offset = (target: Node | null, at: number) => {
+      const range = document.createRange();
+      range.setStart(node, 0);
+      range.setEnd(target ?? node, at);
+      return range.toString().length;
+    };
+    const range = selection.getRangeAt(0);
+    return { start: offset(range.startContainer, range.startOffset), end: offset(range.endContainer, range.endOffset) };
+  });
+}
