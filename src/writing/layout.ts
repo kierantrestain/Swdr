@@ -1,4 +1,4 @@
-import type { Block, BlockKind, DocumentModel, LockedPage, Paper, TitlePage } from '../model';
+import type { Block, BlockKind, DocumentModel, LockedPage, Paper, TitlePage, StyleRange } from '../model';
 
 export interface PageGeometry {
   width: number;
@@ -25,6 +25,8 @@ export interface LaidOutLine extends ElementBox {
   y: number;
   revision?: string;
   decoration?: 'page-number' | 'scene-number' | 'continuation';
+  /** Inline styles relative to this line's text (absent when the line is plain). */
+  styles?: StyleRange[];
 }
 
 export interface WritingPage {
@@ -38,6 +40,7 @@ interface PreparedLine extends ElementBox {
   kind: BlockKind;
   text: string;
   revision?: string;
+  styles?: StyleRange[];
 }
 
 type Lane = 'left' | 'right';
@@ -107,8 +110,22 @@ export function wrapManuscriptText(text: string, characters: number): string[] {
 
 function prepare(block: Block, geometry: PageGeometry, stageplay: boolean, lane?: Lane): PreparedLine[] {
   const box = elementBox(block.kind, geometry, lane, stageplay);
-  return wrapManuscriptText(manuscriptText(block), Math.floor(box.width / geometry.glyphWidth + 1e-8))
-    .map(text => ({ ...box, blockId: block.id, kind: block.kind, text, revision: block.revision }));
+  const source = manuscriptText(block);
+  let cursor = 0;
+  return wrapManuscriptText(source, Math.floor(box.width / geometry.glyphWidth + 1e-8)).map(text => {
+    const line: PreparedLine = { ...box, blockId: block.id, kind: block.kind, text, revision: block.revision };
+    if (block.styles?.length && text) {
+      const start = source.indexOf(text, cursor);
+      if (start >= 0) {
+        cursor = start + text.length;
+        const styles = block.styles
+          .map(range => ({ ...range, from: Math.max(range.from, start) - start, to: Math.min(range.to, start + text.length) - start }))
+          .filter(range => range.to > range.from);
+        if (styles.length) line.styles = styles;
+      }
+    }
+    return line;
+  });
 }
 
 function titlePageLines(title: TitlePage, geometry: PageGeometry): LaidOutLine[] {

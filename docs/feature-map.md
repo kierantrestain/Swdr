@@ -26,7 +26,7 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 | Revision colours, asterisks, locked pages, issued drafts | FD, WriterDuet, OpenDraft (Bundle/source) | ✅ |
 | Alternate dialogue | WriterDuet, FD (Bundle) | 🟡 Stored per element in Notes; no inline picker |
 | Dual dialogue | All | ✅ |
-| Bold, italic, underline in action and dialogue | Celtx (Owner) | ⬜ The block model stores plain text. Needs marks in the model, FDX and PDF. |
+| Bold, italic, underline | Celtx (Owner) | ✅ Ctrl/⌘+B/I/U and toolbar; kept in FDX runs, Fountain emphasis, print and PDF faces |
 | Real-time co-writing in the editor (live cursors) | WriterDuet Firebase/Firepad (Bundle), OpenDraft Yjs (source) | ⬜ Team sync is document-level. Next step: Yjs over the team service. |
 | Read-through with voices | Celtx "Read Through" (Owner) | 🟡 Browser speech in Script tools; per-character voices not assigned |
 
@@ -83,7 +83,7 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 ## Ranked next steps
 
 1. **Real-time co-writing in the editor** (Yjs on the team service). This is the largest gap against WriterDuet.
-2. **Inline styles (bold/italic/underline)** carried through the model, FDX and PDF.
+2. ~~Inline styles~~ shipped in this round.
 3. **Cast & Crew directory and Files & Media browser** as first-class sections.
 4. **Budget templates** (account codes, fringes) and exports.
 5. **An alternate-dialogue picker** inline in the editor.

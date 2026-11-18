@@ -2,6 +2,7 @@ import type { DocumentModel } from '../model';
 import { geometryFor, paginateDocument, revisionInk, wrapManuscriptText } from '../writing/layout';
 import type { LaidOutLine, PageGeometry, WritingPage } from '../writing/layout';
 import { timedRows, timingLabel } from '../writing/av-timing';
+import { styleRuns } from './styles';
 
 const winAnsi = new TextDecoder('windows-1252');
 const encoding = new Map(Array.from({ length: 256 }, (_, byte) => [winAnsi.decode(Uint8Array.of(byte)), byte]));
@@ -24,8 +25,26 @@ function color(label?: string): string {
 function lineCommands(line: LaidOutLine, geometry: PageGeometry): string {
   const width = Array.from(line.text).length * geometry.glyphWidth;
   const shift = line.align === 'right' ? line.width - width : line.align === 'center' ? (line.width - width) / 2 : 0;
-  return 'BT /F1 ' + geometry.fontSize + ' Tf ' + color(line.revision) + ' rg 1 0 0 1 ' +
-    decimal(line.x + shift) + ' ' + decimal(geometry.height - line.y) + ' Tm ' + pdfText(line.text) + ' Tj ET';
+  if (!line.styles?.length) {
+    return 'BT /F1 ' + geometry.fontSize + ' Tf ' + color(line.revision) + ' rg 1 0 0 1 ' +
+      decimal(line.x + shift) + ' ' + decimal(geometry.height - line.y) + ' Tm ' + pdfText(line.text) + ' Tj ET';
+  }
+  // Styled line: one text object per run in Courier, Courier-Bold, -Oblique or -BoldOblique,
+  // plus a thin rule under underlined runs. Courier is monospaced, so x follows the column.
+  const commands: string[] = [];
+  const y = geometry.height - line.y;
+  let column = 0;
+  for (const run of styleRuns(line.text, line.styles)) {
+    const x = line.x + shift + column * geometry.glyphWidth;
+    const font = 1 + (run.styles.includes('bold') ? 1 : 0) + (run.styles.includes('italic') ? 2 : 0);
+    commands.push('BT /F' + font + ' ' + geometry.fontSize + ' Tf ' + color(line.revision) + ' rg 1 0 0 1 ' + decimal(x) + ' ' + decimal(y) + ' Tm ' + pdfText(run.text) + ' Tj ET');
+    const length = Array.from(run.text).length;
+    if (run.styles.includes('underline')) {
+      commands.push(color(line.revision) + ' rg ' + decimal(x) + ' ' + decimal(y - 1.6) + ' ' + decimal(length * geometry.glyphWidth) + ' 0.6 re f');
+    }
+    column += length;
+  }
+  return commands.join('\n');
 }
 
 function layoutAv(document: DocumentModel): { geometry: PageGeometry; pages: WritingPage[] } {
@@ -89,16 +108,22 @@ export function pdfGlyphLoss(document: DocumentModel): boolean {
 
 export function exportPdf(document: DocumentModel): Uint8Array {
   const { geometry, pages } = document.kind === 'av' ? layoutAv(document) : paginateDocument(document);
+  // Bold and italic faces are embedded only when the script uses inline styles, so plain
+  // scripts produce the same bytes as before.
+  const faces = pages.some(page => page.lines.some(line => line.styles?.length))
+    ? ['Courier', 'Courier-Bold', 'Courier-Oblique', 'Courier-BoldOblique'] : ['Courier'];
+  const first = 3 + faces.length;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Count ' + pages.length + ' /Kids [' + pages.map((_, index) => (4 + index * 2) + ' 0 R').join(' ') + '] >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>'
+    '<< /Type /Pages /Count ' + pages.length + ' /Kids [' + pages.map((_, index) => (first + index * 2) + ' 0 R').join(' ') + '] >>',
+    ...faces.map(face => '<< /Type /Font /Subtype /Type1 /BaseFont /' + face + ' /Encoding /WinAnsiEncoding >>')
   ];
+  const fonts = faces.map((_, index) => '/F' + (index + 1) + ' ' + (3 + index) + ' 0 R').join(' ');
   for (const page of pages) {
     const stream = page.lines.map(line => lineCommands(line, geometry)).join('\n');
     const contents = objects.length + 2;
     objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + decimal(geometry.width) + ' ' + decimal(geometry.height) + ']' +
-      ' /Resources << /Font << /F1 3 0 R >> >> /Contents ' + contents + ' 0 R >>');
+      ' /Resources << /Font << ' + fonts + ' >> >> /Contents ' + contents + ' 0 R >>');
     objects.push('<< /Length ' + stream.length + ' >>\nstream\n' + stream + '\nendstream');
   }
   const parts: string[] = ['%PDF-1.4\n'];

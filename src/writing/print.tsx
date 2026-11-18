@@ -1,3 +1,4 @@
+import { styleRuns } from '../interchange/styles';
 import { useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { createPortal } from 'react-dom';
@@ -34,7 +35,10 @@ function ManuscriptPrint({ document }: { document: DocumentModel }) {
         <div className="swdr-print-line" key={lineIndex} style={{
           top: `${line.y}pt`, left: `${line.x}pt`, width: `${line.width}pt`,
           textAlign: line.align, color: revisionInk(line.revision) || '#111', fontSize: `${geometry.fontSize}pt`
-        }}>{line.text}</div>
+        }}>{line.styles?.length ? styleRuns(line.text, line.styles).map((run, runIndex) => <span key={runIndex} style={{
+          fontWeight: run.styles.includes('bold') ? 700 : undefined, fontStyle: run.styles.includes('italic') ? 'italic' : undefined,
+          textDecoration: run.styles.includes('underline') ? 'underline' : undefined
+        }}>{run.text}</span>) : line.text}</div>
       ))}
     </article>
   ));

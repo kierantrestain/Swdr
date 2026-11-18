@@ -6,6 +6,11 @@ export const BLOCK_KINDS = ['scene', 'action', 'character', 'parenthetical', 'di
 export type BlockKind = (typeof BLOCK_KINDS)[number];
 export type Paper = 'letter' | 'a4';
 
+export const TEXT_STYLES = ['bold', 'italic', 'underline'] as const;
+export type TextStyle = (typeof TEXT_STYLES)[number];
+/** An inline style over [from, to) of a block's text. */
+export interface StyleRange { from: number; to: number; style: TextStyle }
+
 export interface Block {
   id: string;
   kind: BlockKind;
@@ -15,6 +20,7 @@ export interface Block {
   dual?: 'left' | 'right';
   alternate?: string[];
   revision?: string;
+  styles?: StyleRange[];
 }
 
 export interface AVRow {

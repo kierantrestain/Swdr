@@ -1,16 +1,50 @@
 import type { Node as PMNode } from 'prosemirror-model';
 import { newId } from '../../model';
-import type { Block, BlockKind } from '../../model';
+import type { Block, BlockKind, StyleRange, TextStyle } from '../../model';
 import { isUppercaseElement } from '../layout';
 import { schema } from './schema';
 
 const SPEECH: BlockKind[] = ['parenthetical', 'dialogue'];
 
+/** Splits text at style boundaries into marked text nodes. */
+function styledText(text: string, styles: StyleRange[] = []): PMNode[] {
+  if (!text) return [];
+  if (!styles.length) return [schema.text(text)];
+  const cuts = new Set([0, text.length]);
+  for (const range of styles) {
+    cuts.add(Math.max(0, Math.min(text.length, range.from)));
+    cuts.add(Math.max(0, Math.min(text.length, range.to)));
+  }
+  const points = [...cuts].sort((a, b) => a - b);
+  const nodes: PMNode[] = [];
+  for (let index = 0; index < points.length - 1; index++) {
+    const [from, to] = [points[index], points[index + 1]];
+    if (from === to) continue;
+    const marks = styles.filter(range => range.from <= from && range.to >= to).map(range => schema.marks[range.style].create());
+    nodes.push(schema.text(text.slice(from, to), marks));
+  }
+  return nodes;
+}
+
 function elementNode(block: Block): PMNode {
   return schema.nodes.element.create({
     id: block.id, kind: block.kind, sceneId: block.sceneId ?? null, sceneNumber: block.sceneNumber ?? null,
     alternate: block.alternate ?? null, revision: block.revision ?? null
-  }, block.text ? schema.text(block.text) : null);
+  }, styledText(block.text, block.styles));
+}
+
+/** Reads marks back into merged style ranges. */
+function readStyles(node: PMNode): StyleRange[] | undefined {
+  const ranges: StyleRange[] = [];
+  node.forEach((child, offset) => {
+    for (const mark of child.marks) {
+      const style = mark.type.name as TextStyle;
+      const previous = [...ranges].reverse().find(range => range.style === style);
+      if (previous && previous.to === offset) previous.to = offset + child.nodeSize;
+      else ranges.push({ from: offset, to: offset + child.nodeSize, style });
+    }
+  });
+  return ranges.length ? ranges : undefined;
 }
 
 /** Model blocks → editor document. Dual cues and their speeches become one container. */
@@ -48,7 +82,8 @@ export function blocksToDoc(blocks: Block[]): PMNode {
 
 function same(a: Block, b: Block): boolean {
   return a.id === b.id && a.kind === b.kind && a.text === b.text && a.sceneId === b.sceneId && a.sceneNumber === b.sceneNumber
-    && a.dual === b.dual && a.revision === b.revision && a.alternate === b.alternate;
+    && a.dual === b.dual && a.revision === b.revision && a.alternate === b.alternate
+    && JSON.stringify(a.styles ?? null) === JSON.stringify(b.styles ?? null);
 }
 
 /**
@@ -64,7 +99,8 @@ export function docToBlocks(doc: PMNode, previous: Block[], revisionLabel?: stri
     const raw = node.textContent;
     const text = isUppercaseElement(kind) ? raw.toUpperCase() : raw;
     const before = prior.get(node.attrs.id);
-    const changed = !before || before.text !== text || before.kind !== kind;
+    const styles = readStyles(node);
+    const changed = !before || before.text !== text || before.kind !== kind || JSON.stringify(before.styles ?? null) !== JSON.stringify(styles ?? null);
     const revision = changed && revisionLabel ? revisionLabel : before?.revision ?? node.attrs.revision ?? undefined;
     const block: Block = {
       id: node.attrs.id, kind, text,
@@ -72,7 +108,8 @@ export function docToBlocks(doc: PMNode, previous: Block[], revisionLabel?: stri
       ...(node.attrs.sceneNumber ? { sceneNumber: node.attrs.sceneNumber } : {}),
       ...(dual && kind === 'character' ? { dual } : {}),
       ...(node.attrs.alternate ? { alternate: node.attrs.alternate } : {}),
-      ...(revision ? { revision } : {})
+      ...(revision ? { revision } : {}),
+      ...(styles ? { styles } : {})
     };
     blocks.push(before && same(before, block) ? before : block);
   };

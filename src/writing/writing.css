@@ -787,3 +787,24 @@
   text-align: center;
   pointer-events: none;
 }
+
+/* Inline styles */
+.swdr-pm strong { font-weight: 700; }
+.swdr-pm em { font-style: italic; }
+.swdr-pm u { text-decoration: underline; text-underline-offset: 2px; }
+.swdr-w-mark {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--color-text-primary, var(--swdr-w-ink));
+  font: 15px/1 Georgia, 'Times New Roman', serif;
+  cursor: pointer;
+}
+.swdr-w-mark-bold { font-weight: 700; }
+.swdr-w-mark-italic { font-style: italic; }
+.swdr-w-mark-underline { text-decoration: underline; }
+.swdr-w-mark:hover:not(:disabled) { background: var(--color-background-secondary, #efede7); }
+.swdr-w-mark[aria-pressed=true] { background: var(--color-background-selected, #dfe8ef); color: var(--color-text-accent, #1f4f78); }
+.swdr-w-mark:focus-visible { outline: 2px solid var(--color-focus-ring, #2c5877); outline-offset: 1px; }

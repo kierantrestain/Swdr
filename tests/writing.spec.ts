@@ -247,6 +247,35 @@ test('anchors a comment to a passage, keeps it through edits and reloads, then r
   expect(pageFaults).toEqual([]);
 });
 
+test('applies bold, italic and underline with shortcuts and toolbar, and keeps them after reload', async ({ page, pageFaults }) => {
+  await loadDemo(page);
+  await page.getByRole('button', { name: 'Resume screenplay' }).click();
+  const action = element(page, 'action').first();
+  const select = async (from: number, to: number) => {
+    await action.click();
+    await action.evaluate((node, [start, end]) => {
+      const text = node.firstChild!;
+      const range = node.ownerDocument.createRange();
+      range.setStart(text, start);
+      range.setEnd(text, end);
+      getSelection()!.removeAllRanges();
+      getSelection()!.addRange(range);
+    }, [from, to]);
+  };
+  await select(2, 11);
+  await page.keyboard.press('Control+b');
+  await expect(action.locator('strong')).toHaveText('desk lamp');
+  await expect(page.getByRole('button', { name: 'Bold', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await select(0, 1);
+  await page.getByRole('button', { name: 'Italic', exact: true }).click();
+  await expect(action.locator('em')).toHaveText('A');
+  await expect(page.getByText('Saved on this device', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(element(page, 'action').first().locator('strong')).toHaveText('desk lamp');
+  await expect(element(page, 'action').first().locator('em')).toHaveText('A');
+  expect(pageFaults).toEqual([]);
+});
+
 test('finds and replaces across the manuscript', async ({ page, pageFaults }) => {
   await loadDemo(page);
   await page.getByRole('button', { name: 'Resume screenplay' }).click();

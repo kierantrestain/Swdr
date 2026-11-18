@@ -11,7 +11,7 @@ export const schema = new Schema({
     element: {
       group: 'flow',
       content: 'text*',
-      marks: '',
+      marks: 'bold italic underline',
       defining: true,
       attrs: {
         id: { default: '' },
@@ -46,6 +46,11 @@ export const schema = new Schema({
       parseDOM: [{ tag: 'div.swdr-dual-col', getAttrs: dom => ({ side: (dom as HTMLElement).classList.contains('swdr-dual-right') ? 'right' : 'left' }) }]
     },
     text: {}
+  },
+  marks: {
+    bold: { toDOM: () => ['strong', 0], parseDOM: [{ tag: 'strong' }, { tag: 'b' }, { style: 'font-weight=bold' }, { style: 'font-weight=700' }] },
+    italic: { toDOM: () => ['em', 0], parseDOM: [{ tag: 'em' }, { tag: 'i' }, { style: 'font-style=italic' }] },
+    underline: { toDOM: () => ['u', 0], parseDOM: [{ tag: 'u' }, { style: 'text-decoration=underline' }] }
   }
 });
 

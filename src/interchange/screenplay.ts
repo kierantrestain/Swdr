@@ -2,6 +2,7 @@ import { newBlock, newDocument } from '../model';
 import type { Block, BlockKind, DocumentModel, TitlePage } from '../model';
 import { attr, element, elements, escapeXml, localName, parseXml, xmlHeader, xmlText } from './xml';
 import type { XmlNode } from './xml';
+import { fdxStyle, fromFdxStyle, fromFountainEmphasis, fromRuns, styleRuns, toFountainEmphasis } from './styles';
 
 export interface UncertainLine {
   blockId: string;
@@ -117,6 +118,11 @@ export function decodeFountain(text: string, fallbackTitle: string, loose = fals
       value = raw;
     }
     const block = newBlock(kind, value);
+    if (kind === 'action' || kind === 'dialogue' || kind === 'parenthetical') {
+      const parsed = fromFountainEmphasis(value);
+      block.text = parsed.text;
+      if (parsed.styles) block.styles = parsed.styles;
+    }
     if (kind === 'scene') {
       const number = /\s+#([^#]+)#\s*$/.exec(value);
       if (number) {
@@ -165,8 +171,8 @@ export function exportFountain(document: DocumentModel): string {
     else if (kind === 'character') lines.push('@' + text + (block.dual === 'right' ? ' ^' : ''));
     else if (kind === 'transition') lines.push('> ' + text);
     else if (kind === 'note') lines.push('[[' + text.replace(/\r?\n/g, ' ').replaceAll(']]', '] ]') + ']]');
-    else if (kind === 'dialogue' || kind === 'parenthetical' || kind === 'act') lines.push(text);
-    else lines.push('!' + text.replace(/\r?\n/g, '\n!'));
+    else if (kind === 'dialogue' || kind === 'parenthetical' || kind === 'act') lines.push(toFountainEmphasis(text, block.styles));
+    else lines.push('!' + toFountainEmphasis(text, block.styles).replace(/\r?\n/g, '\n!'));
   }
   return lines.join('\n') + '\n';
 }
@@ -180,10 +186,17 @@ function parseParagraph(node: XmlNode, warnings: Set<string>): Block {
   const translated = (Object.entries(fdxType) as [BlockKind, string][]).find(([, value]) => value === input)?.[0];
   const kind = translated === 'note' && input === 'General' ? 'action' : translated;
   if (!kind) warnings.add('Some Final Draft paragraph types were converted to action. Review those lines.');
-  const block = newBlock(kind ?? 'action', paragraphText(node));
+  let unsupportedStyle = false;
+  const styled = fromRuns(elements(node, 'Text').map(run => {
+    const { styles, unsupported } = fromFdxStyle(attr(run, 'Style'));
+    unsupportedStyle ||= unsupported;
+    return { text: xmlText(run), styles };
+  }));
+  const block = newBlock(kind ?? 'action', styled.text);
+  if (styled.styles) block.styles = styled.styles;
   if (block.kind === 'scene') block.sceneNumber = attr(node, 'Number') ?? attr(element(node, 'SceneProperties'), 'Number');
   block.revision = attr(node, 'RevisionID') ?? elements(node, 'Text').map(run => attr(run, 'RevisionID')).find(Boolean);
-  if (elements(node, 'Text').some(run => attr(run, 'Style'))) warnings.add('Inline Final Draft text styles remain in the original.');
+  if (unsupportedStyle) warnings.add('Final Draft text styles other than bold, italic and underline remain in the original.');
   return block;
 }
 
@@ -231,7 +244,10 @@ function fdxParagraph(block: Block): string {
   const type = fdxType[block.kind];
   const number = block.kind === 'scene' && block.sceneNumber ? ' Number="' + escapeXml(block.sceneNumber) + '"' : '';
   const change = block.revision ? ' RevisionID="' + escapeXml(block.revision) + '"' : '';
-  return '<Paragraph Type="' + type + '"' + number + '><Text' + change + '>' + escapeXml(block.text) + '</Text></Paragraph>';
+  const runs = block.styles?.length
+    ? styleRuns(block.text, block.styles).map(run => '<Text' + change + (run.styles.length ? ' Style="' + fdxStyle(run.styles) + '"' : '') + '>' + escapeXml(run.text) + '</Text>').join('')
+    : '<Text' + change + '>' + escapeXml(block.text) + '</Text>';
+  return '<Paragraph Type="' + type + '"' + number + '>' + runs + '</Paragraph>';
 }
 
 export function exportFdx(document: DocumentModel): string {

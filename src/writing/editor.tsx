@@ -3,7 +3,7 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } fr
 import {
   Check, ChevronDown, CircleCheck, MessageSquarePlus, NotebookPen, Columns2, Expand, FileText, List, MessageSquareText, Printer, Redo2, Replace, Search, Undo2, X
 } from 'lucide-react';
-import { baseKeymap } from 'prosemirror-commands';
+import { baseKeymap, toggleMark } from 'prosemirror-commands';
 import { closeHistory, history, redo, redoDepth, undo, undoDepth } from 'prosemirror-history';
 import { keymap } from 'prosemirror-keymap';
 import { EditorState, Plugin, Selection, TextSelection } from 'prosemirror-state';
@@ -83,6 +83,7 @@ export function WritingView(props: WritingProps) {
   const [activeComment, setActiveComment] = useState('');
   const [showResolved, setShowResolved] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
+  const [activeMarks, setActiveMarks] = useState('');
   const emittedComments = useRef<ScriptComment[] | undefined>(document.comments);
   const [focused, setFocused] = useState(false);
   const [finder, setFinder] = useState<{ open: boolean; replace: string }>({ open: false, replace: '' });
@@ -136,6 +137,10 @@ export function WritingView(props: WritingProps) {
       return previous.undo === next.undo && previous.redo === next.redo ? previous : next;
     });
     setHasSelection(previous => previous === !state.selection.empty ? previous : !state.selection.empty);
+    const marks = state.storedMarks ?? state.selection.$from.marks();
+    const styled = (['bold', 'italic', 'underline'] as const).filter(name => state.selection.empty
+      ? marks.some(mark => mark.type.name === name) : state.doc.rangeHasMark(state.selection.from, state.selection.to, schema.marks[name])).join(' ');
+    setActiveMarks(previous => previous === styled ? previous : styled);
     const found2 = searchKey.getState(state);
     if (found2) setSearch(previous => previous.query === found2.query && previous.count === found2.matches.length && previous.current === found2.current
       ? previous : { query: found2.query, count: found2.matches.length, current: found2.current });
@@ -190,6 +195,9 @@ export function WritingView(props: WritingProps) {
       keys[`Mod-Alt-${digit}`] = setKind(kind);
     }
     keys['Mod-e'] = (_state, dispatch) => { if (dispatch) openElementMenu(); return true; };
+    keys['Mod-b'] = toggleMark(schema.marks.bold);
+    keys['Mod-i'] = toggleMark(schema.marks.italic);
+    keys['Mod-u'] = toggleMark(schema.marks.underline);
     keys['Mod-Alt-m'] = (state, dispatch) => { if (state.selection.empty) return false; if (dispatch) addComment(); return true; };
     return keys;
   }
@@ -596,6 +604,11 @@ export function WritingView(props: WritingProps) {
         />
         <IconButton label="Undo" tooltip="Undo (Ctrl+Z)" icon={<Undo2 size={16} />} variant="ghost" size="sm" isDisabled={readOnly || !depth.undo} onClick={() => runHistory('undo')} />
         <IconButton label="Redo" tooltip="Redo (Ctrl+Shift+Z)" icon={<Redo2 size={16} />} variant="ghost" size="sm" isDisabled={readOnly || !depth.redo} onClick={() => runHistory('redo')} />
+        <span className="swdr-w-divider" aria-hidden="true" />
+        {([['bold', 'Bold', 'B', 'mod+b'], ['italic', 'Italic', 'I', 'mod+i'], ['underline', 'Underline', 'U', 'mod+u']] as const).map(([mark, label, glyph]) =>
+          <button key={mark} type="button" className={`swdr-w-mark swdr-w-mark-${mark}`} aria-label={label} title={`${label} (${/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl+'}${glyph})`}
+            aria-pressed={activeMarks.split(' ').includes(mark)} disabled={readOnly} onMouseDown={event => event.preventDefault()}
+            onClick={() => { const editor = view.current; if (editor) { toggleMark(schema.marks[mark])(editor.state, editor.dispatch); editor.focus(); } }}>{glyph}</button>)}
         {active.kind === 'character' && !readOnly && <Button label="Dual" variant="ghost" size="sm" icon={<Columns2 size={15} />} tooltip="Pair this speech with the next one" onClick={toggleDual} />}
         <IconButton label="Add comment" tooltip="Comment on the selected words (Ctrl+Alt+M)" icon={<MessageSquarePlus size={16} />} variant="ghost" size="sm"
           isDisabled={readOnly || !hasSelection} onClick={addComment} />
