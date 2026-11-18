@@ -1,5 +1,5 @@
 import { newBlock, newDocument } from '../model';
-import { pageLines, screenplayFromLines } from './pdf-layout';
+import { pageLines, repeatedRuns, screenplayFromLines } from './pdf-layout';
 import type { PdfLine } from './pdf-layout';
 import { decodeFountain } from './screenplay';
 import type { ScriptConversion } from './screenplay';
@@ -320,6 +320,7 @@ export async function decodePdf(data: Uint8Array, title: string, signal?: AbortS
   const width = box ? Number(box[3]) - Number(box[1]) : 612;
   const height = box ? Number(box[4]) - Number(box[2]) : 792;
   const geometry: PdfLine[][] = [];
+  const pageRuns: TextFragment[][] = [];
   for (const [, body] of pages) {
     signal?.throwIfAborted();
     const contentIds = references(/\/Contents\s*(\[[^\]]*\]|\d+\s+\d+\s+R\b)/.exec(body)?.[1] ?? '');
@@ -330,8 +331,10 @@ export async function decodePdf(data: Uint8Array, title: string, signal?: AbortS
       if (stream) fragments.push(...textFragments(stream, fonts));
     }
     pageText.push(readLines(fragments));
-    geometry.push(pageLines(fragments, geometry.length, width, height));
+    pageRuns.push(fragments);
   }
+  const furniture = repeatedRuns(pageRuns, height);
+  pageRuns.forEach((runs, index) => geometry.push(pageLines(runs, index, width, height, furniture)));
   const original = pageText.map((text, index) => text.trim() || '[Page ' + (index + 1) + ' has no extractable text]').join('\n\n');
   if (!pageText.some(text => /\p{L}|\p{N}/u.test(text))) {
     throw new PdfImportError('image-only', 'No editable text was recovered. For a scan, run OCR in your PDF editor, review the result and export DOCX or a searchable PDF.');

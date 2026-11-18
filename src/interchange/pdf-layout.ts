@@ -11,9 +11,27 @@ const FURNITURE = /^(?:\(?CONTINUED\)?:?|CONTINUED: ?\(\d+\)|\(MORE\))$/i;
 const CONTD = /\s*\((?:CONT['’]D|CONTINUED)\)\s*$/i;
 
 /** Groups runs into lines and drops margin scene numbers, page numbers and revision marks. */
-export function pageLines(runs: PositionedText[], page: number, width: number, height: number): PdfLine[] {
+/** Text repeated at the same place on most pages (watermarks, running headers) is furniture. */
+export function repeatedRuns(pages: PositionedText[][], height = 792): Set<string> {
+  const seen = new Map<string, number>();
+  for (const runs of pages) {
+    // Only the header and footer bands: body lines can legitimately repeat (a frequent cue).
+    const bands = runs.filter(run => run.y > height - 72 || run.y < 72);
+    for (const key of new Set(bands.map(runKey))) seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  return new Set([...seen.entries()].filter(([, count]) => pages.length >= 3 && count >= pages.length * 0.6).map(([key]) => key));
+}
+
+/** Export watermarks such as "Created using Celtx" are never script text. */
+const WATERMARK = /^(?:created|made|written|exported) (?:using|with|in) [\w .-]{2,30}$/i;
+
+function runKey(run: PositionedText): string {
+  return `${Math.round(run.y / 4)}|${run.text.trim()}`;
+}
+
+export function pageLines(runs: PositionedText[], page: number, width: number, height: number, skip = new Set<string>()): PdfLine[] {
   const rows: PositionedText[][] = [];
-  for (const run of [...runs].sort((a, b) => b.y - a.y || a.x - b.x)) {
+  for (const run of [...runs].filter(item => !skip.has(runKey(item)) && !WATERMARK.test(item.text.trim())).sort((a, b) => b.y - a.y || a.x - b.x)) {
     const row = rows.find(line => Math.abs(line[0].y - run.y) < 1.5);
     if (row) row.push(run); else rows.push([run]);
   }
@@ -55,7 +73,9 @@ export function screenplayFromLines(pages: PdfLine[][]): LaidOutScript | null {
   if (all.length < 8) return null;
   const counts = new Map<number, number>();
   for (const line of all) counts.set(Math.round(line.x), (counts.get(Math.round(line.x)) ?? 0) + 1);
-  const left = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  // The action margin is the leftmost indent in regular use. (The most common indent can be
+  // the dialogue column in a dialogue-heavy script.)
+  const left = Math.min(...[...counts.entries()].filter(([, count]) => count >= Math.max(3, all.length * 0.03)).map(([x]) => x));
   const blocks: LaidOutScript['blocks'] = [];
   let title: string[] | undefined;
   let previous: { line: PdfLine; kind: BlockKind } | null = null;
