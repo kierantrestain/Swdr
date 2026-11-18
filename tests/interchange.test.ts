@@ -74,7 +74,7 @@ test('PDF intake distinguishes a scan, mixed text, protected data and an invalid
   const protectedPdf = encoder.encode(new TextDecoder().decode(rasterPdf(false)).replace('/Root 1 0 R', '/Root 1 0 R /Encrypt 9 0 R'));
   await assert.rejects(readImport('protected.pdf', protectedPdf, 'screenplay'), /protected/i);
   await assert.rejects(readImport('broken.pdf', encoder.encode('this is not a PDF'), 'screenplay'), /PDF document/i);
-  await assert.rejects(readImport('stale.wdz', encoder.encode('synthetic, unsupported'), 'screenplay'), /export an editable/i);
+  await assert.rejects(readImport('stale.wdz', encoder.encode('synthetic, unsupported'), 'screenplay'), /No script was found inside this WriterDuet file.*export a Final Draft/i);
   const abort = new AbortController();
   abort.abort();
   await assert.rejects(readImport('cancel.fountain', encoder.encode('INT. ROOM - DAY'), 'screenplay', abort.signal), { name: 'AbortError' });

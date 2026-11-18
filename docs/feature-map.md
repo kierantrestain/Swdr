@@ -27,7 +27,7 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 | Alternate dialogue | WriterDuet, FD (Bundle) | ✅ Margin marker; Ctrl/⌘+Alt+↑/↓ cycles alternates in place |
 | Dual dialogue | All | ✅ |
 | Bold, italic, underline | Celtx (Owner) | ✅ Ctrl/⌘+B/I/U and toolbar; kept in FDX runs, Fountain emphasis, print and PDF faces |
-| Real-time co-writing in the editor (live cursors) | WriterDuet Firebase/Firepad (Bundle), OpenDraft Yjs (source) | ⬜ Team sync is document-level. Next step: Yjs over the team service. |
+| Real-time co-writing in the editor (live cursors) | WriterDuet Firebase/Firepad (Bundle), OpenDraft Yjs (source) | ✅ Presence avatars, typing state, named remote cursors, follow; character-level three-way merge within a line; ~0.8 s adaptive sync |
 | Read-through with voices | Celtx "Read Through" (Owner) | ✅ Script tools → Table read: a device voice per character, narrator for headings and action, start from any scene, speed, choose what is read aloud |
 | Script reports and statistics | Final Draft reports, WriterDuet stats (Bundle) | ✅ Script tools → Report: pages, screen time, dialogue share per character, scenes, first appearance, locations, INT/EXT and time-of-day split, longest scenes, CSV |
 | Formatting checker | WriterDuet (Bundle) | ✅ Script tools → Checks: headings without INT./EXT. or time, cues without dialogue, orphan dialogue and parentheticals, transitions, duplicate scene numbers, long action, likely misspelt names; each jumps to the line |
@@ -93,11 +93,11 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 | --- | --- |
 | FDX, Fountain, DOCX, text PDF in; FDX, Fountain, DOCX, PDF out | ✅ Field checks in `tests/interchange.test.ts` |
 | `.swdr` project archive | ✅ |
-| `.celtx`, `.wdz`, `.fadein` | ⬜ Needs genuine sample files; see [interchange](interchange.md) |
+| `.celtx`, `.fadein`, `.osf`, `.highland`, `.wdz` | ✅ Bundle reader: Celtx script HTML, Open Screenplay Format, Fountain or FDX inside the archive. Verify with real exports from each app before relying on edge cases. |
 
 ## Ranked next steps
 
-1. **Real-time co-writing in the editor** (Yjs on the team service). This is the largest gap against WriterDuet.
+1. ~~Real-time co-writing~~ shipped. Next: a WebSocket transport for keystroke-level latency at larger team sizes.
 2. ~~Inline styles~~ shipped in this round.
 3. ~~Cast & Crew directory~~ and ~~Files & Media~~ shipped.
 4. ~~Budget account codes and fringes~~ shipped in this round.

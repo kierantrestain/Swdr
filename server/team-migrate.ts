@@ -6,7 +6,8 @@ import type { Pool } from 'pg';
 /** A fixed key so concurrent cold starts apply the schema one at a time. */
 const LOCK = 0x5344_5201;
 
-let pending: Promise<void> | undefined;
+/** One schema check per pool, so a new database is migrated even within the same process. */
+const applied = new WeakMap<Pool, Promise<void>>();
 
 /** The idempotent schema without its own BEGIN/COMMIT, so it can run inside a locked transaction. */
 function schemaFile(): string {
@@ -26,7 +27,9 @@ export function schemaStatements(sql = schemaFile()): string {
  * so a fresh database is ready on first sign-up and an existing one is upgraded in place.
  */
 export function ensureSchema(pool: Pool): Promise<void> {
-  pending ??= (async () => {
+  const existing = applied.get(pool);
+  if (existing) return existing;
+  const pending = (async () => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -40,9 +43,10 @@ export function ensureSchema(pool: Pool): Promise<void> {
       client.release();
     }
   })().catch(error => {
-    pending = undefined;
+    applied.delete(pool);
     throw error;
   });
+  applied.set(pool, pending);
   return pending;
 }
 

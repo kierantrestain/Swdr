@@ -2,7 +2,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { DocumentModel, Project } from '../src/model.js';
 import type {
-  LineChange, ReviewDocument, TeamAccount, TeamConfig, TeamGrant, TeamListing, TeamNote, TeamProject, TeamRole,
+  LineChange, ReviewDocument, TeamAccount, TeamConfig, TeamGrant, TeamListing, TeamNote, TeamPresence, TeamProject, TeamRole,
   TeamSignedIn, TeamSignupMode
 } from '../src/workspace/team-contract.js';
 import {
@@ -616,6 +616,51 @@ async function openReview(db: Pool, request: Body): Promise<ReviewDocument> {
   };
 }
 
+/**
+ * Records where the caller is and returns everyone else seen in the last 20 seconds. It reads without
+ * the project lock so frequent heartbeats never queue behind saves, and it only reveals positions in
+ * documents the caller may read.
+ */
+async function presence(pool: Pool, email: string, request: Body): Promise<TeamPresence[]> {
+  const id = idField(request.projectId, 'project ID');
+  const row = await pool.query<{ body: Project; role: TeamRole; episode_ids: string[] | null }>(
+    `SELECT p.body, g.role, g.episode_ids FROM swdr_team_projects p JOIN swdr_team_grants g ON g.project_id = p.id
+     WHERE p.id = $1 AND g.email = $2`, [id, email]
+  );
+  if (!row.rows[0]) throw new TeamFault(404, 'Project unavailable.');
+  const { body, role, episode_ids: episodeIds } = row.rows[0];
+  const grant: TeamGrant = { email, role, episodeIds };
+  const readable = (documentId?: string | null) => {
+    if (!documentId) return false;
+    try { visibleDocument(body, grant, documentId); return true; } catch { return false; }
+  };
+  const documentId = request.documentId === undefined || request.documentId === null ? null : idField(request.documentId, 'document ID');
+  const here = readable(documentId);
+  const blockId = here && request.blockId !== undefined && request.blockId !== null ? idField(request.blockId, 'line ID') : null;
+  const offset = blockId && request.offset !== undefined ? integerField(request.offset, 'cursor', 0, 1_000_000) : null;
+  await pool.query(
+    `INSERT INTO swdr_team_presence (project_id, email, document_id, block_id, cursor_offset, typing, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, now())
+     ON CONFLICT (project_id, email) DO UPDATE SET document_id = EXCLUDED.document_id, block_id = EXCLUDED.block_id,
+       cursor_offset = EXCLUDED.cursor_offset, typing = EXCLUDED.typing, updated_at = now()`,
+    [id, email, here ? documentId : null, blockId, offset, request.typing === true]
+  );
+  const others = await pool.query<{ email: string; name: string | null; document_id: string | null; block_id: string | null; cursor_offset: number | null; typing: boolean; seen: number }>(
+    `SELECT pr.email, u.name, pr.document_id, pr.block_id, pr.cursor_offset, pr.typing, EXTRACT(EPOCH FROM now() - pr.updated_at)::int AS seen
+     FROM swdr_team_presence pr JOIN swdr_team_grants g ON g.project_id = pr.project_id AND g.email = pr.email
+     LEFT JOIN swdr_team_users u ON u.email = pr.email
+     WHERE pr.project_id = $1 AND pr.email <> $2 AND pr.updated_at > now() - interval '20 seconds'
+     ORDER BY pr.email`, [id, email]
+  );
+  return others.rows.map(other => {
+    const visible = readable(other.document_id);
+    return {
+      email: other.email, name: other.name || other.email.split('@')[0], typing: visible && other.typing, seen: other.seen,
+      ...(visible ? { documentId: other.document_id!, ...(other.block_id ? { blockId: other.block_id, offset: other.cursor_offset ?? 0 } : {}) } : {})
+    };
+  });
+}
+
 export async function runTeamAction(
   pool: Pool, accounts: TeamAccounts, request: Body, session?: string, context: TeamContext = defaultContext
 ): Promise<TeamResult> {
@@ -654,6 +699,7 @@ export async function runTeamAction(
     case 'create':
       return { data: await transaction(pool, db => createProject(db, email, request)) };
   }
+  if (request.action === 'presence') return { data: await presence(pool, email, request) };
   const id = idField(request.projectId, 'project ID');
   return transaction(pool, async db => {
     const stored = await requireProject(db, id, email);

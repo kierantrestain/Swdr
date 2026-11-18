@@ -123,3 +123,17 @@ dialog.team-ax-overlay.team-ax-overlay :is(button, input, textarea, select, a, h
   overflow-x: auto;
 }
 .team-toolbar .team-account { border-radius: 8px; background: var(--paper, #fffdf9); }
+
+/* Live presence */
+.team-script-stage { position: relative; }
+.presence-bar { display: flex; align-items: center; gap: 0; margin: 0 0 0 auto; padding: 0; list-style: none; }
+.presence-bar li + li { margin-inline-start: -6px; }
+.presence-avatar { position: relative; display: inline-grid; place-items: center; width: 2rem; height: 2rem; min-height: 0; padding: 0; border: 2px solid var(--color-background-surface); border-radius: 50%; background: var(--peer); color: #fff; font-size: var(--font-size-2xs); font-weight: 700; box-shadow: 0 0 0 2px var(--peer); }
+.presence-avatar:hover { background: var(--peer); filter: brightness(1.1); z-index: 1; }
+.presence-avatar:disabled { opacity: .75; cursor: default; }
+.presence-avatar.is-typing::after { content: ''; position: absolute; right: -2px; bottom: -2px; width: .6rem; height: .6rem; border: 2px solid var(--color-background-surface); border-radius: 50%; background: var(--color-success); animation: presence-pulse 1.2s ease-in-out infinite; }
+@keyframes presence-pulse { 50% { transform: scale(1.35); } }
+.presence-count { margin-inline-start: var(--spacing-3) !important; color: var(--color-text-secondary); font-size: var(--font-size-xs); }
+.presence-alone { margin: 0 0 0 auto; color: var(--color-text-secondary); font-size: var(--font-size-xs); }
+.remote-caret { position: absolute; z-index: 5; width: 2px; margin-left: -1px; background: var(--peer); pointer-events: none; transition: top .12s ease, left .12s ease; }
+.remote-caret b { position: absolute; bottom: 100%; left: -1px; padding: 1px 5px; border-radius: 4px 4px 4px 0; background: var(--peer); color: #fff; font: 600 10px/1.4 var(--font-family-body); white-space: nowrap; }

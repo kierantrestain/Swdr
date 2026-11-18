@@ -223,9 +223,35 @@ function keyedItems(value: unknown): value is Array<JsonRecord & { id: string }>
   return Array.isArray(value) && value.every(item => hasObject(item) && typeof item.id === 'string');
 }
 
+/** The single span one side changed: [start, end) of the base, replaced by insert. */
+function changedSpan(base: string, next: string): { start: number; end: number; insert: string } {
+  let start = 0;
+  while (start < base.length && start < next.length && base[start] === next[start]) start += 1;
+  let tail = 0;
+  while (tail < base.length - start && tail < next.length - start && base[base.length - 1 - tail] === next[next.length - 1 - tail]) tail += 1;
+  return { start, end: base.length - tail, insert: next.slice(start, next.length - tail) };
+}
+
+/**
+ * Character-level three-way merge for one line of text, as collaborative editors do: two people
+ * typing in different parts of the same line both keep their words. Overlapping edits return undefined.
+ */
+export function mergeText(base: string, local: string, remote: string): string | undefined {
+  const mine = changedSpan(base, local);
+  const theirs = changedSpan(base, remote);
+  const [first, second] = mine.start <= theirs.start ? [mine, theirs] : [theirs, mine];
+  // Overlapping spans, or two edits starting at the same point (such as both rewriting an empty line), need a person to choose.
+  if (first.end > second.start || mine.start === theirs.start) return undefined;
+  return base.slice(0, first.start) + first.insert + base.slice(first.end, second.start) + second.insert + base.slice(second.end);
+}
+
 function mergeNode(base: unknown, local: unknown, remote: unknown, path: string, conflicts: string[]): unknown {
   if (equal(base, local)) return remote;
   if (equal(base, remote) || equal(local, remote)) return local;
+  if (typeof base === 'string' && typeof local === 'string' && typeof remote === 'string') {
+    const merged = mergeText(base, local, remote);
+    if (merged !== undefined) return merged;
+  }
   if (keyedItems(base) && keyedItems(local) && keyedItems(remote)) {
     const baseIds = base.map(item => item.id);
     const localIds = local.map(item => item.id);

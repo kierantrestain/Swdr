@@ -270,7 +270,7 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
       </select></label>
       <div className="actions"><button type="button" className="primary" onClick={() => chooser.current?.click()}>Choose files</button></div>
       <details><summary>File formats and conversion</summary>
-        <p>Choose FDX, Fountain, TXT, DOCX, RTF, supported text-layer PDF, OpenDraft (.odraft), CSV, XLSX, YAML or SWDR. For a Google Docs or other cloud link, download an editable file first.</p>
+        <p>Choose Final Draft (.fdx), Celtx (.celtx), Fade In (.fadein, .osf), Highland, WriterDuet backup (.wdz), OpenDraft (.odraft), Fountain, Word (.docx), RTF, TXT, text-layer PDF, CSV, XLSX, YAML or SWDR. Arc Studio and StudioBinder scripts import through their FDX or PDF export. For a Google Docs or other cloud link, download an editable file first.</p>
         <p>For legacy Word, Pages or older Final Draft, export DOCX or FDX in the original application. For image-only PDF, use an OCR tool and review the recognised text before importing.</p>
       </details>
     </section>}

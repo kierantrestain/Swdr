@@ -202,11 +202,18 @@ export function useTeamDraft() {
     }
   }, [persist]);
 
+  // Sync faster while collaborators are active, slower when alone, and rarely in a background tab.
+  const pace = useRef(1750);
+  const setPace = useCallback((ms: number) => { pace.current = ms; }, []);
   useEffect(() => {
-    const tick = window.setInterval(() => { void flush(); }, 1750);
+    let timer = 0;
+    const loop = () => {
+      timer = window.setTimeout(() => { void flush(); loop(); }, document.visibilityState === 'hidden' ? 6000 : pace.current);
+    };
+    loop();
     window.addEventListener('online', flush);
     return () => {
-      window.clearInterval(tick);
+      window.clearTimeout(timer);
       window.removeEventListener('online', flush);
     };
   }, [flush]);
@@ -321,5 +328,5 @@ export function useTeamDraft() {
     }
   }, [persist]);
 
-  return { state, localStatus, serverStatus, message, open, resume, close, forget, edit, acceptServer, resolve, flush };
+  return { state, localStatus, serverStatus, message, open, resume, close, forget, edit, acceptServer, resolve, flush, setPace };
 }

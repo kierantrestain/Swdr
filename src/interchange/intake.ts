@@ -6,6 +6,7 @@ import { decodeOdraft } from './odraft';
 import { decodeDocx } from './office';
 import { decodePdf } from './pdf-read';
 import { readRtf } from './rtf';
+import { decodeBundle } from './bundles';
 import { decodeFdx, decodeFountain } from './screenplay';
 import type { ScriptConversion } from './screenplay';
 import { decodeCsv, decodeXlsx, decodeYaml } from './tabular';
@@ -19,6 +20,11 @@ export const fileFormats = {
   rtf: ['Rich text', 'application/rtf'],
   pdf: ['PDF', 'application/pdf'],
   odraft: ['OpenDraft', 'application/json'],
+  celtx: ['Celtx', 'application/zip'],
+  fadein: ['Fade In', 'application/zip'],
+  osf: ['Open Screenplay Format', 'application/xml'],
+  highland: ['Highland', 'application/zip'],
+  wdz: ['WriterDuet backup', 'application/zip'],
   swdr: ['SWDR project archive', 'application/zip'],
   csv: ['CSV', 'text/csv'],
   xlsx: ['Excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
@@ -38,7 +44,7 @@ export function pathExtension(name: string): string {
 function conversionRoute(extension: string): string {
   if (extension === 'doc' || extension === 'pages' || extension === 'gdoc') return 'Open the source in Word, Google Docs or Pages and export as Word (.docx), then import the editable file.';
   if (extension === 'fdr') return 'Open this older Final Draft file in Final Draft and save a new .fdx copy.';
-  if (['celtx', 'cxscript', 'wdz', 'sbx', 'fadein', 'osf'].includes(extension)) {
+  if (['cxscript', 'sbx', 'arc'].includes(extension)) {
     return 'Open this file in the source application and export an editable Final Draft (.fdx), Fountain or Word (.docx) copy.';
   }
   return 'Choose a supported file. For a cloud link, open the original app and download an editable DOCX, FDX, Fountain or AV table first.';
@@ -63,6 +69,7 @@ export async function readImport(name: string, bytes: Uint8Array, mode: 'screenp
   } else if (extension === 'xlsx') return { type: 'av', table: decodeXlsx(bytes), source, title };
   else if (extension === 'csv') return { type: 'av', table: decodeCsv(decodeText(bytes)), source, title };
   else if (extension === 'yaml' || extension === 'yml') return { type: 'av', table: decodeYaml(decodeText(bytes)), source, title };
+  else if (['celtx', 'fadein', 'osf', 'highland', 'wdz'].includes(extension)) conversion = decodeBundle(bytes, extension, title);
   else if (extension === 'rtf') conversion = decodeFountain(readRtf(new TextDecoder('windows-1252').decode(bytes)), title, true);
   else {
     const text = decodeText(bytes);

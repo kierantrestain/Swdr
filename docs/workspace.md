@@ -33,6 +33,14 @@ A team workspace is a hosted, private copy of a project that several people edit
 
 Episode scope applies to Writer, Reviewer and Viewer. A scoped member sees only the documents, drafts and storyboard images of their episodes; whole-project story and production data is withheld. The account menu (top right) shows who is signed in and has **Sign out**; someone using a legacy access key can **Add a password** there.
 
+### Live co-writing
+
+Everyone in a team project sees who else is there in the bar above the script: a coloured avatar per person, a green dot while they type, and a count. Each person's caret appears in the script with their name, and selecting an avatar jumps to where they are. Presence is a heartbeat to `/api/team` (`presence`) every second while others are present and every three seconds when alone; positions are only shared for documents the viewer may read.
+
+Edits sync about every 0.8 seconds while collaborators are active (1.75 s alone, 6 s in a background tab). Changes merge by line ID, and within a line by character: two people editing different parts of the same line both keep their text. Only edits to the same characters, or two people starting at the same point, are flagged for a decision.
+
+This is the model Google Docs uses — a central server ordering changes — carried over HTTPS so it runs on Vercel's serverless functions and the existing Postgres database without another service. A persistent WebSocket transport (for example on Cloudflare Durable Objects) is the next step if teams need keystroke-level latency.
+
 ### Security design
 
 - **Passwords** are hashed with Node's `crypto.scrypt` (N = 2^15, r = 8, p = 1, 32-byte key, 16-byte random salt per user), compared with `timingSafeEqual`. Unknown emails run the same derivation against a decoy so timing does not reveal accounts. The scheme and parameters are stored with each hash so they can be raised later. Rules: 10–256 characters, not the email address, not a well-known password, not one repeated character. Emails are NFKC-normalised, trimmed and lower-cased.

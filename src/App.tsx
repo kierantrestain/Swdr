@@ -1,6 +1,6 @@
 import { Theme } from '@astryxdesign/core/theme';
 import { LoaderCircle } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { themes, defaultThemeSlug } from './astryx-themes';
 import { Home } from './Home';
 import { ProjectView } from './ProjectView';
@@ -12,6 +12,7 @@ import { AVView, OutlineView, WritingView } from './writing';
 import { ReviewWorkspace, TeamWorkspace } from './workspace/team-ui';
 import type { TeamRenderProps } from './workspace/team-ui';
 import { CreatorStudio } from './creator/CreatorStudio';
+import { PresenceBar, RemoteCursors, usePresence } from './workspace/presence';
 import { MediaLibrary } from './workspace/MediaLibrary';
 import { ScriptTools } from './ScriptTools';
 import { ProductionView } from './production';
@@ -354,6 +355,8 @@ const teamDestinations: { id: TeamView; label: string }[] = [
 
 function TeamDocument({ view }: { view: TeamRenderProps }) {
   const [mode, setMode] = useState<TeamView>('write');
+  const stage = useRef<HTMLDivElement>(null);
+  const peers = usePresence(view.project.id, view.document.id, stage, view.setPace);
   const fullScope = view.grant.episodeIds === null;
   const currentMode = fullScope || mode === 'outline' ? mode : 'write';
   const props = { ...view, onOpenSource: (source: SourceRef) => { setMode('write'); view.onOpenSource(source); } };
@@ -365,13 +368,22 @@ function TeamDocument({ view }: { view: TeamRenderProps }) {
       {teamDestinations.slice(0, fullScope ? teamDestinations.length : 2).map(destination =>
         <button key={destination.id} type="button" aria-pressed={destination.id === currentMode} className="selectable"
           onClick={() => setMode(destination.id)}>{destination.label}</button>)}
+      <PresenceBar peers={peers} documentTitle={id => view.project.documents.find(item => item.id === id)?.title}
+        onFollow={peer => {
+          const doc = view.project.documents.find(item => item.id === peer.documentId);
+          if (!doc) return;
+          setMode('write');
+          if (doc.id !== view.document.id) view.openDocument(doc.id);
+          view.onOpenSource(sourceFor(view.project, doc, { blockId: peer.blockId }));
+        }} />
     </nav>
     {currentMode === 'outline' ? <OutlineView key={view.document.id} {...props} />
       : currentMode === 'story' ? <SeriesView {...props} />
       : currentMode === 'editorial' ? <EditorialView key={view.document.id} {...props} />
       : currentMode === 'production' ? <ProductionView key={view.document.id} {...props} />
       : view.document.kind === 'av' ? <AVView key={view.document.id} {...props} target={view.selectedSource} toolbarEnd={exporter} />
-      : <div className="team-script-stage" id="main-content"><WritingView key={view.document.id} {...props}
-        target={view.selectedSource} toolbarEnd={exporter} onOpenOutline={() => setMode('outline')} /></div>}
+      : <div className="team-script-stage" id="main-content" ref={stage}><WritingView key={view.document.id} {...props}
+        target={view.selectedSource} toolbarEnd={exporter} onOpenOutline={() => setMode('outline')} />
+        <RemoteCursors peers={peers} documentId={view.document.id} root={stage} /></div>}
   </>;
 }

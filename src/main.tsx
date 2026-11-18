@@ -4,12 +4,13 @@ import { createRoot } from 'react-dom/client';
 import '@astryxdesign/core/reset.css';
 import '@astryxdesign/core/astryx.css';
 import { App } from './App';
+import { ErrorBoundary } from './shell/ErrorBoundary';
 import './styles.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('SWDR could not open its workspace.');
 // App wraps itself in the SWDR Astryx theme (src/astryx-themes.ts) so it can switch light and dark.
-createRoot(root).render(<App />);
+createRoot(root).render(<ErrorBoundary><App /></ErrorBoundary>);
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator && location.protocol !== 'file:') {
   void navigator.serviceWorker.register('/sw.js').catch(() => {

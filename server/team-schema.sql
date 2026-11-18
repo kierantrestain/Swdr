@@ -127,4 +127,16 @@ CREATE TABLE IF NOT EXISTS swdr_team_login_attempts (
   locked_until timestamptz
 );
 
+-- Who is in a project right now and where their cursor is. Rows older than a minute are ignored.
+CREATE TABLE IF NOT EXISTS swdr_team_presence (
+  project_id text NOT NULL REFERENCES swdr_team_projects (id) ON DELETE CASCADE,
+  email text NOT NULL,
+  document_id text,
+  block_id text,
+  cursor_offset integer,
+  typing boolean NOT NULL DEFAULT false,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (project_id, email)
+);
+
 COMMIT;

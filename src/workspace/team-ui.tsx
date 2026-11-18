@@ -21,6 +21,8 @@ export interface TeamRenderProps extends WorkspaceViewProps {
   serverStatus: TeamServerStatus;
   selectedSource?: SourceRef;
   openDocument: (id: string) => void;
+  /** How often the project syncs; presence speeds it up while collaborators are active. */
+  setPace?: (ms: number) => void;
 }
 
 interface TeamWorkspaceProps {
@@ -399,7 +401,7 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
         {document && renderWorkspace({
           project, document, grant, readOnly: !canEditDocument,
           localStatus: draft.localStatus, serverStatus: draft.serverStatus,
-          selectedSource: source, openDocument: selectDocument, onOpenSource: openSource,
+          selectedSource: source, openDocument: selectDocument, onOpenSource: openSource, setPace: draft.setPace,
           onStatus: setMessage,
           onProjectChange: mutation => {
             if (canEditDocument) draft.edit(mutation);

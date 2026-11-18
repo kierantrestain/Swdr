@@ -2,6 +2,18 @@ import type { DocumentModel, Project, Snapshot } from '../model';
 
 export type TeamRole = 'owner' | 'editor' | 'reviewer' | 'viewer';
 
+/** Another member who is in the project now, and where. */
+export interface TeamPresence {
+  email: string;
+  name: string;
+  documentId?: string;
+  blockId?: string;
+  offset?: number;
+  typing: boolean;
+  /** Seconds since they were last seen. */
+  seen: number;
+}
+
 export interface TeamGrant {
   email: string;
   role: TeamRole;

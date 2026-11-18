@@ -191,6 +191,6 @@ test('invalid, unsupported and cancelled intake does not produce an editable dra
   cancel.abort();
   await assert.rejects(readImport('cancel.txt', encode('Text'), 'screenplay', cancel.signal), { name: 'AbortError' });
   await assert.rejects(readImport('bad.fdx', encode('<bad/>'), 'screenplay'), /Final Draft/i);
-  await assert.rejects(readImport('legacy.wdz', encode('Data'), 'screenplay'), /editable.*Final Draft/i);
+  await assert.rejects(readImport('legacy.wdz', encode('Data'), 'screenplay'), /export a Final Draft \(\.fdx\)/i);
   await assert.rejects(readImport('bad.txt', Uint8Array.from([0xff, 0xff]), 'screenplay'));
 });

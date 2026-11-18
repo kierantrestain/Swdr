@@ -239,3 +239,16 @@ test('team documents accept valid inline styles and comments and reject malforme
   bad(copy => { copy.documents[0].comments![0].text = 'x'.repeat(20001); });
   bad(copy => { copy.documents[0].comments![0].resolved = 'yes' as never; });
 });
+
+test('two people typing in different parts of the same line both keep their words', async () => {
+  const { mergeText, mergeTeamProjects } = await import('./team-model');
+  assert.equal(mergeText('The lamp turns.', 'The old lamp turns.', 'The lamp turns slowly.'), 'The old lamp turns slowly.');
+  assert.equal(mergeText('Rain.', 'Heavy rain.', 'Rain. Wind.'), 'Heavy rain. Wind.');
+  assert.equal(mergeText('abc', 'aXc', 'aYc'), undefined);
+  assert.equal(mergeText('ab', 'aXb', 'aYb'), undefined);
+  const base = { id: 'p', blocks: [{ id: 'b1', text: 'Nora waits by the door.' }] };
+  const merged = mergeTeamProjects(base as never, { ...base, blocks: [{ id: 'b1', text: 'Nora waits nervously by the door.' }] } as never,
+    { ...base, blocks: [{ id: 'b1', text: 'Nora waits by the back door.' }] } as never);
+  assert.deepEqual(merged.conflicts, []);
+  assert.equal((merged.project as unknown as typeof base).blocks[0].text, 'Nora waits nervously by the back door.');
+});

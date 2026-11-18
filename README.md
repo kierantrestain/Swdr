@@ -64,10 +64,13 @@ Everything above is calculated in the browser from your own project. Nothing is 
 - **Sign up and sign in** with email and password, from **Sign in** in the top bar.
 - **Private team workspaces**: share a project, invite people by link, and assign a role (Owner, Writer, Reviewer, Viewer) for the whole project or selected episodes.
 - **Review links**: expiring, read-only links to an issued script.
-- **Sync** with line-level merging, conflict detection, suggestions and line history.
+- **Live co-writing**: see who is in the project, who is typing and where, with each person's named cursor in the script. Click an avatar to jump to them.
+- **Character-level merging**: two people typing in different parts of the same line both keep their words; only true overlaps (both rewriting the same words) ask for a decision.
+- **Adaptive sync**: changes sync about every 0.8 seconds while others are active, less often when you are alone or the tab is in the background, and edits queue offline.
+- Suggestions, line history and restore.
 
 ### Import and export
-- **In:** Final Draft (`.fdx`), Fountain, Word (`.docx`), text-based PDF.
+- **In:** Final Draft (`.fdx`), Celtx (`.celtx`), Fade In (`.fadein`, `.osf`), Highland (`.highland`), WriterDuet backups (`.wdz`), OpenDraft (`.odraft`), Fountain, Word (`.docx`), RTF, plain text and text-based PDF. Arc Studio and StudioBinder scripts come in through their FDX or PDF export.
 - **Out:** FDX, Fountain, DOCX, PDF and a full `.swdr` project archive.
 
 ---
