@@ -1,6 +1,6 @@
 import { durationLabel, newId, sourceFor } from '../model';
 import type { DocumentModel, Project, SourceRef } from '../model';
-import { retainSources, sourceDocument, upsert } from './source';
+import { episodeCode, orderedEpisodes, retainSources, sourceDocument, upsert, validSource } from './source';
 
 export const EVIDENCE_STATES = ['Verified', 'Check required', 'Contested'] as const;
 export type EvidenceState = (typeof EVIDENCE_STATES)[number];
@@ -37,6 +37,8 @@ export interface ClaimContent {
   text: string;
   evidenceIds: string[];
   status: EvidenceState;
+  /** The exact script line where the claim is spoken or shown. */
+  scriptLine?: SourceRef;
 }
 
 export type ClaimVersion = ClaimContent & Revision;
@@ -196,11 +198,14 @@ export function saveClaim(project: Project, input: ClaimContent, claimId?: strin
   if (!input.text.trim()) throw new Error('Enter the exact claim.');
   if (input.status === 'Verified' && !input.evidenceIds.length) throw new Error('A verified claim requires linked evidence.');
   if (input.evidenceIds.some(id => !store.evidence.some(item => item.id === id))) throw new Error('A linked source is unavailable.');
+  if (input.scriptLine && !validSource(project, input.scriptLine, true)) throw new Error('Choose the exact script line for this claim.');
   const current = claimId ? store.claims.find(item => item.id === claimId) : undefined;
   if (claimId && !current) throw new Error('The claim is unavailable.');
   const version = { ...input, evidenceIds: [...new Set(input.evidenceIds)], ...correctionRevision(correction, Boolean(current)) };
+  if (!version.scriptLine) delete version.scriptLine;
   const claims = upsert(store.claims, { id: current?.id ?? newId(), versions: [...(current?.versions ?? []), version] });
-  return withEditorial(project, { ...store, claims });
+  const retained = retainSources(project, input.scriptLine ? [input.scriptLine] : [], 'Claim script line');
+  return withEditorial(retained, { ...store, claims });
 }
 
 export function saveBrief(project: Project, documentId: string, brief: Brief): Project {
@@ -346,4 +351,61 @@ export function issueManifest(issue: EditorialIssue) {
     evidence: issue.sources.map(item => ({ id: item.id, revisionId: item.version.revisionId })),
     avSource: issue.draft.brief?.avSource, outputs: OUTPUT_LABELS
   };
+}
+
+export const CLAIM_LANES = ['Unsourced', 'Sourced', 'Verified', 'Disputed'] as const;
+export type ClaimLane = (typeof CLAIM_LANES)[number];
+
+export interface ClaimUse {
+  documentId: string;
+  documentTitle: string;
+  episode: string;
+  segmentId: string;
+  segmentTitle: string;
+}
+
+export interface ClaimCard {
+  id: string;
+  version: ClaimVersion;
+  corrections: number;
+  lane: ClaimLane;
+  warnings: string[];
+  sources: { id: string; version: SourceVersion }[];
+  uses: ClaimUse[];
+}
+
+/**
+ * Places every shared claim on the verification board. The lane is derived from the claim's own
+ * status and the current status of each linked source, so a verified claim never hides a contested source.
+ */
+export function claimBoard(project: Project, store: EditorialStore): ClaimCard[] {
+  const episodes = orderedEpisodes(project);
+  const order = new Map(episodes.map((episode, index) => [episode.id, index]));
+  const documents = [...project.documents].sort((a, b) => (order.get(a.episodeId ?? '') ?? Infinity) - (order.get(b.episodeId ?? '') ?? Infinity));
+  return store.claims.flatMap(claim => {
+    const version = claim.versions.at(-1);
+    if (!version) return [];
+    const sources = store.evidence.flatMap(item => {
+      const latest = item.versions.at(-1);
+      return version.evidenceIds.includes(item.id) && latest ? [{ id: item.id, version: latest }] : [];
+    });
+    const uses = documents.flatMap(document => {
+      const episode = episodes.find(item => item.id === document.episodeId);
+      return getEditorialDraft(store, document.id).segments.filter(segment => segment.claimIds.includes(claim.id)).map(segment => ({
+        documentId: document.id, documentTitle: document.title, episode: episode ? episodeCode(episode) : document.title,
+        segmentId: segment.id, segmentTitle: segment.title
+      }));
+    });
+    const contested = sources.filter(source => source.version.status === 'Contested');
+    const pending = sources.filter(source => source.version.status === 'Check required');
+    const lane: ClaimLane = version.status === 'Contested' || contested.length ? 'Disputed'
+      : version.status === 'Verified' ? 'Verified' : sources.length ? 'Sourced' : 'Unsourced';
+    const warnings = [
+      ...contested.map(source => `Linked source is contested: ${source.version.title}`),
+      ...(lane === 'Verified' ? pending.map(source => `Verified, but relies on a source still marked Check required: ${source.version.title}`) : []),
+      ...(!version.scriptLine ? ['Not linked to a script line'] : []),
+      ...(!uses.length ? ['Not used in any segment'] : [])
+    ];
+    return [{ id: claim.id, version, corrections: claim.versions.length - 1, lane, warnings, sources, uses }];
+  });
 }

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { newId, sourceFor } from '../model';
-import type { Project } from '../model';
+import type { Project, SourceRef } from '../model';
+import { initialSource, SourceFields } from './StoryControls';
 import {
   APPROVAL_STATES, CUE_KINDS, EVIDENCE_STATES, SEGMENT_KINDS,
   getEditorial
@@ -99,11 +100,14 @@ export function ClaimForm({ project, item, save, close }: CommonProps & {
   item?: Claim; save: (version: ClaimContent, id?: string, correction?: string) => boolean;
 }) {
   const current = item?.versions.at(-1);
+  const [line, setLine] = useState<SourceRef | undefined>(current?.scriptLine);
+  const [linked, setLinked] = useState(Boolean(current?.scriptLine));
+  const scripted = project.documents.find(document => document.kind !== 'av' && document.blocks.some(block => block.text.trim()));
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     if (save({ text: text(form, 'text'), status: text(form, 'status') as EvidenceState,
-      evidenceIds: multi(form, 'evidence') }, item?.id, text(form, 'correction'))) close();
+      evidenceIds: multi(form, 'evidence'), scriptLine: linked ? line : undefined }, item?.id, text(form, 'correction'))) close();
   }
   return <form className="swdr-story-card swdr-story-form" onSubmit={submit}>
     <h2>{item ? 'Correct claim' : 'Add shared claim'}</h2>
@@ -111,6 +115,14 @@ export function ClaimForm({ project, item, save, close }: CommonProps & {
     <label>Verification<select name="status" defaultValue={current?.status ?? 'Check required'}>{EVIDENCE_STATES.map(state => <option key={state}>{state}</option>)}</select></label>
     <Links label="Evidence for this claim" name="evidence" selected={current?.evidenceIds ?? []}
       items={getEditorial(project).evidence.map(item => ({ id: item.id, title: item.versions.at(-1)?.title ?? 'Source' }))} />
+    <fieldset><legend>Script line</legend>
+      <label className="swdr-story-inline-check"><input type="checkbox" checked={linked} onChange={event => {
+        const next = event.currentTarget.checked;
+        setLinked(next);
+        if (next && !line && scripted) setLine(initialSource(project, scripted));
+      }} />Link the exact line where this claim is said</label>
+      {linked && <SourceFields project={project} value={line} onChange={setLine} />}
+    </fieldset>
     {item && <label>Reason for correction<input required name="correction" /></label>}
     <FormActions close={close} label="Save claim" />
   </form>;

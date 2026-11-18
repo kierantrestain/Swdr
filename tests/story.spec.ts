@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, loadDemo, test } from './support/browser';
+import { expectPassage } from './story-passage';
 
 test('filters a 24-episode series, exports spoiler-safe data and traces a dossier interaction to its line', async ({ page, pageFaults }, testInfo) => {
   await loadDemo(page);
@@ -35,9 +36,7 @@ test('filters a 24-episode series, exports spoiler-safe data and traces a dossie
   const specificSource = page.getByRole('button', { name: /S1E04 · Scene 1 · Line 9/ });
   await expect(interaction.first()).toBeVisible();
   await specificSource.first().click();
-  const exactLine = page.getByRole('textbox', { name: 'Dialogue', exact: true }).nth(1);
-  await expect(exactLine).toHaveValue('The timetable they sent you is for tomorrow.');
-  await expect(exactLine).toHaveAttribute('readonly', '');
+  await expectPassage(page, 'The timetable they sent you is for tomorrow.', { readOnly: true });
   expect(page.url()).toMatch(/rev=.*scene=.*block=/);
   expect(pageFaults).toEqual([]);
 });
@@ -52,7 +51,8 @@ test('corrects a claim in a 75-minute outline and downloads four files from the 
   await page.screenshot({ path: testInfo.outputPath('09-editorial-1440x900.png'), animations: 'disabled' });
 
   await page.getByRole('button', { name: 'Sources', exact: true }).click();
-  await page.getByRole('button', { name: 'Correct claim', exact: true }).click();
+  await page.locator('.swdr-editorial-resource').filter({ hasText: 'three costed alternatives' })
+    .getByRole('button', { name: 'Correct claim', exact: true }).click();
   await page.getByRole('textbox', { name: /^Exact claim/ }).fill('The committee compared two costed alternatives before the vote.');
   await page.getByLabel('Reason for correction').fill('One option had no cost schedule.');
   await page.getByRole('button', { name: 'Save claim', exact: true }).click();

@@ -4,7 +4,7 @@ import { orderedEpisodes, retainSources, upsert, validSource } from './source';
 
 export const STORY_KINDS = ['event', 'appearance', 'interaction', 'relationship', 'knowledge', 'arc'] as const;
 export type StoryKind = (typeof STORY_KINDS)[number];
-export const RELATIONSHIPS = ['Trust', 'Alliance', 'Conflict', 'Pressure', 'Distance'] as const;
+export const RELATIONSHIPS = ['Trust', 'Alliance', 'Romance', 'Conflict', 'Betrayal', 'Pressure', 'Distance'] as const;
 export type RelationshipState = (typeof RELATIONSHIPS)[number];
 export const KNOWLEDGE = ['Confirmed', 'Unresolved', 'Believes', 'Refuted'] as const;
 export type KnowledgeState = (typeof KNOWLEDGE)[number];
