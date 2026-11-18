@@ -1,5 +1,6 @@
 import { newId, sceneList, sourceFor } from '../model';
 import type { Block, DocumentModel, Project, Snapshot, SourceRef } from '../model';
+import { scriptPages } from './pages';
 
 export const CATALOGUE_CATEGORIES = [
   'Cast', 'Extras', 'Prop', 'Wardrobe', 'Hair and make-up', 'Set dressing', 'Equipment', 'Vehicle',
@@ -16,20 +17,49 @@ export interface ProductionScene extends SourcedRecord {
   number: string;
   heading: string;
   status: 'active' | 'omitted';
+  /** Length in page eighths, measured from the issued script's page layout. */
+  eighths?: number;
+  /** The set or location the scene heading names, linked by the script breakdown. */
+  locationId?: string;
 }
 
+export const PERSON_STATUSES = ['Confirmed', 'Pencilled', 'Offer out', 'To cast'] as const;
+export type PersonStatus = (typeof PERSON_STATUSES)[number];
+
 export interface Person extends SourcedRecord {
+  /** For cast, the character; for crew, the person's name. */
   name: string;
   type: 'Cast' | 'Crew';
+  /** For cast, the artist playing the character; for crew, the job title. */
   role: string;
   unavailable: string[];
   holdDates?: string[];
+  /** Project asset holding this person's photo. */
+  photoAssetId?: string;
+  department?: string;
+  email?: string;
+  phone?: string;
+  agent?: string;
+  status?: PersonStatus;
+  notes?: string;
+  /** The character cue this cast member was matched to in the script breakdown. */
+  scriptName?: string;
+  /** The character no longer speaks in the active release; kept so manual details are not lost. */
+  notInScript?: boolean;
 }
 
 export interface Location extends SourcedRecord {
   name: string;
   address: string;
   notes: string;
+  /** Recce photos, as project asset IDs. */
+  photoAssetIds?: string[];
+  contact?: string;
+  phone?: string;
+  parking?: string;
+  /** The normalised set name from scene headings this location was matched to. */
+  scriptSet?: string;
+  notInScript?: boolean;
 }
 
 export interface CatalogueItem extends SourcedRecord {
@@ -44,6 +74,8 @@ export interface BreakdownTag extends SourcedRecord {
   itemId: string;
   notes: string;
   reviewed?: boolean;
+  /** Added by the script breakdown (a speaking role), so a re-sync may retire it. */
+  auto?: boolean;
 }
 
 export interface ProductionShot extends SourcedRecord {
@@ -90,6 +122,9 @@ export interface BudgetLine extends SourcedRecord {
   quantity: number;
   unitCostPence: number;
   actualPence: number;
+  /** Multiplier for the rate, such as days or weeks (planned = quantity × rate × units). */
+  units?: number;
+  unitLabel?: string;
 }
 
 export interface CallSheetScene {
@@ -160,6 +195,10 @@ export interface ProductionPlan {
   callSheets: CallSheet[];
   deliveries: CallSheetDelivery[];
   outputs: ProductionOutput[];
+  /** When the cast, locations and page counts were last built from the issued script. */
+  breakdownSyncedAt?: string;
+  /** Contingency as a percentage of the budget subtotal. */
+  contingencyPercent?: number;
 }
 
 interface ProductionModule {
@@ -270,11 +309,13 @@ export function startProduction(project: Project, documentId: string, snapshotId
   const snapshot = releasedScript(project, documentId, snapshotId);
   if (!snapshot) throw new Error('Production requires an issued snapshot of this script.');
   const source = sourceFor(project, snapshot.document);
+  const pages = scriptPages(snapshot.document).eighths;
   return setProductionPlan(project, {
     documentId, activeSnapshotId: snapshot.id,
-    scenes: scriptTargets(project, snapshot.document).map(target => ({
-      id: target.id, heading: target.heading, number: target.number, source: target.source, status: 'active'
-    })),
+    scenes: scriptTargets(project, snapshot.document).map<ProductionScene>(target => {
+      const eighths = pages.get(target.id);
+      return { id: target.id, heading: target.heading, number: target.number, source: target.source, status: 'active', ...(eighths ? { eighths } : {}) };
+    }),
     catalogue: [], tags: [], people: [], locations: [], shots: [], lookbook: [],
     units: [{ id: newId(), name: 'Unit A', source }],
     days: [], strips: [], budget: [], callSheets: [], deliveries: [], outputs: []
@@ -371,10 +412,17 @@ export function applyRevision(
 
   const oldIds = new Set(plan.scenes.map(scene => scene.id));
   const byTarget = new Map([...chosen.entries()].map(([id, target]) => [target.id, id]));
-  const active = preview.incoming.map<ProductionScene>(target => ({
-    id: byTarget.get(target.id) ?? (oldIds.has(target.id) ? newId() : target.id),
-    heading: target.heading, number: target.number, source: target.source, status: 'active'
-  }));
+  const pages = scriptPages(preview.snapshot.document).eighths;
+  const active = preview.incoming.map<ProductionScene>(target => {
+    const kept = byTarget.get(target.id);
+    const locationId = kept ? plan.scenes.find(scene => scene.id === kept)?.locationId : undefined;
+    const eighths = pages.get(target.id);
+    return {
+      id: kept ?? (oldIds.has(target.id) ? newId() : target.id),
+      heading: target.heading, number: target.number, source: target.source, status: 'active',
+      ...(eighths ? { eighths } : {}), ...(locationId ? { locationId } : {})
+    };
+  });
   const omitted = plan.scenes
     .filter(scene => !chosen.has(scene.id))
     .map<ProductionScene>(scene => ({ ...scene, status: 'omitted' }));
@@ -515,8 +563,12 @@ export function dayOutOfDays(plan: ProductionPlan): { dates: string[]; rows: Arr
   return { dates, rows };
 }
 
+export function linePlanned(line: BudgetLine): number {
+  return Math.round(line.quantity * line.unitCostPence * (line.units ?? 1));
+}
+
 export function budgetTotals(plan: Pick<ProductionPlan, 'budget'>): { planned: number; actual: number; variance: number } {
-  const planned = plan.budget.reduce((sum, line) => sum + Math.round(line.quantity * line.unitCostPence), 0);
+  const planned = plan.budget.reduce((sum, line) => sum + linePlanned(line), 0);
   const actual = plan.budget.reduce((sum, line) => sum + line.actualPence, 0);
   return { planned, actual, variance: planned - actual };
 }
@@ -550,7 +602,7 @@ function buildCallSheet(project: Project, plan: ProductionPlan, dayId: string, i
   const ordered = orderedDays(plan);
   const scenes = strips.map((strip): CallSheetScene => {
     const scene = plan.scenes.find(item => item.id === strip.sceneId)!;
-    const location = plan.locations.find(item => item.id === strip.locationId);
+    const location = plan.locations.find(item => item.id === (strip.locationId ?? scene.locationId));
     const cast = sceneCast(plan, scene.id);
     for (const person of cast) {
       if (!firstByCast.has(person.id)) firstByCast.set(person.id, strip.startTime);
@@ -638,19 +690,6 @@ export function scheduleCsv(project: Project, plan: ProductionPlan): string {
         sceneCast(plan, scene.id).map(person => person.name).join(', '), snapshot?.document.revisionId ?? ''
       ];
     }))
-  ]);
-}
-
-export function budgetCsv(project: Project, plan: ProductionPlan): string {
-  const totals = budgetTotals(plan);
-  const source = activeProductionSource(project, plan);
-  return reportCsv([
-    ['Category', 'Item', 'Quantity', 'Rate GBP', 'Planned GBP', 'Actual GBP', 'Variance GBP', 'Source revision'],
-    ...plan.budget.map(line => {
-      const planned = Math.round(line.quantity * line.unitCostPence);
-      return [line.category, line.name, line.quantity, line.unitCostPence / 100, planned / 100, line.actualPence / 100, (planned - line.actualPence) / 100, line.source.revisionId];
-    }),
-    ['', 'TOTAL', '', '', totals.planned / 100, totals.actual / 100, totals.variance / 100, source.revisionId]
   ]);
 }
 
@@ -790,7 +829,8 @@ export function placeStrip(
   const others = dayStrips(plan, dayId).filter(strip => strip.id !== existing?.id);
   const moved: Strip = existing ? { ...existing, dayId } : {
     id: newId(), sceneId: scene.id, dayId, startTime: '', minutes: defaultStripMinutes(eighths),
-    eighths: Math.max(0, Math.round(eighths)), source: scene.source
+    eighths: Math.max(0, Math.round(eighths)), source: scene.source,
+    ...(scene.locationId && plan.locations.some(location => location.id === scene.locationId) ? { locationId: scene.locationId } : {})
   };
   const position = Math.max(0, Math.min(Math.round(index), others.length));
   runBackToBack([...others.slice(0, position), moved, ...others.slice(position)], dayAnchor(plan, day), day, retimed);

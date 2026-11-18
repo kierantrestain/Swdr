@@ -1,10 +1,13 @@
+import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { newId } from '../model';
 import { Dialog, Empty, SourceButton, displayDate } from './components';
 import type { PaneProps } from './components';
-import { CATALOGUE_CATEGORIES, castNumbers, eighthsLabel, estimateEighths, isShootDate, orderedDays, scriptTargets, settingLabel } from './model';
-import type { BreakdownTag, CatalogueCategory, CatalogueItem, Location, Person, ProductionScene } from './model';
+import { CATALOGUE_CATEGORIES, castNumbers, eighthsLabel, estimateEighths, orderedDays, scriptTargets, settingLabel } from './model';
+import type { BreakdownTag, CatalogueCategory, CatalogueItem, ProductionScene } from './model';
+import { Locations } from './Locations';
+import { People } from './People';
 import { ScriptChangeBadge, ScriptChangeBanner, ScriptChangeDialog } from './ScriptChanges';
 
 type Section = 'Scene tags' | 'Catalogue' | 'Cast & crew' | 'Locations';
@@ -23,15 +26,10 @@ function itemLabel(item: CatalogueItem | undefined, ids: Map<string, number>): s
   return id ? `${id}. ${item.name}` : item.name;
 }
 
-function dateList(value: string): string[] {
-  return [...new Set(value.split(/[\s,]+/).filter(Boolean))].sort();
-}
-
-export function Breakdown({ plan, project, snapshot, source, readOnly, update, onOpenSource, changes, reviewScript }: PaneProps) {
+export function Breakdown(pane: PaneProps) {
+  const { plan, project, snapshot, source, readOnly, update, onOpenSource, changes, reviewScript, syncScript } = pane;
   const [section, setSection] = useState<Section>('Scene tags');
   const [sceneId, setSceneId] = useState('');
-  const [editingPerson, setEditingPerson] = useState<Person>();
-  const [editingLocation, setEditingLocation] = useState<Location>();
   const [reviewing, setReviewing] = useState<BreakdownTag>();
   const [error, setError] = useState('');
   const [changeFocus, setChangeFocus] = useState<string>();
@@ -47,46 +45,6 @@ export function Breakdown({ plan, project, snapshot, source, readOnly, update, o
     const index = days.findIndex(day => day.id === strip.dayId);
     return index < 0 ? [] : [`Day ${index + 1} · ${displayDate(days[index].date)}`];
   }) : [];
-
-  function addPerson(event: FormEvent<HTMLFormElement>, editing?: Person) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const unavailable = dateList(field(form, 'unavailable'));
-    const holdDates = dateList(field(form, 'hold'));
-    if (![...unavailable, ...holdDates].every(isShootDate)) return setError('Enter dates as YYYY-MM-DD separated by spaces or commas.');
-    const name = field(form, 'name');
-    const type = field(form, 'type') === 'Cast' ? 'Cast' : 'Crew';
-    if (!name) return setError('Enter a name.');
-    if (editing?.type === 'Cast' && type === 'Crew' && plan.catalogue.some(item => item.personId === editing.id)) {
-      return setError('Review this person’s cast items before changing their role type.');
-    }
-    const person: Person = { id: editing?.id ?? newId(), name, type, role: field(form, 'role'), unavailable, holdDates, source };
-    if (update(current => ({
-      ...current,
-      people: editing ? current.people.map(item => item.id === person.id ? person : item) : [...current.people, person]
-    }), 'Personnel saved.')) {
-      event.currentTarget.reset();
-      setEditingPerson(undefined);
-      setError('');
-    }
-  }
-
-  function addLocation(event: FormEvent<HTMLFormElement>, editing?: Location) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const location: Location = {
-      id: editing?.id ?? newId(), name: field(form, 'name'), address: field(form, 'address'), notes: field(form, 'notes'), source
-    };
-    if (!location.name) return setError('Enter a location name.');
-    if (update(current => ({
-      ...current,
-      locations: editing ? current.locations.map(item => item.id === location.id ? location : item) : [...current.locations, location]
-    }), 'Location saved.')) {
-      event.currentTarget.reset();
-      setEditingLocation(undefined);
-      setError('');
-    }
-  }
 
   function attachTag(event: FormEvent<HTMLFormElement>, activeScene: ProductionScene, editing?: BreakdownTag) {
     event.preventDefault();
@@ -110,11 +68,16 @@ export function Breakdown({ plan, project, snapshot, source, readOnly, update, o
   }
 
   return <>
-    <div className="production-actions production-subnav" aria-label="Breakdown areas">
-      {(['Scene tags', 'Catalogue', 'Cast & crew', 'Locations'] as const).map(label => <button
-        type="button" className="production-button" key={label} aria-pressed={section === label}
-        onClick={() => { setSection(label); setError(''); }}
-      >{label}</button>)}
+    <div className="production-subnav-bar">
+      <div className="production-actions production-subnav" aria-label="Breakdown areas">
+        {(['Scene tags', 'Catalogue', 'Cast & crew', 'Locations'] as const).map(label => <button
+          type="button" className="production-button" key={label} aria-pressed={section === label}
+          onClick={() => { setSection(label); setError(''); }}
+        >{label}{label === 'Cast & crew' ? <span className="production-count">{plan.people.length}</span> : label === 'Locations' ? <span className="production-count">{plan.locations.length}</span> : null}</button>)}
+      </div>
+      {!readOnly && syncScript && <button type="button" className="production-button" onClick={syncScript}
+        title={plan.breakdownSyncedAt ? `Last built ${plan.breakdownSyncedAt.slice(0, 16).replace('T', ' ')}` : undefined}>
+        <RefreshCw size={16} aria-hidden="true" /> {plan.breakdownSyncedAt ? 'Sync from script' : 'Build breakdown from script'}</button>}
     </div>
     {section === 'Scene tags' && <>
       <ScriptChangeBanner changes={changes} release={snapshot.label} onOpen={() => setChangeFocus('')} />
@@ -214,57 +177,7 @@ export function Breakdown({ plan, project, snapshot, source, readOnly, update, o
         </form>
       </section>}
     </div>}
-    {section === 'Cast & crew' && <div className="production-two-columns">
-      <section className="production-card">
-        <h3>Cast & crew</h3>
-        {!plan.people.length && <p className="production-muted">Add a cast or crew member to build the production directory.</p>}
-        {plan.people.map(person => <div className="production-list-row" key={person.id}>
-          <div><strong>{castIds.has(person.id) && <span className="production-cast-id">{castIds.get(person.id)}</span>}{person.name}</strong><small>{person.type}{person.role && ` · ${person.role}`}</small>
-            {person.unavailable.length > 0 && <small>Unavailable {person.unavailable.join(', ')}</small>}
-          </div>
-          {!readOnly && <button className="production-link" type="button" onClick={() => { setEditingPerson(person); setError(''); }} aria-label={`Edit ${person.name}`}>Edit</button>}
-        </div>)}
-      </section>
-      {!readOnly && <section className="production-card">
-        <h3>{editingPerson ? 'Edit person' : 'Add person'}</h3>
-        <form key={editingPerson?.id ?? 'new-person'} onSubmit={event => addPerson(event, editingPerson)} className="production-form">
-          <label>Name<input name="name" required defaultValue={editingPerson?.name} /></label>
-          <div className="production-form-row">
-            <label>Type<select name="type" defaultValue={editingPerson?.type}><option>Cast</option><option>Crew</option></select></label>
-            <label>Role<input name="role" defaultValue={editingPerson?.role} /></label>
-          </div>
-          <label>Unavailable dates<input name="unavailable" placeholder="YYYY-MM-DD, YYYY-MM-DD" defaultValue={editingPerson?.unavailable.join(', ')} /></label>
-          <label>Paid hold dates<input name="hold" placeholder="YYYY-MM-DD" defaultValue={editingPerson?.holdDates?.join(', ')} /></label>
-          {error && <p className="production-form-error" role="alert">{error}</p>}
-          <div className="production-actions">
-            <button type="submit" className="production-button production-primary">{editingPerson ? 'Save person' : 'Add person'}</button>
-            {editingPerson && <button type="button" className="production-button" onClick={() => { setEditingPerson(undefined); setError(''); }}>Cancel edit</button>}
-          </div>
-        </form>
-      </section>}
-    </div>}
-    {section === 'Locations' && <div className="production-two-columns">
-      <section className="production-card">
-        <h3>Locations</h3>
-        {!plan.locations.length && <p className="production-muted">Add a location to use on the stripboard.</p>}
-        {plan.locations.map(location => <div className="production-list-row" key={location.id}>
-          <div><strong>{location.name}</strong><small>{location.address}</small>{location.notes && <small>{location.notes}</small>}</div>
-          {!readOnly && <button className="production-link" type="button" onClick={() => { setEditingLocation(location); setError(''); }} aria-label={`Edit ${location.name}`}>Edit</button>}
-        </div>)}
-      </section>
-      {!readOnly && <section className="production-card">
-        <h3>{editingLocation ? 'Edit location' : 'Add location'}</h3>
-        <form key={editingLocation?.id ?? 'new-location'} className="production-form" onSubmit={event => addLocation(event, editingLocation)}>
-          <label>Location name<input name="name" defaultValue={editingLocation?.name} required /></label>
-          <label>Address<input name="address" defaultValue={editingLocation?.address} /></label>
-          <label>Notes<textarea name="notes" rows={2} defaultValue={editingLocation?.notes} /></label>
-          {error && <p className="production-form-error" role="alert">{error}</p>}
-          <div className="production-actions">
-            <button type="submit" className="production-button production-primary">{editingLocation ? 'Save location' : 'Add location'}</button>
-            {editingLocation && <button type="button" className="production-button" onClick={() => { setEditingLocation(undefined); setError(''); }}>Cancel edit</button>}
-          </div>
-        </form>
-      </section>}
-    </div>}
+    {section === 'Cast & crew' && <People {...pane} />}
+    {section === 'Locations' && <Locations {...pane} />}
   </>;
 }
