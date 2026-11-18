@@ -7,7 +7,7 @@ function offlineShell(): Plugin {
     name: 'swdr-offline-shell',
     apply: 'build',
     generateBundle(_options, bundle) {
-      const assets = Object.keys(bundle).filter(name => /\.(?:css|js)$/.test(name)).sort();
+      const assets = Object.keys(bundle).filter(name => /\.(?:css|js|woff2)$/.test(name)).sort();
       const version = createHash('sha256').update(assets.join('\n')).digest('hex').slice(0, 16);
       this.emitFile({
         type: 'asset',
