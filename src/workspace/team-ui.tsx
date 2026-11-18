@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { ArrowLeft, Clock3, FileText, Home, Link, LockKeyhole, MessageCircle, Users } from 'lucide-react';
+import { ArrowLeft, Clock3, FileText, Home, Link, MessageCircle, Users } from 'lucide-react';
 import { sourceFor } from '../model';
 import type { DocumentModel, Project, SourceRef, WorkspaceViewProps } from '../model';
 import { issueDocument, resolveSource } from './project';
+import { accountApi, clearInviteToken, readInviteToken } from './account-api';
+import { AccountMenu, InvitationPrompt, TeamAuthPage } from './account-ui';
+import type { AuthResult } from './account-ui';
 import { errorMessage, TeamRequestError, teamRequest, useTeamDraft } from './team-client';
 import type { TeamLocalStatus, TeamServerStatus } from './team-client';
-import type { LineChange, ReviewDocument, TeamGrant, TeamListing, TeamNote, TeamProject, TeamRole } from './team-contract';
+import type {
+  LineChange, ReviewDocument, TeamAccount, TeamConfig, TeamGrant, TeamInvitePreview, TeamListing, TeamNote, TeamProject
+} from './team-contract';
+import { TeamSharingPanel } from './team-sharing';
 import './team.css';
 
 export interface TeamRenderProps extends WorkspaceViewProps {
@@ -24,7 +30,6 @@ interface TeamWorkspaceProps {
 }
 
 type Panel = 'people' | 'feedback' | 'history' | 'review';
-type MemberRole = Exclude<TeamRole, 'owner'>;
 
 const localLabels: Record<TeamLocalStatus, string> = {
   saved: 'Saved locally', saving: 'Saving locally', error: 'Local save failed'
@@ -34,53 +39,6 @@ const serverLabels: Record<TeamServerStatus, string> = {
   synced: 'Team synced', pending: 'Sync pending', syncing: 'Syncing', offline: 'Offline',
   conflict: 'Edit conflict', denied: 'Access changed', error: 'Sync failed'
 };
-
-function LoginForm({ onLogin, disabled }: { onLogin: (email: string, key: string) => void; disabled: boolean }) {
-  const [email, setEmail] = useState('');
-  const [key, setKey] = useState('');
-  return <form className="team-form" onSubmit={event => {
-    event.preventDefault();
-    onLogin(email, key);
-  }}>
-    <label>Email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} /></label>
-    <label>Team access key<input type="password" autoComplete="current-password" required value={key} onChange={event => setKey(event.target.value)} /></label>
-    <button type="submit" disabled={disabled}>Sign in</button>
-  </form>;
-}
-
-function AccessPanel({ project, grants, onGrant, disabled }: {
-  project: Project;
-  grants: TeamGrant[];
-  onGrant: (email: string, role: MemberRole | null, episodeIds: string[] | null) => void;
-  disabled: boolean;
-}) {
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<MemberRole>('editor');
-  const [episodeId, setEpisodeId] = useState('');
-  return <section aria-label="Project access" className="team-panel">
-    <h3>Project access</h3>
-    <ul className="team-list">
-      {grants.map(grant => <li key={grant.email}>
-        <span>{grant.email}<small>{grant.role} · {grant.episodeIds?.map(id => project.episodes.find(episode => episode.id === id)?.title ?? 'Episode').join(', ') ?? 'All episodes'}</small></span>
-        {grant.role !== 'owner' && <button disabled={disabled} onClick={() => onGrant(grant.email, null, null)}>Revoke</button>}
-      </li>)}
-    </ul>
-    <form className="team-inline-form" onSubmit={event => {
-      event.preventDefault();
-      onGrant(email, role, episodeId ? [episodeId] : null);
-    }}>
-      <label>Member email<input type="email" placeholder="writer@example.com" value={email} onChange={event => setEmail(event.target.value)} required /></label>
-      <label>Role<select value={role} onChange={event => setRole(event.target.value as MemberRole)}>
-        <option value="editor">Editor</option><option value="reviewer">Reviewer</option><option value="viewer">Viewer</option>
-      </select></label>
-      <label>Episode scope<select value={episodeId} onChange={event => setEpisodeId(event.target.value)}>
-        <option value="">Whole project</option>
-        {project.episodes.map(episode => <option value={episode.id} key={episode.id}>S{episode.season} · E{episode.number} · {episode.title}</option>)}
-      </select></label>
-      <button type="submit" disabled={disabled}>Save access</button>
-    </form>
-  </section>;
-}
 
 function LinePicker({ document, value, onChange }: { document: DocumentModel; value: string; onChange: (id: string) => void }) {
   return <label>Script line<select value={value} onChange={event => onChange(event.target.value)}>
@@ -153,7 +111,12 @@ function IssuedLinkPanel({ project, onIssue, onShare, onRevoke, canShare, disabl
 export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWorkspaceProps) {
   const draft = useTeamDraft();
   const { state, resume, forget } = draft;
-  const [email, setEmail] = useState<string>();
+  const [account, setAccount] = useState<TeamAccount>();
+  const email = account?.email;
+  const [config, setConfig] = useState<TeamConfig>();
+  const [inviteToken, setInviteToken] = useState(readInviteToken);
+  const [invite, setInvite] = useState<TeamInvitePreview>();
+  const [inviteError, setInviteError] = useState<string>();
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState<string>();
   const [projects, setProjects] = useState<TeamListing[]>([]);
@@ -161,7 +124,6 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
   const [documentId, setDocumentId] = useState('');
   const [source, setSource] = useState<SourceRef>();
   const [panel, setPanel] = useState<Panel>();
-  const [grants, setGrants] = useState<TeamGrant[]>([]);
   const [notes, setNotes] = useState<TeamNote[]>([]);
   const [history, setHistory] = useState<LineChange[]>([]);
   const [blockId, setBlockId] = useState('');
@@ -169,10 +131,16 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
   useEffect(() => {
     let cancelled = false;
     const start = async () => {
+      void accountApi.config().then(value => { if (!cancelled) setConfig(value); }, () => undefined);
+      const token = readInviteToken();
+      if (token) {
+        void accountApi.previewInvite(token).then(value => { if (!cancelled) setInvite(value); },
+          error => { if (!cancelled) setInviteError(errorMessage(error)); });
+      }
       try {
-        const session = await teamRequest<{ email: string }>('session');
+        const session = await accountApi.session();
         if (cancelled) return;
-        setEmail(session.email);
+        setAccount(session);
         const list = await teamRequest<TeamListing[]>('list');
         if (cancelled) return;
         setProjects(list);
@@ -183,7 +151,7 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
           await forget();
         } else if (cause instanceof TeamRequestError && cause.status === 0) {
           const cachedEmail = await resume().catch(() => undefined);
-          if (!cancelled) setEmail(cachedEmail);
+          if (!cancelled && cachedEmail) setAccount({ email: cachedEmail, name: '', method: 'password', hasPassword: true });
         } else {
           setMessage(errorMessage(cause));
         }
@@ -208,14 +176,44 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
     }
   };
 
-  const onLogin = (loginEmail: string, key: string) => {
-    void handle(async () => {
-      const session = await teamRequest<{ email: string }>('login', { email: loginEmail, key });
-      await forget();
-      setEmail(session.email);
-      setProjects(await teamRequest<TeamListing[]>('list'));
-    });
+  const finishInvite = () => {
+    clearInviteToken();
+    setInviteToken(undefined);
+    setInvite(undefined);
+    setInviteError(undefined);
   };
+
+  const onSignedIn = async (result: AuthResult) => {
+    await forget();
+    setAccount(result.account);
+    setMessage(undefined);
+    if (result.inviteUsed) finishInvite();
+    setProjects(await teamRequest<TeamListing[]>('list').catch(() => []));
+    if (result.projectId) {
+      selectDocument('');
+      await draft.open(result.projectId, result.account.email).catch(error => setMessage(errorMessage(error)));
+    }
+  };
+
+  const acceptInvite = () => void handle(async () => {
+    if (!inviteToken || !account) return;
+    const accepted = await accountApi.acceptInvite(inviteToken);
+    finishInvite();
+    setProjects(await teamRequest<TeamListing[]>('list'));
+    if (accepted.projectId) {
+      selectDocument('');
+      setPanel(undefined);
+      await draft.open(accepted.projectId, account.email);
+    }
+  });
+
+  const signOut = () => void handle(async () => {
+    if (state?.draft || state?.pending || state?.conflict) throw new Error('Sync or recover pending edits before signing out.');
+    await accountApi.signOut();
+    await forget();
+    setAccount(undefined);
+    setProjects([]);
+  });
 
   const selectDocument = useCallback((next: string) => {
     setDocumentId(next);
@@ -286,12 +284,7 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
   const editor = grant?.role === 'owner' || grant?.role === 'editor';
   const canEditDocument = editor && !state?.conflict && document?.revisionId === current?.revisionId;
   const connected = draft.serverStatus === 'synced';
-  const showPanel = (next: Panel) => {
-    setPanel(panel === next ? undefined : next);
-    if (next === 'people' && project) {
-      void handle(async () => setGrants(await teamRequest<TeamGrant[]>('grants', { projectId: project.id })));
-    }
-  };
+  const showPanel = (next: Panel) => setPanel(panel === next ? undefined : next);
 
   return <div className="team-workspace">
     <header className="team-toolbar">
@@ -301,21 +294,15 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
         <span role="status" className="team-save-status">{localLabels[draft.localStatus]} · {serverLabels[draft.serverStatus]}</span>
         <button onClick={() => { void draft.flush(); }} disabled={draft.serverStatus === 'syncing' || draft.serverStatus === 'conflict'}>Sync</button>
       </>}
-      {email && <button onClick={() => { void handle(async () => {
-        if (state?.draft || state?.pending || state?.conflict) throw new Error('Sync or recover pending edits before signing out.');
-        await teamRequest('logout');
-        await forget();
-        setEmail(undefined);
-        setProjects([]);
-      }); }}>Sign out</button>}
+      {account && <span className="team-ax team-account"><AccountMenu account={account} onSignOut={signOut} onAccountChange={setAccount} /></span>}
     </header>
     <div className="team-body">
       {(message || draft.message) && <p role="status" className="team-message">{message || draft.message}</p>}
-      {!email && <section className="team-auth">
-        <LockKeyhole size={24} />
-        <h1>Private team workspace</h1>
-        {busy ? <p>Opening workspace…</p> : <LoginForm onLogin={onLogin} disabled={busy} />}
-      </section>}
+      {!email && (busy ? <p role="status" className="team-opening">Opening workspace…</p>
+        : <TeamAuthPage config={config} invite={invite} inviteToken={inviteToken} inviteError={inviteError} onSignedIn={onSignedIn} />)}
+      {account && inviteToken && invite && <InvitationPrompt preview={invite} account={account} busy={busy}
+        onAccept={acceptInvite} onDismiss={finishInvite} onSignOut={signOut} />}
+      {account && inviteToken && inviteError && !invite && <p role="status" className="team-message">{inviteError}</p>}
       {email && !project && <section className="team-library">
         <h1>Team projects</h1>
         <p>{email}</p>
@@ -345,7 +332,7 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
           </select></label>
           <button onClick={() => showPanel('feedback')} aria-expanded={panel === 'feedback'}><MessageCircle size={15}/> Feedback</button>
           <button onClick={() => showPanel('history')} aria-expanded={panel === 'history'}><Clock3 size={15}/> Line history</button>
-          {grant.role === 'owner' && <button onClick={() => showPanel('people')} aria-expanded={panel === 'people'}><Users size={15}/> Access</button>}
+          {grant.role === 'owner' && <button onClick={() => showPanel('people')} aria-expanded={panel === 'people'}><Users size={15}/> Team &amp; sharing</button>}
           {editor && <button onClick={() => showPanel('review')} aria-expanded={panel === 'review'}><Link size={15}/> Issue &amp; review</button>}
         </div>
         {state?.conflict && <section className="team-panel" aria-label="Edit conflict">
@@ -356,9 +343,7 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
             <button onClick={() => draft.resolve('server')}>Discard local edit and use team draft</button>
           </div>
         </section>}
-        {panel === 'people' && <AccessPanel project={project} grants={grants} disabled={busy || !connected} onGrant={(memberEmail, role, episodeIds) => {
-          void handle(async () => setGrants(await teamRequest<TeamGrant[]>('grant', { projectId, email: memberEmail, role, episodeIds })));
-        }} />}
+        {panel === 'people' && <TeamSharingPanel key={`sharing-${project.id}`} project={state?.head.project ?? project} ownEmail={grant.email} disabled={!connected} />}
         {panel === 'feedback' && document && <section className="team-panel" aria-label="Script feedback">
           <h3>Feedback</h3>
           <LinePicker document={document} value={blockId} onChange={setBlockId} />

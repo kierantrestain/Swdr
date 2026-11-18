@@ -83,3 +83,43 @@
   .team-notes li { flex-wrap: wrap; }
   .team-notes li > div { flex-basis: 100%; }
 }
+
+/*
+ * Astryx islands. The app stylesheet styles bare elements (button, input, h1 …) outside any cascade
+ * layer, which would beat Astryx's layered component styles. Inside .team-ax (and Astryx overlays)
+ * those element rules are rolled back to the layered Astryx styles.
+ */
+.team-ax.team-ax.team-ax :is(button, input, textarea, select, a, h1, h2, h3, h4, p, label, table, th, td, dialog),
+dialog.team-ax-overlay.team-ax-overlay :is(button, input, textarea, select, a, h1, h2, h3, h4, p, label, table, th, td) {
+  all: revert-layer;
+}
+.team-ax-form { display: contents; }
+.team-opening { text-align: center; color: var(--muted, #6e6258); margin: 12dvh auto; }
+
+.team-auth-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 440px);
+  gap: clamp(24px, 5vw, 72px);
+  align-items: center;
+  max-width: 1080px;
+  margin: clamp(16px, 6dvh, 72px) auto;
+  padding-inline: 16px;
+}
+.team-auth-intro { max-width: 520px; }
+@media (max-width: 820px) {
+  .team-auth-page { grid-template-columns: minmax(0, 1fr); }
+  .team-auth-card { order: -1; }
+}
+
+.team-account { display: inline-flex; }
+.team-invite-prompt { display: block; max-width: 840px; margin: 0 auto 1rem; }
+.team-sharing {
+  display: block;
+  margin-bottom: .8rem;
+  padding: 1.35rem;
+  border: 1px solid var(--line, #ded8ce);
+  border-radius: 10px;
+  background: var(--surface, #fffdf8);
+  overflow-x: auto;
+}
+.team-toolbar .team-account { border-radius: 8px; background: var(--paper, #fffdf9); }

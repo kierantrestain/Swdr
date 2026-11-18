@@ -77,4 +77,54 @@ CREATE TABLE IF NOT EXISTS swdr_team_reviews (
   revoked_at timestamptz
 );
 
+-- Accounts, invitations and sign-in throttling (added for self-service team accounts).
+-- Every statement is idempotent so the whole file can be re-applied to an existing database.
+
+ALTER TABLE swdr_team_sessions ADD COLUMN IF NOT EXISTS method text NOT NULL DEFAULT 'access-key';
+ALTER TABLE swdr_team_sessions ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+CREATE INDEX IF NOT EXISTS swdr_team_sessions_email ON swdr_team_sessions (email);
+CREATE INDEX IF NOT EXISTS swdr_team_sessions_expiry ON swdr_team_sessions (expires_at);
+
+ALTER TABLE swdr_team_grants ADD COLUMN IF NOT EXISTS added_at timestamptz DEFAULT now();
+CREATE INDEX IF NOT EXISTS swdr_team_grants_email ON swdr_team_grants (email);
+
+CREATE TABLE IF NOT EXISTS swdr_team_users (
+  email text PRIMARY KEY CHECK (email = lower(email)),
+  name text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_active_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS swdr_team_credentials (
+  email text PRIMARY KEY REFERENCES swdr_team_users (email) ON DELETE CASCADE,
+  scheme text NOT NULL,
+  salt bytea NOT NULL,
+  hash bytea NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS swdr_team_invitations (
+  id text PRIMARY KEY,
+  digest text NOT NULL UNIQUE,
+  project_id text REFERENCES swdr_team_projects (id),
+  email text NOT NULL CHECK (email = lower(email)),
+  role text CHECK (role IN ('owner', 'editor', 'reviewer', 'viewer')),
+  episode_ids text[],
+  invited_by text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  accepted_at timestamptz,
+  accepted_by text,
+  revoked_at timestamptz,
+  CHECK ((project_id IS NULL) = (role IS NULL))
+);
+CREATE INDEX IF NOT EXISTS swdr_team_invitations_project ON swdr_team_invitations (project_id, email);
+
+CREATE TABLE IF NOT EXISTS swdr_team_login_attempts (
+  scope text PRIMARY KEY,
+  failures integer NOT NULL DEFAULT 0,
+  window_started_at timestamptz NOT NULL DEFAULT now(),
+  locked_until timestamptz
+);
+
 COMMIT;
