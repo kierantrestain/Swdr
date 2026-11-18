@@ -1,17 +1,24 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { DocumentModel, Project } from '../src/model.js';
 import type {
-  LineChange, ReviewDocument, TeamGrant, TeamListing, TeamNote, TeamProject, TeamRole
+  LineChange, ReviewDocument, TeamAccount, TeamConfig, TeamGrant, TeamListing, TeamNote, TeamProject, TeamRole,
+  TeamSignedIn, TeamSignupMode
 } from '../src/workspace/team-contract.js';
+import {
+  ACCESS_KEY_SESSION_SECONDS, assertNotThrottled, clearAttempts, hashPassword, newToken, PASSWORD_SESSION_SECONDS,
+  recordAttempt, requirePassword, sessionCookie, signInRules, signUpRules, TOKEN, tokenDigest, verifyPassword
+} from './team-auth.js';
+import {
+  acceptInvitation, createInvitation, episodeScope, listInvitations, listMembers, lockInvitation, previewInvitation,
+  reissueInvitation, revokeInvitation, roleField
+} from './team-invitations.js';
 import {
   applyProjection, asObject, canReadEpisode, canWrite, currentBlock, emailField, idField,
   integerField, mergeTeamProjects, preserveSnapshots, TeamFault, textField, toVisibleProject,
   validateProject, visibleDocument
 } from './team-model.js';
 
-const SESSION_HOURS = 12;
-const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const HASH = /^[a-fA-F0-9]{64}$/;
 
 export type TeamAccounts = Map<string, Buffer>;
@@ -40,6 +47,14 @@ export interface TeamResult {
   cookie?: string;
 }
 
+/** Deployment settings and the caller's network address, resolved by the HTTP route. */
+export interface TeamContext {
+  signup: TeamSignupMode;
+  address: string;
+}
+
+const defaultContext: TeamContext = { signup: 'invite', address: 'unknown' };
+
 class TeamConflict extends TeamFault {
   constructor(public readonly latest: TeamProject, public readonly paths: string[]) {
     super(409, 'Another writer changed this draft. Your local edits are still available.');
@@ -50,14 +65,19 @@ export function conflictDetails(error: unknown) {
   return error instanceof TeamConflict ? { latest: error.latest, conflicts: error.paths } : {};
 }
 
+/**
+ * Operator-provisioned access keys (SWDR_TEAM_ACCOUNTS). The variable is optional now that people can
+ * create password accounts; a present but malformed value still fails closed.
+ */
 export function readAccounts(value?: string): TeamAccounts {
+  const accounts: TeamAccounts = new Map();
+  if (value === undefined || !value.trim()) return accounts;
   let configured: Body;
   try {
-    configured = asObject(JSON.parse(value ?? '{}'), 'accounts');
+    configured = asObject(JSON.parse(value), 'accounts');
   } catch {
     throw new TeamFault(503, 'Private team access is not configured.');
   }
-  const accounts: TeamAccounts = new Map();
   for (const [email, digest] of Object.entries(configured)) {
     if (typeof digest !== 'string' || !HASH.test(digest)) {
       throw new TeamFault(503, 'Private team access is not configured.');
@@ -68,24 +88,15 @@ export function readAccounts(value?: string): TeamAccounts {
       throw new TeamFault(503, 'Private team access is not configured.');
     }
   }
-  if (accounts.size === 0) throw new TeamFault(503, 'Private team access is not configured.');
   return accounts;
 }
 
-function keyHash(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
-}
-
-function token(): string {
-  return randomBytes(32).toString('base64url');
-}
-
-function cookie(value: string, maxAge: number): string {
-  return `swdr_session=${value}; Max-Age=${maxAge}; Path=/api/team; Secure; HttpOnly; SameSite=Strict`;
-}
-
+const keyHash = tokenDigest;
+const token = newToken;
+const cookie = sessionCookie;
 const blankDigest = Buffer.alloc(32);
 
+/** Legacy sign-in with an operator-provisioned 256-bit access key. Guessing is infeasible, so it is not throttled. */
 async function signIn(db: Pool, accounts: TeamAccounts, request: Body): Promise<TeamResult> {
   const email = emailField(request.email);
   const key = textField(request.key, 'access key', 256);
@@ -97,18 +108,149 @@ async function signIn(db: Pool, accounts: TeamAccounts, request: Body): Promise<
     "INSERT INTO swdr_team_sessions (digest, email, expires_at) VALUES ($1, $2, now() + interval '12 hours')",
     [keyHash(session), email]
   );
-  return { data: { email }, cookie: cookie(session, SESSION_HOURS * 3600) };
+  return { data: { email }, cookie: cookie(session, ACCESS_KEY_SESSION_SECONDS) };
 }
 
-async function requireEmail(db: Pool, accounts: TeamAccounts, session?: string): Promise<string> {
+async function startPasswordSession(db: Pool | PoolClient, email: string): Promise<string> {
+  const session = token();
+  await db.query(
+    `INSERT INTO swdr_team_sessions (digest, email, expires_at, method)
+     VALUES ($1, $2, now() + make_interval(secs => $3), 'password')`,
+    [keyHash(session), email, PASSWORD_SESSION_SECONDS]
+  );
+  await db.query("DELETE FROM swdr_team_sessions WHERE expires_at < now() - interval '1 day'");
+  return cookie(session, PASSWORD_SESSION_SECONDS);
+}
+
+interface StoredCredential {
+  name: string;
+  scheme: string;
+  salt: Buffer;
+  hash: Buffer;
+}
+
+async function signInWithPassword(db: Pool, request: Body, context: TeamContext): Promise<TeamResult> {
+  const email = emailField(request.email);
+  const password = textField(request.password, 'password', 1024, true);
+  const rules = signInRules(email, context.address);
+  await assertNotThrottled(db, rules);
+  const stored = await db.query<StoredCredential>(
+    `SELECT u.name, c.scheme, c.salt, c.hash FROM swdr_team_credentials c
+     JOIN swdr_team_users u ON u.email = c.email WHERE c.email = $1`,
+    [email]
+  );
+  const credential = stored.rows[0];
+  if (!await verifyPassword(password, credential)) {
+    await recordAttempt(db, rules);
+    throw new TeamFault(401, 'Email or password was not accepted.');
+  }
+  await clearAttempts(db, rules.slice(0, 1));
+  const sessionHeader = await startPasswordSession(db, email);
+  await db.query('UPDATE swdr_team_users SET last_active_at = now() WHERE email = $1', [email]);
+  const account: TeamAccount = { email, name: credential.name, method: 'password', hasPassword: true };
+  return { data: { account } satisfies TeamSignedIn, cookie: sessionHeader };
+}
+
+function nameField(value: unknown): string {
+  const name = textField(value, 'name', 100, true).normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (!name || /\p{Cc}/u.test(name)) throw new TeamFault(400, 'Enter your name.');
+  return name;
+}
+
+async function signUp(pool: Pool, accounts: TeamAccounts, request: Body, context: TeamContext): Promise<TeamResult> {
+  const email = emailField(request.email);
+  const name = nameField(request.name);
+  const password = requirePassword(request.password, email);
+  const invited = request.invite !== undefined && request.invite !== null && request.invite !== '';
+  if (!invited && context.signup !== 'open') {
+    throw new TeamFault(403, 'This workspace is invite-only. Open the invitation link you were sent to create an account.');
+  }
+  const rules = signUpRules(context.address);
+  await assertNotThrottled(pool, rules);
+  await recordAttempt(pool, rules);
+  if (accounts.has(email)) {
+    throw new TeamFault(409, 'This email signs in with a team access key. Use the access key option to sign in.');
+  }
+  // Derive the key before taking locks: scrypt is deliberately slow.
+  const credential = await hashPassword(password);
+  return transaction(pool, async db => {
+    const invitation = invited ? await lockInvitation(db, request.invite) : undefined;
+    if (invitation && invitation.email !== email) {
+      throw new TeamFault(403, `This invitation was sent to ${invitation.email}. Create the account with that email.`);
+    }
+    const created = await db.query(
+      'INSERT INTO swdr_team_users (email, name, last_active_at) VALUES ($1, $2, now()) ON CONFLICT DO NOTHING',
+      [email, name]
+    );
+    if (created.rowCount !== 1) throw new TeamFault(409, 'An account with this email already exists. Sign in instead.');
+    // Grants are keyed by email. A new account must not inherit access left behind by an earlier identity.
+    const leftovers = await db.query('SELECT 1 FROM swdr_team_grants WHERE email = $1 LIMIT 1', [email]);
+    if (leftovers.rows.length) {
+      throw new TeamFault(409, 'This email already has workspace records. Ask the workspace operator to restore the account.');
+    }
+    await db.query(
+      'INSERT INTO swdr_team_credentials (email, scheme, salt, hash) VALUES ($1, $2, $3, $4)',
+      [email, credential.scheme, credential.salt, credential.hash]
+    );
+    const projectId = invitation ? await acceptInvitation(db, invitation, email) : undefined;
+    const sessionHeader = await startPasswordSession(db, email);
+    const account: TeamAccount = { email, name, method: 'password', hasPassword: true };
+    return { data: { account, projectId } satisfies TeamSignedIn, cookie: sessionHeader };
+  });
+}
+
+interface SessionRow {
+  email: string;
+  method?: TeamAccount['method'];
+  name?: string | null;
+  registered?: boolean;
+  has_password?: boolean;
+}
+
+async function requireAccount(db: Pool, accounts: TeamAccounts, session?: string): Promise<TeamAccount> {
   if (!session || !TOKEN.test(session)) throw new TeamFault(401, 'Sign in to the private workspace.');
-  const result = await db.query<{ email: string }>(
-    'SELECT email FROM swdr_team_sessions WHERE digest = $1 AND expires_at > now()',
+  const result = await db.query<SessionRow>(
+    `SELECT s.email, s.method, u.name, u.email IS NOT NULL AS registered, c.email IS NOT NULL AS has_password
+     FROM swdr_team_sessions s
+     LEFT JOIN swdr_team_users u ON u.email = s.email
+     LEFT JOIN swdr_team_credentials c ON c.email = s.email
+     WHERE s.digest = $1 AND s.expires_at > now()`,
     [keyHash(session)]
   );
-  const email = result.rows[0]?.email;
-  if (!email || !accounts.has(email)) throw new TeamFault(401, 'Sign in to the private workspace.');
-  return email;
+  const row = result.rows[0];
+  const method = row?.method ?? 'access-key';
+  // Access-key sessions end when the operator removes the key; password sessions end when the account is deleted.
+  const valid = row && (method === 'password' ? row.has_password === true : accounts.has(row.email));
+  if (!row || !valid) throw new TeamFault(401, 'Sign in to the private workspace.');
+  if (row.registered) {
+    await db.query(
+      `UPDATE swdr_team_users SET last_active_at = now()
+       WHERE email = $1 AND (last_active_at IS NULL OR last_active_at < now() - interval '5 minutes')`,
+      [row.email]
+    );
+  }
+  return { email: row.email, name: row.name ?? '', method, hasPassword: row.has_password === true };
+}
+
+/** Lets someone signed in with an access key add a password, so the operator can later retire the key. */
+async function setPassword(pool: Pool, account: TeamAccount, request: Body): Promise<TeamAccount> {
+  if (account.hasPassword) throw new TeamFault(409, 'This account already has a password.');
+  const password = requirePassword(request.password, account.email);
+  const name = request.name === undefined ? account.name : nameField(request.name);
+  const credential = await hashPassword(password);
+  await transaction(pool, async db => {
+    await db.query(
+      `INSERT INTO swdr_team_users (email, name, last_active_at) VALUES ($1, $2, now())
+       ON CONFLICT (email) DO UPDATE SET name = CASE WHEN EXCLUDED.name = '' THEN swdr_team_users.name ELSE EXCLUDED.name END`,
+      [account.email, name]
+    );
+    const inserted = await db.query(
+      'INSERT INTO swdr_team_credentials (email, scheme, salt, hash) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+      [account.email, credential.scheme, credential.salt, credential.hash]
+    );
+    if (inserted.rowCount !== 1) throw new TeamFault(409, 'This account already has a password.');
+  });
+  return { ...account, name, hasPassword: true };
 }
 
 async function transaction<T>(pool: Pool, run: (db: PoolClient) => Promise<T>): Promise<T> {
@@ -300,41 +442,41 @@ async function saveProject(db: PoolClient, stored: StoredProject, grant: TeamGra
   return result;
 }
 
+/**
+ * Owner action: change a member's role or episode scope, or remove them (role null). New people join through
+ * an invitation link, which proves they hold the address; only operator-provisioned access-key accounts can be
+ * added directly by email.
+ */
 async function setGrant(db: PoolClient, accounts: TeamAccounts, stored: StoredProject, grant: TeamGrant, body: Body) {
   ownerOnly(grant);
   const email = emailField(body.email);
   if (email === grant.email) throw new TeamFault(400, 'The owner cannot revoke their own access.');
   if (body.role === null) {
     await db.query('DELETE FROM swdr_team_grants WHERE project_id = $1 AND email = $2', [stored.body.id, email]);
+    await db.query(
+      `UPDATE swdr_team_invitations SET revoked_at = now()
+       WHERE project_id = $1 AND email = $2 AND accepted_at IS NULL AND revoked_at IS NULL`,
+      [stored.body.id, email]
+    );
     return;
   }
-  if (!accounts.has(email)) throw new TeamFault(400, 'This email has no private workspace account.');
-  if (body.role !== 'editor' && body.role !== 'reviewer' && body.role !== 'viewer') {
-    throw new TeamFault(400, 'Invalid project role.');
-  }
-  let episodes: string[] | null = null;
-  if (body.episodeIds !== null) {
-    if (!Array.isArray(body.episodeIds) || body.episodeIds.length === 0 || body.episodeIds.length > 500) {
-      throw new TeamFault(400, 'Select one or more episodes.');
-    }
-    const episodeIds = new Set(stored.body.episodes.map(episode => episode.id));
-    episodes = [...new Set(body.episodeIds.map(value => idField(value, 'episode ID')))];
-    if (episodes.some(id => !episodeIds.has(id))) throw new TeamFault(400, 'An episode is missing.');
+  const role = roleField(body.role);
+  if (body.episodeIds === undefined) throw new TeamFault(400, 'Select one or more episodes.');
+  const episodes = episodeScope(stored.body, body.episodeIds);
+  const member = await db.query('SELECT 1 FROM swdr_team_grants WHERE project_id = $1 AND email = $2', [stored.body.id, email]);
+  if (!member.rows.length && !accounts.has(email)) {
+    throw new TeamFault(400, 'This email has no private workspace account. Invite them with a link from Team & sharing.');
   }
   await db.query(
     `INSERT INTO swdr_team_grants (project_id, email, role, episode_ids) VALUES ($1, $2, $3, $4)
      ON CONFLICT (project_id, email) DO UPDATE SET role = EXCLUDED.role, episode_ids = EXCLUDED.episode_ids`,
-    [stored.body.id, email, body.role, episodes]
+    [stored.body.id, email, role, role === 'owner' ? null : episodes]
   );
 }
 
-async function listGrants(db: PoolClient, projectId: string, grant: TeamGrant): Promise<TeamGrant[]> {
+async function listGrants(db: PoolClient, projectId: string, grant: TeamGrant) {
   ownerOnly(grant);
-  const result = await db.query<TeamGrant>(
-    'SELECT email, role, episode_ids AS "episodeIds" FROM swdr_team_grants WHERE project_id = $1 ORDER BY email',
-    [projectId]
-  );
-  return result.rows;
+  return listMembers(db, projectId);
 }
 
 function visibleSource(project: Project, grant: TeamGrant, request: Body) {
@@ -474,18 +616,43 @@ async function openReview(db: Pool, request: Body): Promise<ReviewDocument> {
   };
 }
 
-export async function runTeamAction(pool: Pool, accounts: TeamAccounts, request: Body, session?: string): Promise<TeamResult> {
-  if (request.action === 'login') return signIn(pool, accounts, request);
-  if (request.action === 'logout') {
-    if (session && TOKEN.test(session)) await pool.query('DELETE FROM swdr_team_sessions WHERE digest = $1', [keyHash(session)]);
-    return { data: null, cookie: cookie('', 0) };
+export async function runTeamAction(
+  pool: Pool, accounts: TeamAccounts, request: Body, session?: string, context: TeamContext = defaultContext
+): Promise<TeamResult> {
+  switch (request.action) {
+    case 'config':
+      return { data: { signup: context.signup, accessKeys: accounts.size > 0 } satisfies TeamConfig };
+    case 'login':
+      return signIn(pool, accounts, request);
+    case 'sign-in':
+      return signInWithPassword(pool, request, context);
+    case 'sign-up':
+      return signUp(pool, accounts, request, context);
+    case 'invitation':
+      return { data: await previewInvitation(pool, email => accounts.has(email), request.token) };
+    case 'logout':
+      if (session && TOKEN.test(session)) await pool.query('DELETE FROM swdr_team_sessions WHERE digest = $1', [keyHash(session)]);
+      return { data: null, cookie: cookie('', 0) };
+    case 'review':
+      return { data: await openReview(pool, request) };
   }
-  if (request.action === 'review') return { data: await openReview(pool, request) };
-  const email = await requireEmail(pool, accounts, session);
-  if (request.action === 'session') return { data: { email } };
-  if (request.action === 'list') return { data: await listProjects(pool, email) };
-  if (request.action === 'create') {
-    return { data: await transaction(pool, db => createProject(db, email, request)) };
+  const account = await requireAccount(pool, accounts, session);
+  const email = account.email;
+  switch (request.action) {
+    case 'session':
+      return { data: account };
+    case 'set-password':
+      return { data: await setPassword(pool, account, request) };
+    case 'accept-invite':
+      return {
+        data: await transaction(pool, async db => ({
+          account, projectId: await acceptInvitation(db, await lockInvitation(db, request.token), email)
+        } satisfies TeamSignedIn))
+      };
+    case 'list':
+      return { data: await listProjects(pool, email) };
+    case 'create':
+      return { data: await transaction(pool, db => createProject(db, email, request)) };
   }
   const id = idField(request.projectId, 'project ID');
   return transaction(pool, async db => {
@@ -502,6 +669,19 @@ export async function runTeamAction(pool: Pool, accounts: TeamAccounts, request:
       case 'grant':
         await setGrant(db, accounts, stored, grant, request);
         return { data: await listGrants(db, id, grant) };
+      case 'invitations':
+        ownerOnly(grant);
+        return { data: await listInvitations(db, id) };
+      case 'invite':
+        ownerOnly(grant);
+        return { data: await createInvitation(db, project, grant, request) };
+      case 'reissue-invite':
+        ownerOnly(grant);
+        return { data: await reissueInvitation(db, id, request) };
+      case 'revoke-invite':
+        ownerOnly(grant);
+        await revokeInvitation(db, id, request);
+        return { data: await listInvitations(db, id) };
       case 'notes':
         return { data: await listNotes(db, project, grant) };
       case 'add-note':

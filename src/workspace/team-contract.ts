@@ -55,3 +55,59 @@ export interface TeamResponse<T> {
   latest?: TeamProject;
   conflicts?: string[];
 }
+
+/** "open": anyone can create an account. "invite": an account needs a valid invitation link. */
+export type TeamSignupMode = 'open' | 'invite';
+
+export interface TeamConfig {
+  signup: TeamSignupMode;
+  /** True when operator-provisioned access keys (SWDR_TEAM_ACCOUNTS) are configured. */
+  accessKeys: boolean;
+}
+
+export interface TeamAccount {
+  email: string;
+  name: string;
+  method: 'password' | 'access-key';
+  hasPassword: boolean;
+}
+
+export interface TeamMember extends TeamGrant {
+  name: string;
+  lastActiveAt: string | null;
+  addedAt: string | null;
+}
+
+export interface TeamInvitation {
+  id: string;
+  email: string;
+  role: TeamRole;
+  episodeIds: string[] | null;
+  invitedBy: string;
+  createdAt: string;
+  expiresAt: string;
+  expired: boolean;
+}
+
+export interface TeamInviteIssued {
+  invitation: TeamInvitation;
+  /** The single-use secret. The server keeps only its digest, so this is the only time it is visible. */
+  token: string;
+}
+
+export interface TeamInvitePreview {
+  email: string;
+  /** Null for a workspace invitation that only lets the person create an account. */
+  projectTitle: string | null;
+  role: TeamRole | null;
+  episodeTitles: string[] | null;
+  invitedBy: string;
+  expiresAt: string;
+  accountExists: boolean;
+}
+
+export interface TeamSignedIn {
+  account: TeamAccount;
+  /** The project an accepted invitation opened, if any. */
+  projectId?: string;
+}

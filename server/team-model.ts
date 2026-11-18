@@ -33,7 +33,8 @@ export function idField(value: unknown, name: string): string {
 }
 
 export function emailField(value: unknown): string {
-  const email = textField(value, 'email', 254).trim().toLowerCase();
+  // NFKC folds visually identical code points (full-width letters, ligatures) so one address has one form.
+  const email = textField(value, 'email', 254).normalize('NFKC').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new TeamFault(400, 'Invalid email.');
   return email;
 }

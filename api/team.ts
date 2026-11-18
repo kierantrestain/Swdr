@@ -1,7 +1,20 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Pool } from 'pg';
+import { readSignupMode } from '../server/team-auth.js';
 import { asObject, TeamFault } from '../server/team-model.js';
 import { conflictDetails, readAccounts, runTeamAction } from '../server/team-service.js';
+
+/**
+ * The caller's address for sign-in throttling. Vercel's edge sets x-real-ip and x-forwarded-for and
+ * overwrites client-supplied values; a self-hosted deployment must sit behind a proxy that does the same.
+ */
+function clientAddress(req: IncomingMessage): string {
+  const real = req.headers['x-real-ip'];
+  if (typeof real === 'string' && real.trim()) return real.trim();
+  const forwarded = req.headers['x-forwarded-for'];
+  const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
+  return first || req.socket?.remoteAddress || 'unknown';
+}
 
 const MAX_BYTES = 4_000_000;
 type TeamRequest = IncomingMessage & { body?: unknown };
@@ -76,7 +89,8 @@ export default async function handler(req: TeamRequest, res: ServerResponse): Pr
     const request = await bodyOf(req);
     const cookie = req.headers.cookie?.match(/(?:^|;\s*)swdr_session=([A-Za-z0-9_-]+)/)?.[1];
     const accounts = readAccounts(process.env.SWDR_TEAM_ACCOUNTS);
-    const result = await runTeamAction(getPool(), accounts, request, cookie);
+    const signup = readSignupMode(process.env.SWDR_TEAM_SIGNUP);
+    const result = await runTeamAction(getPool(), accounts, request, cookie, { signup, address: clientAddress(req) });
     if (result.cookie) res.setHeader('Set-Cookie', result.cookie);
     res.end(JSON.stringify({ data: result.data }));
   } catch (error) {
