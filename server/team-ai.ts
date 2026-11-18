@@ -124,8 +124,16 @@ const PRESETS: Array<{ id: keyof UserKeys; label: string; keyVar: string; baseUr
 
 const CLAUDE_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
 
+/** Accepts variable names in any capitalisation (Gemini_API_Key works like GEMINI_API_KEY). */
+function upperEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  const out = { ...env };
+  for (const [key, value] of Object.entries(env)) if (out[key.toUpperCase()] === undefined) out[key.toUpperCase()] = value;
+  return out;
+}
+
 /** Providers whose key (or, for a custom server, base URL) is set. */
-export function aiProviders(env: Record<string, string | undefined> = process.env): Provider[] {
+export function aiProviders(input: Record<string, string | undefined> = process.env): Provider[] {
+  const env = upperEnv(input);
   const list = (value?: string) => (value ?? '').split(',').map(item => item.trim()).filter(Boolean);
   const base = (preset: (typeof PRESETS)[number]) => env[`SWDR_AI_${preset.id.toUpperCase()}_BASE_URL`]?.trim() || preset.baseUrl;
   const providers: Provider[] = PRESETS.filter(preset => env[preset.keyVar]?.trim()).map(preset => ({

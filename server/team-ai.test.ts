@@ -43,6 +43,7 @@ async function fakeProvider() {
 
 test('providers switch on by key, and a custom server serves your own fine-tuned model', async t => {
   assert.deepEqual(aiProviders({}), []);
+  assert.deepEqual(aiProviders({ Gemini_API_Key: 'AIza-test-key' }).map(item => item.id), ['gemini']);
   assert.deepEqual(aiProviders({ ANTHROPIC_API_KEY: 'k', GROQ_API_KEY: 'g', SWDR_AI_GROQ_MODELS: 'llama-3.3-70b-versatile' }).map(item => [item.id, item.models]),
     [['anthropic', ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']], ['groq', ['llama-3.3-70b-versatile']]]);
   const fake = await fakeProvider();
