@@ -808,3 +808,14 @@
 .swdr-w-mark:hover:not(:disabled) { background: var(--color-background-secondary, #efede7); }
 .swdr-w-mark[aria-pressed=true] { background: var(--color-background-selected, #dfe8ef); color: var(--color-text-accent, #1f4f78); }
 .swdr-w-mark:focus-visible { outline: 2px solid var(--color-focus-ring, #2c5877); outline-offset: 1px; }
+
+/* Lines with alternate wording: a margin marker; Ctrl/Cmd+Alt+Up/Down cycles them. */
+.swdr-el[data-alternates]:not([data-scene-number]):not(.swdr-el-empty)::before {
+  content: '⇄ ' attr(data-alternates);
+  position: absolute;
+  top: 0;
+  left: calc(72pt - var(--x));
+  font: 600 9pt/12pt system-ui, sans-serif;
+  color: #7a6a3a;
+  letter-spacing: .02em;
+}

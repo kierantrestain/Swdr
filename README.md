@@ -26,6 +26,9 @@ Device work lives in IndexedDB for this browser profile and origin. The status c
 | Ctrl+F | Find and replace |
 | Ctrl+Shift+F | Focus mode |
 | Ctrl+Z / Ctrl+Shift+Z | Undo and redo. Paste, cut and drop are separate steps. |
+| Ctrl+B / I / U | Bold, italic, underline |
+| Ctrl+Alt+M | Comment on the selected words |
+| Ctrl+Alt+↑ / ↓ | Cycle a line's alternate wording |
 
 Typing `INT. ` or `EXT. ` starts a scene heading, `(` after a cue starts a parenthetical, and a line ending in `TO:` becomes a transition. SmartType suggests scene intros, locations and times already in the script, character names and extensions; press Enter or Tab to accept and Esc to dismiss.
 

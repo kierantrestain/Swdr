@@ -95,6 +95,26 @@ export const enterCommand: Command = (state, dispatch) => {
   return true;
 };
 
+/** Swaps the line for its next (or previous) alternate; the current wording joins the list. */
+export function cycleAlternate(direction: 1 | -1): Command {
+  return (state, dispatch) => {
+    const found = currentElement(state.selection.$from);
+    const alternates = (found?.node.attrs.alternate as string[] | null)?.filter(Boolean);
+    if (!found || !alternates?.length) return false;
+    if (dispatch) {
+      const ring = [found.node.textContent, ...alternates];
+      const rotated = direction === 1 ? [...ring.slice(1), ring[0]] : [ring[ring.length - 1], ...ring.slice(0, -1)];
+      const [text, ...rest] = rotated;
+      const start = found.pos + 1;
+      const tr = state.tr.replaceWith(start, start + found.node.content.size, text ? schema.text(text) : []);
+      tr.setNodeMarkup(found.pos, undefined, { ...found.node.attrs, alternate: rest });
+      tr.setSelection(TextSelection.create(tr.doc, start + text.length));
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  };
+}
+
 export function tabCommand(back: boolean): Command {
   return (state, dispatch) => {
     const found = currentElement(state.selection.$from);
@@ -237,6 +257,11 @@ export function presentationPlugin(options: PresentationOptions): Plugin {
           }
           if (node.attrs.revision) {
             attrs['data-revision'] = String(node.attrs.revision).toLowerCase();
+          }
+          const alternates = (node.attrs.alternate as string[] | null)?.filter(Boolean).length;
+          if (alternates && node.content.size) {
+            attrs['data-alternates'] = String(alternates);
+            attrs.title = `${alternates} alternate${alternates === 1 ? '' : 's'} · Ctrl+Alt+↑/↓ to cycle`;
           }
           if (!node.content.size && (caret?.pos === pos || state.doc.childCount === 1)) {
             attrs['data-placeholder'] = options.placeholderFor(node.attrs.kind);

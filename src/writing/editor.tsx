@@ -22,7 +22,7 @@ import { useScriptPrint } from './print';
 import { blocksToDoc, docToBlocks } from './pm/convert';
 import { ELEMENTS, ELEMENT_ORDER, shortcutLabel } from './pm/elements';
 import {
-  bracketPlugin, clipboardProps, commentAnchors, commentDecorations, commentsKey, commentsPlugin, currentElement, enterCommand, integrityPlugin, measurePages, pageDecorations, pagesKey,
+  bracketPlugin, clipboardProps, cycleAlternate, commentAnchors, commentDecorations, commentsKey, commentsPlugin, currentElement, enterCommand, integrityPlugin, measurePages, pageDecorations, pagesKey,
   pagesPlugin, presentationPlugin, searchKey, searchPlugin, searchTransaction, setKind, tabCommand
 } from './pm/plugins';
 import { indexScript, suggest } from './pm/smarttype';
@@ -195,6 +195,8 @@ export function WritingView(props: WritingProps) {
       keys[`Mod-Alt-${digit}`] = setKind(kind);
     }
     keys['Mod-e'] = (_state, dispatch) => { if (dispatch) openElementMenu(); return true; };
+    keys['Mod-Alt-ArrowDown'] = cycleAlternate(1);
+    keys['Mod-Alt-ArrowUp'] = cycleAlternate(-1);
     keys['Mod-b'] = toggleMark(schema.marks.bold);
     keys['Mod-i'] = toggleMark(schema.marks.italic);
     keys['Mod-u'] = toggleMark(schema.marks.underline);

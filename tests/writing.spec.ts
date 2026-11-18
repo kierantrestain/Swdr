@@ -276,6 +276,30 @@ test('applies bold, italic and underline with shortcuts and toolbar, and keeps t
   expect(pageFaults).toEqual([]);
 });
 
+test('cycles alternate dialogue in place without losing any wording', async ({ page, pageFaults }) => {
+  await loadDemo(page);
+  await page.getByRole('button', { name: 'Resume screenplay' }).click();
+  const line = element(page, 'dialogue').first();
+  await expect(line).toHaveText('Tell me which boat.');
+  await line.click();
+  await page.getByRole('button', { name: 'Notes', exact: true }).click();
+  await page.locator('.swdr-w-drawer summary', { hasText: 'Active element' }).click();
+  await page.getByPlaceholder('One alternative per line').fill('Which boat was it?\nSay the name of the boat.');
+  await page.getByRole('button', { name: 'Notes', exact: true }).click();
+  await expect(line).toHaveAttribute('data-alternates', '2');
+  await line.click();
+  await page.keyboard.press('Control+Alt+ArrowDown');
+  await expect(line).toHaveText('Which boat was it?');
+  await page.keyboard.press('Control+Alt+ArrowDown');
+  await expect(line).toHaveText('Say the name of the boat.');
+  await page.keyboard.press('Control+Alt+ArrowDown');
+  await expect(line).toHaveText('Tell me which boat.');
+  await page.keyboard.press('Control+Alt+ArrowUp');
+  await expect(line).toHaveText('Say the name of the boat.');
+  await expect(line).toHaveAttribute('data-alternates', '2');
+  expect(pageFaults).toEqual([]);
+});
+
 test('finds and replaces across the manuscript', async ({ page, pageFaults }) => {
   await loadDemo(page);
   await page.getByRole('button', { name: 'Resume screenplay' }).click();

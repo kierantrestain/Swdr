@@ -24,7 +24,7 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 | Find and replace, focus mode, scene navigator, undo/redo | All | ✅ |
 | Comments anchored to text | WriterDuet, FD Cloud ScriptNotes (Bundle) | ✅ Highlight, panel, resolve/reopen, follow edits |
 | Revision colours, asterisks, locked pages, issued drafts | FD, WriterDuet, OpenDraft (Bundle/source) | ✅ |
-| Alternate dialogue | WriterDuet, FD (Bundle) | 🟡 Stored per element in Notes; no inline picker |
+| Alternate dialogue | WriterDuet, FD (Bundle) | ✅ Margin marker; Ctrl/⌘+Alt+↑/↓ cycles alternates in place |
 | Dual dialogue | All | ✅ |
 | Bold, italic, underline | Celtx (Owner) | ✅ Ctrl/⌘+B/I/U and toolbar; kept in FDX runs, Fountain emphasis, print and PDF faces |
 | Real-time co-writing in the editor (live cursors) | WriterDuet Firebase/Firepad (Bundle), OpenDraft Yjs (source) | ⬜ Team sync is document-level. Next step: Yjs over the team service. |
@@ -86,5 +86,5 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 2. ~~Inline styles~~ shipped in this round.
 3. **Cast & Crew directory and Files & Media browser** as first-class sections.
 4. **Budget templates** (account codes, fringes) and exports.
-5. **An alternate-dialogue picker** inline in the editor.
+5. ~~Alternate-dialogue cycling~~ shipped in this round.
 6. **Per-character voices** for the read-through.
