@@ -251,7 +251,7 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
   const blocked = unresolved.length > 0 || needsMapping || Boolean(revision?.matches.some(match => match.outcome === 'unmatched') || avRevision?.matches.some(match => match.outcome === 'unmatched'));
   const importedCharacters = new Set(unresolved.map(line => line.blockId));
 
-  return <main className="swdr-page interchange-page" id="main-content">
+  return <div className="swdr-page interchange-page" id="main-content">
     <div className="page-heading interchange-heading">
       <div>
         <h1>{result?.type === 'archive' ? 'Restore project archive' : draft ? 'Review script import' : 'Import script'}</h1>
@@ -442,7 +442,7 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
         </button>}
       </div>
     </footer>
-  </main>;
+  </div>;
 }
 
 function EditLine({ block, close, apply }: { block: Block; close: () => void; apply: (kind: BlockKind, value: string) => void }) {

@@ -1,0 +1,111 @@
+{
+  "name": "swdr",
+  "like": "neutral",
+  "mode": "both",
+  "settings": [
+    {
+      "thing": "accent",
+      "value": "#1d5c78",
+      "source": "dial"
+    },
+    {
+      "thing": "font",
+      "value": "system",
+      "source": "dial"
+    },
+    {
+      "thing": "font",
+      "value": "georgia",
+      "source": "dial",
+      "on": "heading"
+    },
+    {
+      "thing": "corners",
+      "value": "small",
+      "source": "dial"
+    },
+    {
+      "thing": "spacing",
+      "value": "compact",
+      "source": "dial"
+    },
+    {
+      "thing": "surfaces",
+      "value": "outlined",
+      "source": "dial"
+    },
+    {
+      "thing": "type",
+      "value": "editorial",
+      "source": "dial"
+    },
+    {
+      "thing": "headings",
+      "value": "regular",
+      "source": "dial",
+      "axis": "weight"
+    },
+    {
+      "thing": "vibrancy",
+      "value": "40",
+      "source": "dial"
+    },
+    {
+      "thing": "neutral",
+      "value": "#6f6b64",
+      "source": "dial"
+    },
+    {
+      "thing": "info",
+      "value": "#3a6f8c",
+      "source": "dial"
+    },
+    {
+      "thing": "success",
+      "value": "#3f7a5c",
+      "source": "dial"
+    },
+    {
+      "thing": "warning",
+      "value": "#b7791f",
+      "source": "dial"
+    },
+    {
+      "thing": "danger",
+      "value": "#b2443a",
+      "source": "dial"
+    },
+    {
+      "thing": "--color-background-body",
+      "value": "#f4f2ee",
+      "source": "token",
+      "mode": "light"
+    },
+    {
+      "thing": "--color-text-primary",
+      "value": "#1c1e21",
+      "source": "token",
+      "mode": "light"
+    },
+    {
+      "thing": "--color-icon-primary",
+      "value": "#1c1e21",
+      "source": "token",
+      "mode": "light"
+    },
+    {
+      "thing": "--color-info-muted",
+      "value": "#e2ecf1",
+      "source": "token",
+      "mode": "light"
+    },
+    {
+      "thing": "--color-accent-muted",
+      "value": "#e1ecf1",
+      "source": "token",
+      "mode": "light"
+    }
+  ],
+  "lifted": [],
+  "palette": "0558a0f724c47efeac9ffd19aec5370576ab5ff28eb88217e6151da0ce36c45c"
+}

@@ -26,14 +26,34 @@ const TITLES: Record<Pane, string> = {
   Sides: 'Shooting sides', 'Call sheets': 'Call sheets', Reports: 'Production reports'
 };
 
-export function ProductionView(props: WorkspaceViewProps) {
+const SLUGS: Record<Pane, string> = {
+  Stripboard: 'schedule', Breakdown: 'breakdown', 'Shots & storyboard': 'shots', Sides: 'sides', 'Call sheets': 'call-sheets', Reports: 'reports'
+};
+
+interface ProductionProps extends WorkspaceViewProps {
+  /** The pane named in the address (schedule, breakdown, shots, sides, call-sheets, reports or budget). */
+  tab?: string;
+  onTabChange?: (tab: string) => void;
+}
+
+function paneFor(tab?: string): Pane {
+  if (tab === 'budget') return 'Reports';
+  return PANES.find(pane => SLUGS[pane] === tab) ?? 'Stripboard';
+}
+
+export function ProductionView(props: ProductionProps) {
   return <ProductionDocument key={props.document.id} {...props} />;
 }
 
-function ProductionDocument({ project, document, readOnly, onProjectChange, onOpenSource, onStatus }: WorkspaceViewProps) {
+function ProductionDocument({ project, document, readOnly, onProjectChange, onOpenSource, onStatus, tab, onTabChange }: ProductionProps) {
   const plan = getProductionPlan(project, document.id);
   const snapshot = plan && releasedScript(project, document.id, plan.activeSnapshotId);
-  const [pane, setPane] = useState<Pane>('Stripboard');
+  const [localPane, setLocalPane] = useState<Pane>(() => paneFor(tab));
+  const pane = onTabChange ? paneFor(tab) : localPane;
+  const setPane = (next: Pane) => {
+    setLocalPane(next);
+    onTabChange?.(SLUGS[next]);
+  };
   const [releasePanel, setReleasePanel] = useState(false);
   const [target, setTarget] = useState('');
   const [review, setReview] = useState<RevisionPreview>();
@@ -102,7 +122,7 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
     changes: scriptChanges(project, plan, document), reviewScript: readOnly ? undefined : openRevisions
   } : undefined;
 
-  return <main id="main-content" className="swdr-page production-workspace" aria-label="Production workspace">
+  return <div id="main-content" className="swdr-page production-workspace" aria-label="Production workspace">
     <header className="production-hero">
       <div>
         <h1>{TITLES[pane]}</h1>
@@ -146,7 +166,7 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
       {pane === 'Shots & storyboard' && <Shots {...paneProps} />}
       {pane === 'Sides' && <Sides {...paneProps} />}
       {pane === 'Call sheets' && <CallSheets {...paneProps} />}
-      {pane === 'Reports' && <Reports {...paneProps} />}
+      {pane === 'Reports' && <Reports key={tab === 'budget' ? 'budget' : 'reports'} {...paneProps} startAt={tab === 'budget' ? 'Budget' : undefined} />}
     </>}
     {error && !releasePanel && !review && <p role="alert" className="production-form-error production-workspace-error">{error}</p>}
     {releasePanel && <Dialog title={plan ? 'Production script revisions' : 'Issue writing draft'} onClose={() => { setReleasePanel(false); setError(''); }}>
@@ -180,5 +200,5 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
         if (changeProject(current => applyRevision(current, document.id, review.snapshot.id, review.previousSnapshotId, choices), 'Production revision applied.')) setReview(undefined);
       }}
     />}
-  </main>;
+  </div>;
 }
