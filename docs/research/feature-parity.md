@@ -1,3 +1,5 @@
+> Superseded by the [six-application REA research matrix](rea/README.md) from the 18 November 2026 run. This page records the earlier benchmark.
+
 # Reference workflows and release checks
 
 The benchmark compares writing and production behaviour through official walkthroughs and authorised visible screens. SWDR uses its own interface and a neutral, synthetic test project. Proprietary interchange formats require a genuine permitted sample and a tested loss report.

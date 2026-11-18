@@ -1,0 +1,169 @@
+# REA scenario: finaldraft-entry
+
+- Evidence: `ev_ab77e8a5ca08c6c7e62054fa4f875a9bb065ac81ddc1d528d46edbb56dbd3d41`
+- Browser: Chromium 153.0.8010.12 (connect, cleanup disconnected-external)
+- Completeness: incomplete
+
+## 00 scenario_start — goto_start — completed
+URL: https://www.finaldraft.com/
+
+## 01 settle — wait_for_timeout — completed
+URL: https://www.finaldraft.com/
+Screenshot: `01-settle.png` sha256 `877ce629c16f9152…`
+```yaml
+- document:
+  - 'link "Black Friday Early Access: 30% Off Final Draft Suite Shop Now"':
+    - /url: /products/final-draft-cloud
+    - text: "Black Friday Early Access:"
+    - strong: 30% Off
+    - text: Final Draft Suite Shop Now
+  - banner:
+    - link "Skip to Content":
+      - /url: "#contentarea"
+    - link "Go to Home page":
+      - /url: https://www.finaldraft.com/
+      - img "Final Draft"
+    - navigation "Main menu":
+      - list:
+        - listitem:
+          - link "Products":
+            - /url: "#"
+          - button "Toggle submenu for Products"
+        - listitem:
+          - link "Big Break Screenwriting Contest":
+            - /url: /big-break-screenwriting-contest/
+          - button "Toggle submenu for Big Break Screenwriting Contest"
+        - listitem:
+          - link "Learn Screenwriting":
+            - /url: /learn/
+          - button "Toggle submenu for Learn Screenwriting"
+        - listitem:
+          - link "Support":
+            - /url: /support/
+          - button "Toggle submenu for Support"
+    - link "Cloud Login":
+      - /url: https://cloud.finaldraft.com/
+    - link "account":
+      - /url: https://www.finaldraft.com/customer/account/index/
+      - img "account"
+    - link "View cart, Cart is empty" [disabled]:
+      - /url: https://www.finaldraft.com/checkout/cart/index/
+  - main:
+    - alert
+    - figure:
+      - 'link "Black Friday Early Access: 30% off Final Draft Suite. Shop now."':
+        - /url: /products/final-draft-cloud
+        - 'img "Black Friday Early Access: 30% off Final Draft Suite. Shop now."'
+    - figure
+    - figure
+    - figure
+    - figure
+    - figure
+    - figure
+    - figure
+    - figure
+    - figure
+    - figure
+    - figure
+    - figure
+    - heading "The Industry Standard Screenwriting Software" [level=2]
+    - heading "Final Draft is the only screenwriting tool you need." [level=3]
+    - paragraph: The number one-selling screenwriting software for over 30 years, Final Draft automatically formats your screenplay to entertainment industry standards so you can focus on what you do best - writing.
+    - paragraph
+    - paragraph: Turn your idea into a production-ready script for film & TV, theater, documentary and other forms of media. Final Draft has all the features you need to plan your story, collaborate with other writers, run production reports, and share your script with the world.
+    - heading "Used in" [level=6]
+    - heading "0%" [level=2]
+    - heading "of Hollywood productions" [level=6]
+    - heading "Available in" [level=6]
+    - heading "0" [level=2]
+    - heading "languages" [level=6]
+    - heading "Chosen by over" [level=6]
+    - heading "3 million +" [level=2]
+    - heading "writers" [level=6]
+    - heading "Used in" [level=6]
+    - heading "100" [level=2]
+    - heading "countries" [level=6]
+    - heading "Introducing Final Draft Cloud™" [level=2]
+    - paragraph:
+      - text: Now Available in
+      - link "Final Draft Suite":
+        - /url: https://www.finaldraft.com/products/final-draft-cloud
+    - iframe
+    - link "Explore Final Draft Suite":
+      - /url: /products/final-draft-cloud
+    - heading "Find the Final Draft product that's right for you." [level=2]
+    - tablist:
+      - tab "Individual":
+        - link "Individual":
+          - /url: "#CFJKAJ1"
+      - tab "Education":
+        - link "Education":
+          - /url: "#WCBJD9D"
+      - tab "Studios & Production":
+        - link "Studios & Production":
+          - /url: "#GXUFL4S"
+    - heading "Final Draft Suite" [level=4]
+    - paragraph
+    - paragraph:
+      - strong: Two powerful tools. One subscription.
+    - paragraph
+    - list:
+      - listitem:
+        - strong: Final Draft Cloud
+        - list:
+          - listitem: Elegant, minimal online writing interface (perfect for beginners)
+          - listitem: Secure cloud storage for all your script and project files
+          - listitem: Enterprise-secure collaboration and sharing
+      - listitem:
+        - strong: Final Draft 13
+        - list:
+          - listitem: The industry-standard screenwriting software for desktop
+      - listitem: Low monthly or annual subscription
+    - paragraph:
+      - link "Try Suite FREE for 5 Days":
+        - /url: /products/final-draft-cloud
+    - heading "Final Draft 13" [level=4]
+    - paragraph
+    - paragraph:
+      - strong: Best for personal, desktop application use.
+    - paragraph
+    - list:
+      - listitem: The industry-standard screenwriting software
+      - listitem: Used by 95% of film and TV professionals
+      - listitem: Access production features and advanced screenwriting tools
+      - listitem: Advanced outlining and story development tools
+      - listitem: One-time purchase
+      - listitem: Does not include Final Draft Cloud
+    - paragraph:
+      - link "Purchase Final Draft 13":
+        - /url: /products/final-draft-13
+    - link "Explore Pricing":
+      - /url: /pricing/
+    - heading "Who uses Final Draft?" [level=2]
+    - paragraph: Final Draft is the preferred screenwriting software of beginners, professionals and award-winners. Here are just a few of our testimonials.
+    - figure
+    - paragraph:
+      - text: "\"It's a beautiful thing when you find a program or an app that does exactly what you want it to do, that feels intuitive in that way, and I've felt for years that Final Draft achieves that.\" -"
+      - strong: Shawn Levy
+      - text: (
+      - emphasis: Deadpool & Wolverine
+      - text: ","
+      - emphasis: Free Guy
+      - text: ","
+      - emphasis: Night at the Museum
+      - text: )
+    - figure
+    - paragraph:
+      - text: "\"Final Draft makes it so much easier – and it's motivating when what you're working on looks like a script.\" -"
+      - strong: Sofia Coppola
+      - text: (
+      - emphasis: Priscilla
+      - text: ","
+      - emphasis: Lost In Translation
+      - text: )
+    - figure
+    - paragraph:
+      - text: "\"I would not be alive today without Final Draft.\" -"
+      - strong: Jesse Eisenbe
+…(truncated in this view; full text in evidence.json)
+```

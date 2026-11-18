@@ -99,7 +99,7 @@
 }
 
 .swdr-w-element { position: relative; margin-left: 3px; }
-.swdr-w-element select { appearance: none; padding-right: 29px; width: 132px; }
+.swdr-w-element select { appearance: none; padding-right: 29px; width: 152px; }
 .swdr-w-element > svg { position: absolute; right: 10px; top: 11px; pointer-events: none; }
 .swdr-write-save, .swdr-av-save {
   display: inline-flex;
@@ -671,6 +671,7 @@
 .swdr-compact .swdr-page-number { position: static; display: block; text-align: right; font: 11px system-ui, sans-serif; color: var(--swdr-w-muted); }
 
 @media (max-width: 650px) {
+  .swdr-w-hint { display: none; }
   .swdr-finder { left: 6px; right: 6px; top: 50px; flex-wrap: wrap; }
   .swdr-finder input { flex: 1 1 120px; width: auto; }
 }

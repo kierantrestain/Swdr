@@ -15,6 +15,20 @@ Open [SWDR on localhost](http://127.0.0.1:5173). Select **Load demo projects** i
 
 Device work lives in IndexedDB for this browser profile and origin. The status changes to **Saved on this device** after the local transaction commits. Run a production build with `npm run build` and serve `dist` over HTTPS or localhost to enable the offline application shell. Finish an initial online visit before opening the installed shell offline.
 
+## Writing keys
+
+| Key | Action |
+| --- | --- |
+| Enter | Next element: Scene heading → Action, Character → Dialogue, Dialogue → Action, Transition → Scene heading. On an empty line: Action → Scene heading, Character or Dialogue → Action. |
+| Tab / Shift+Tab | Action → Character, Character → Transition, Dialogue → Parenthetical, Parenthetical → Dialogue; Shift+Tab steps back |
+| Ctrl+Alt+1–9 (⌘⌥ on Mac) | Scene heading, Action, Character, Parenthetical, Dialogue, Transition, Shot, Note, Act |
+| Ctrl+E | Element menu |
+| Ctrl+F | Find and replace |
+| Ctrl+Shift+F | Focus mode |
+| Ctrl+Z / Ctrl+Shift+Z | Undo and redo. Paste, cut and drop are separate steps. |
+
+Typing `INT. ` or `EXT. ` starts a scene heading, `(` after a cue starts a parenthetical, and a line ending in `TO:` becomes a transition. SmartType suggests scene intros, locations and times already in the script, character names and extensions; press Enter or Tab to accept and Esc to dismiss.
+
 ## Backup and restore
 
 1. Open a document and choose **Export** → **Project archive**.
@@ -41,6 +55,8 @@ npm run lint
 npm test
 npx playwright install chromium
 npm run test:browser
+# or reuse an installed Chromium
+SWDR_CHROMIUM=/path/to/chrome npm run test:browser
 ```
 
-See [verification and remaining gaps](docs/verification.md), [supported interchange](docs/interchange.md), and the [six-reference benchmark](docs/research/feature-parity.md).
+See [verification and remaining gaps](docs/verification.md), [supported interchange](docs/interchange.md), and the [six-application REA research matrix](docs/research/rea/README.md).
