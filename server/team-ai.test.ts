@@ -123,6 +123,7 @@ test('Gemini lists only writing models, best first; a failing model falls throug
     let body = '';
     request.on('data', chunk => { body += chunk; });
     request.on('end', () => {
+      if (JSON.parse(body).model === 'broke-model') { response.statusCode = 429; response.end(JSON.stringify([{ error: { message: 'Your prepayment credits are depleted. Please go to AI Studio.' } }])); return; }
       if (JSON.parse(body).model === 'retired-model') { response.statusCode = 404; response.end(JSON.stringify({ error: { message: 'models/retired-model is not found' } })); return; }
       response.setHeader('Content-Type', 'text/event-stream');
       response.end(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Plan ready.' } }] })}\n\ndata: [DONE]\n\n`);
@@ -134,6 +135,7 @@ test('Gemini lists only writing models, best first; a failing model falls throug
   let text = '';
   await streamAi(readAiRequest({ mode: 'outline', model: 'custom:retired-model' }), chunk => { text += chunk; }, undefined, env);
   assert.equal(text, 'Plan ready.');
+  await assert.rejects(streamAi(readAiRequest({ mode: 'outline', model: 'custom:broke-model' }), () => undefined, undefined, env), /no credit or free quota left/);
 
   assert.deepEqual(parseBeats('I | The last boat | Nora misses the ferry and finds a ticket.\n- II | Lies | She covers for Elias.\nIII: Reckoning | The tide turns.\nBiggest question: who sold the ticket?'), [
     { act: 1, title: 'The last boat', notes: 'Nora misses the ferry and finds a ticket.' },

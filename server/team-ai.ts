@@ -237,7 +237,7 @@ export async function streamAi(request: AiRequest, write: (text: string) => void
       return await streamCompatible(request, provider, candidate, write, signal);
     } catch (error) {
       lastError = error;
-      if (!(error instanceof TeamFault) || error.status === 401 || error.status === 503) throw error;
+      if (!(error instanceof TeamFault) || [401, 402, 429, 503].includes(error.status)) throw error;
     }
   }
   throw lastError;
@@ -283,6 +283,12 @@ async function streamCompatible(request: AiRequest, provider: Provider, model: s
     }).catch(() => '');
     console.error('SWDR AI provider refused', provider.id, model, response.status);
     const reason = detail.replace(/\s+/g, ' ').trim().slice(0, 240);
+    // Billing and quota problems belong to the key's account, and every model on it will refuse the same way.
+    if (/credit|billing|prepay|insufficient.?(funds|balance)|exceeded your current quota|payment/i.test(reason)) {
+      throw new TeamFault(402, `${provider.label} refused because the key's account has no credit or free quota left. ${provider.id.endsWith('gemini')
+        ? 'In Google AI Studio, create a key in a new project without billing to use the free tier, or add credit to this project'
+        : 'Add credit to that account, or use a different key'}, then update the key in the hosting settings.`);
+    }
     const status = response.status === 429 ? 429 : response.status === 401 || response.status === 403 ? 503 : 502;
     throw new TeamFault(status, status === 429 ? `${provider.label} is busy or your free quota is used up for now${reason ? ` (${reason})` : ''}. Try again shortly or pick another model.`
       : status === 503 ? `${provider.label} rejected the key. Check the key in the hosting settings${reason ? ` (${reason})` : ''}.`
