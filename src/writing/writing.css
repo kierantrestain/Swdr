@@ -708,3 +708,25 @@
   .swdr-w-element-trigger { min-width: 0; padding-inline: 8px; }
   .swdr-w-divider, .swdr-write-toolbar .swdr-w-current:first-child { display: none; }
 }
+
+/* Title page: the first sheet, as on a printed script. Opens the title page details. */
+.swdr-title-sheet {
+  display: block;
+  height: calc(var(--swdr-paper-height, 1056px));
+  padding: 0;
+  border: 0;
+  font-family: 'Courier Prime', 'Courier New', Courier, monospace;
+  font-size: 12pt;
+  line-height: 12pt;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: #1f1d1a;
+  cursor: pointer;
+  text-align: left;
+}
+.swdr-sheet-a4.swdr-title-sheet { --swdr-paper-height: 1122.5px; }
+.swdr-title-sheet:hover { box-shadow: 0 0 0 2px var(--color-focus-ring, #7595ab), 0 2px 18px rgba(57, 50, 36, .11); }
+.swdr-title-sheet:focus-visible { outline: 2px solid var(--color-focus-ring, #2c5877); outline-offset: 3px; }
+.swdr-title-line { position: absolute; white-space: pre; }
+.swdr-compact .swdr-title-sheet { height: auto; min-height: 320px; position: relative; }
+.swdr-compact .swdr-title-line { position: static; display: block; width: auto !important; text-align: center !important; margin: .4em 0; }

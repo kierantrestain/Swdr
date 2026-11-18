@@ -190,6 +190,21 @@ test('shows every element shortcut in the element menu and applies the choice', 
   expect(pageFaults).toEqual([]);
 });
 
+test('shows the title page as the first sheet and opens its details', async ({ page, pageFaults }) => {
+  await openHome(page);
+  await makeProject(page, 'Blind Spot');
+  await page.getByRole('button', { name: 'Notes', exact: true }).click();
+  await page.locator('.swdr-w-drawer summary', { hasText: 'Page and title' }).click();
+  await page.getByRole('checkbox', { name: 'Include title page' }).check();
+  await page.getByRole('textbox', { name: 'Author' }).fill('Kieran Trestain');
+  await page.getByRole('button', { name: 'Notes', exact: true }).click();
+  const sheet = page.getByRole('button', { name: /^Title page/ });
+  await expect(sheet.locator('.swdr-title-line')).toHaveText(['BLIND SPOT', 'Written by', 'Kieran Trestain']);
+  await sheet.click();
+  await expect(page.getByRole('textbox', { name: 'Author' })).toHaveValue('Kieran Trestain');
+  expect(pageFaults).toEqual([]);
+});
+
 test('finds and replaces across the manuscript', async ({ page, pageFaults }) => {
   await loadDemo(page);
   await page.getByRole('button', { name: 'Resume screenplay' }).click();

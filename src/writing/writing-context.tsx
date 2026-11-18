@@ -11,6 +11,8 @@ interface ContextProps extends Omit<WorkspaceViewProps, 'onDocumentChange'> {
   onResetHistory: () => void;
   onPrint: () => void;
   onDocumentChange: (update: (document: DocumentModel) => DocumentModel) => void;
+  /** Open with this section expanded (e.g. after clicking the title page). */
+  section?: 'title';
 }
 
 const revisionColors = ['White', 'Blue', 'Pink', 'Yellow', 'Green', 'Goldenrod', 'Buff', 'Salmon', 'Cherry'];
@@ -22,7 +24,7 @@ function notesFrom(project: Project): Record<string, string> {
 }
 
 export function WritingContext({
-  project, document, active, onProjectChange, onDocumentChange, onClose, onPrint, onResetHistory, onStatus, readOnly
+  project, document, active, onProjectChange, onDocumentChange, onClose, onPrint, onResetHistory, onStatus, readOnly, section
 }: ContextProps) {
   const [draftName, setDraftName] = useState('');
   const [compareId, setCompareId] = useState('');
@@ -71,7 +73,7 @@ export function WritingContext({
           }} />
       </label>
     </section>
-    <details>
+    <details open={section === 'title' || undefined}>
       <summary>Page and title</summary>
       <div className="swdr-w-context-content">
         <label className="swdr-w-label">Paper

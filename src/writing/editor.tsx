@@ -84,6 +84,7 @@ export function WritingView(props: WritingProps) {
   const [search, setSearch] = useState({ query: '', count: 0, current: 0 });
   const [popover, setPopoverState] = useState<Popover | null>(null);
   const [elementMenuOpen, setElementMenuOpen] = useState(false);
+  const [notesSection, setNotesSection] = useState<'title' | undefined>();
   const [depth, setDepth] = useState({ undo: 0, redo: 0 });
   const [compact, setCompact] = useState(false);
   const [page, setPage] = useState(1);
@@ -107,6 +108,7 @@ export function WritingView(props: WritingProps) {
   indexRef.current = scriptIndex;
 
   const pageCount = layout.pages.filter(sheet => !sheet.titlePage).length;
+  const titleSheet = layout.pages.find(sheet => sheet.titlePage);
   const geometry = geometryFor(document.paper);
 
   // ------------------------------------------------------------ measurement
@@ -524,7 +526,7 @@ export function WritingView(props: WritingProps) {
         <IconButton label="Find and replace" tooltip="Find and replace (Ctrl+F)" icon={<Search size={16} />} variant="ghost" size="sm"
           onClick={() => { setFinder(previous => ({ ...previous, open: !previous.open })); requestAnimationFrame(() => globalThis.document.querySelector<HTMLInputElement>('#swdr-find-input')?.focus()); }} />
         <Button label="Scenes" variant={drawer === 'scenes' ? 'secondary' : 'ghost'} size="sm" icon={<List size={16} />} onClick={() => setDrawer(previous => previous === 'scenes' ? null : 'scenes')} />
-        <Button label="Notes" variant={drawer === 'notes' ? 'secondary' : 'ghost'} size="sm" icon={<MessageSquareText size={15} />} onClick={() => setDrawer(previous => previous === 'notes' ? null : 'notes')} />
+        <Button label="Notes" variant={drawer === 'notes' ? 'secondary' : 'ghost'} size="sm" icon={<MessageSquareText size={15} />} onClick={() => { setNotesSection(undefined); setDrawer(previous => previous === 'notes' ? null : 'notes'); }} />
         <Button label="Focus" variant="secondary" size="sm" icon={<Expand size={14} />} tooltip="Focus mode (Ctrl+Shift+F)" onClick={() => setFocus(true)} />
         {toolbarEnd || <Button label="Print" variant="secondary" size="sm" icon={<Printer size={14} />} onClick={print.requestPrint} />}
       </div>}
@@ -546,6 +548,12 @@ export function WritingView(props: WritingProps) {
       </div>}
 
       <div ref={scroller} className={`swdr-manuscript-scroll ${compact ? 'swdr-compact' : ''}`} onScroll={onScroll} aria-label="Manuscript pages">
+        {titleSheet && <button type="button" className={`swdr-sheet swdr-title-sheet swdr-sheet-${document.paper}`} style={compact ? undefined : { zoom: zoom / 100 }}
+          aria-label="Title page. Edit title page details" onClick={() => { setNotesSection('title'); setDrawer('notes'); }}>
+          {titleSheet.lines.map((line, index) => <span key={index} className="swdr-title-line" style={{
+            left: `${line.x * PT}px`, top: `${(line.y - geometry.fontSize) * PT}px`, width: `${line.width * PT}px`, textAlign: line.align
+          }}>{line.text}</span>)}
+        </button>}
         <div className={`swdr-sheet swdr-sheet-${document.paper}`} style={compact ? undefined : { zoom: zoom / 100 }}>
           <div ref={mount} className="swdr-pm-mount" />
         </div>
@@ -572,7 +580,7 @@ export function WritingView(props: WritingProps) {
           }}><small>{scene.number}</small><span>{scene.heading.toUpperCase() || 'Untitled scene'}</span></button>
         </li>)}</ol> : <p>Add a scene heading to start the scene list.</p>}
       </aside>}
-      {!focused && drawer === 'notes' && activeBlock && <WritingContext {...props} active={activeBlock} onClose={() => setDrawer(null)} onDocumentChange={commit} onResetHistory={() => undefined} onPrint={print.requestPrint} />}
+      {!focused && drawer === 'notes' && activeBlock && <WritingContext {...props} key={notesSection ?? 'notes'} section={notesSection} active={activeBlock} onClose={() => { setDrawer(null); setNotesSection(undefined); }} onDocumentChange={commit} onResetHistory={() => undefined} onPrint={print.requestPrint} />}
 
       <footer className="swdr-write-footer">
         <span className="swdr-w-page-control"><span>Page {Math.min(page, pageCount) || 1} of {pageCount || 1}</span><span aria-hidden="true">·</span><span className="swdr-w-words">{words.toLocaleString()} words</span><span aria-hidden="true">·</span><span className="swdr-w-element-name">{ELEMENTS[active.kind]?.label}</span></span>
