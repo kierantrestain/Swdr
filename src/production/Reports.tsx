@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { newId } from '../model';
 import { Empty, SourceButton, displayDate, downloadText } from './components';
 import type { PaneProps } from './components';
-import { budgetCsv, budgetTotals, dayOutOfDays, doodCsv, moneyLabel, productionManifest } from './model';
+import { budgetCsv, budgetTotals, castNumbers, dayOutOfDays, doodCsv, moneyLabel, productionManifest } from './model';
 import type { BudgetLine } from './model';
 
 function asPence(raw: FormDataEntryValue | null): number {
@@ -20,6 +20,7 @@ export function Reports({ project, plan, source, update, readOnly, onOpenSource,
   const [editing, setEditing] = useState<BudgetLine>();
   const [error, setError] = useState('');
   const { dates, rows } = dayOutOfDays(plan);
+  const castIds = castNumbers(plan);
   const totals = budgetTotals(plan);
   return <>
     <div className="production-actions production-subnav" aria-label="Production reports">
@@ -35,9 +36,9 @@ export function Reports({ project, plan, source, update, readOnly, onOpenSource,
       </div>
       {!dates.length || !rows.length ? <Empty>Cast and dated shoot days are needed to calculate the report.</Empty> : <>
         <div className="production-table-scroll"><table className="production-table production-dood">
-          <thead><tr><th>Cast</th>{dates.map(date => <th key={date}>{displayDate(date)}</th>)}<th>Worked days</th></tr></thead>
+          <thead><tr><th>ID</th><th>Cast</th>{dates.map(date => <th key={date}>{displayDate(date)}</th>)}<th>Worked days</th></tr></thead>
           <tbody>{rows.map(row => <tr key={row.person.id}>
-            <th scope="row">{row.person.name}</th>{row.codes.map((code, index) => <td key={dates[index]}><span className={code !== '—' ? 'production-code' : ''}>{code}</span></td>)}<td>{row.worked}</td>
+            <td><span className="production-cast-id">{castIds.get(row.person.id)}</span></td><th scope="row">{row.person.name}</th>{row.codes.map((code, index) => <td key={dates[index]}><span className={code !== '—' ? 'production-code' : ''}>{code}</span></td>)}<td>{row.worked}</td>
           </tr>)}</tbody>
         </table></div>
         <p className="production-muted">SW Start work · W Work · WF Work finish · SWF Start/work/finish · H Paid hold</p>
