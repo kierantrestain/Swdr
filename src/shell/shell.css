@@ -20,6 +20,8 @@
 .shell-content > * { flex: 1 0 auto; }
 .shell-content.is-writing { height: 100%; }
 .shell-content.is-writing > * { flex: 1 1 auto; min-height: 0; }
+.shell-content.is-writing > [data-astryx-theme] { display: flex; flex-direction: column; background: var(--color-background-body); }
+.shell-content.is-writing > [data-astryx-theme] > * { flex: 1 1 auto; min-height: 0; }
 
 .shell-count {
   min-width: 20px; padding: 0 6px; border-radius: var(--radius-full); text-align: center; font-size: var(--font-size-2xs, 11px);
@@ -38,6 +40,20 @@
 .shell-shortcut-group h3 { margin: 0; font-size: var(--font-size-base); }
 .shell-shortcut-group td:last-child { text-align: right; white-space: nowrap; }
 .shell-keys, .shell-keys-option { display: inline-flex; align-items: center; gap: var(--spacing-1); flex-wrap: wrap; justify-content: flex-end; }
+
+/* Below the shell's mobile breakpoint the top bar keeps Home, Back and actions; the trail and episode switcher move here. */
+.shell-context-bar { display: none; }
+@media (max-width: 1023.98px) {
+  .shell-content > .shell-context-bar {
+    display: flex; flex: none; align-items: center; gap: var(--spacing-1); min-width: 0; overflow-x: auto;
+    padding: var(--spacing-1-5) var(--spacing-4); border-bottom: 1px solid var(--color-border); background: var(--color-background-surface);
+  }
+  .shell-context-bar .shell-crumbs { flex: 1; }
+  .shell-context-bar li:first-child { display: none; }
+  .shell-context-bar li:nth-child(2) > :first-child:not(button):not(a) { display: none; }
+  dialog .shell-crumbs { display: none; }
+  .app.is-focused .shell-context-bar { display: none; }
+}
 
 @media (max-width: 760px) {
   .shell-shortcut-groups { grid-template-columns: 1fr; }

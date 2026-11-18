@@ -127,7 +127,7 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
       <div>
         <h1>{TITLES[pane]}</h1>
         <div className="production-hero-subtitle">
-          <span>{episode ? `S${String(episode.season).padStart(2, '0')}E${String(episode.number).padStart(2, '0')}` : document.title}</span>
+          <span>{episode ? `S${episode.season}E${String(episode.number).padStart(2, '0')} · ${episode.title}` : document.title}</span>
           {snapshot && <><span aria-hidden="true"> · </span><SourceButton source={sourceFor(project, snapshot.document)} onOpenSource={onOpenSource}>{snapshot.label}</SourceButton></>}
         </div>
       </div>

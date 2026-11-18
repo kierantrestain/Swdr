@@ -69,3 +69,19 @@ export function isCurrent(entry: NavEntry, route: Route): boolean {
   const current = route.tab ?? 'schedule';
   return entry.route.tab === current;
 }
+
+const SERIES_TABS = ['Relationship web', 'Story map', 'Event ledger', 'Characters', 'Scene matrix', 'Arcs and continuity'];
+const EDITORIAL_TABS = ['Segments', 'Sources', 'Claims', 'Host guide', 'Producer rundown', 'Graphics', 'Issues', 'Branded brief'];
+const tabSlug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+/** Workspace tabs inside Series Intelligence and Editorial, for the command palette. */
+export function workspaceTabs(project: Project, document: DocumentModel | undefined): NavEntry[] {
+  const base = { projectId: project.id, documentId: document?.id };
+  const sections = sectionsFor(project);
+  return [
+    ...(sections.series ? SERIES_TABS.map(label => ({ id: `story-${tabSlug(label)}`, label: `Series Intelligence · ${label}`, icon: icon(BookOpen),
+      route: { ...base, view: 'story' as Destination, tab: tabSlug(label) } })) : []),
+    ...(sections.editorial ? EDITORIAL_TABS.map(label => ({ id: `editorial-${tabSlug(label)}`, label: `Editorial · ${label}`, icon: icon(Mic),
+      route: { ...base, view: 'editorial' as Destination, tab: tabSlug(label) } })) : [])
+  ];
+}

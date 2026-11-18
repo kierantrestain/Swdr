@@ -111,6 +111,8 @@ export function Shell(props: ShellProps) {
     <IconButton label="Keyboard shortcuts" tooltip="Keyboard shortcuts (?)" variant="ghost" icon={<Keyboard size={17} aria-hidden="true" />} onClick={onShortcuts} />
     <IconButton label={mode === 'dark' ? 'Use light appearance' : 'Use dark appearance'} variant="ghost"
       icon={mode === 'dark' ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />} onClick={() => onModeChange(mode === 'dark' ? 'light' : 'dark')} />
+    {project && <Button label="Share" size="sm" variant="primary" icon={<Share2 size={14} aria-hidden="true" />} tooltip="Share through the private team workspace"
+      {...linkProps({ view: 'team' }, navigate)} />}
   </span>;
 
   // Keyed by the writing/page split: a route change remounts the rail at its remembered width instead of
@@ -119,12 +121,12 @@ export function Shell(props: ShellProps) {
     key={writing ? 'writing' : 'pages'}
     aria-label="Project sections"
     collapsible={{ isCollapsed: sidebarCollapsed, onCollapsedChange: onSidebarCollapsedChange, buttonLabel: sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar' }}
-    header={<SideNavHeading heading={project.title} subheading={`${PROJECT_LABELS[project.kind]}${project.episodes.length ? ` · ${project.episodes.length} episodes` : ''}`}
-      headerEndContent={<Button label="Share" size="sm" variant="secondary" icon={<Share2 size={14} aria-hidden="true" />} {...linkProps({ view: 'team' }, navigate)} />} />}
+    header={<SideNavHeading heading={project.title} subheading={`${PROJECT_LABELS[project.kind]}${project.episodes.length ? ` · ${project.episodes.length} episodes` : ''}`} />}
   >
     {projectNavigation(project, document).map(group => <SideNavSection key={group.title} title={group.title}>
       {group.entries.map(entry => <SideNavItem key={entry.id} label={entry.label} icon={entry.icon} isSelected={isCurrent(entry, route)}
-        endContent={entry.count ? <span className={`shell-count${entry.tone === 'warning' ? ' is-warning' : ''}`}>{entry.count}</span> : undefined}
+        endContent={entry.count ? <span className={`shell-count${entry.tone === 'warning' ? ' is-warning' : ''}`} aria-hidden="true"
+          title={entry.tone === 'warning' ? `${entry.count} schedule conflict${entry.count === 1 ? '' : 's'}` : undefined}>{entry.count}</span> : undefined}
         {...linkProps(entry.route, navigate)} />)}
     </SideNavSection>)}
   </SideNav> : undefined;
@@ -133,10 +135,13 @@ export function Shell(props: ShellProps) {
     height="fill"
     variant="section"
     contentPadding={0}
-    mobileNav={{ breakpoint: 'md' }}
+    mobileNav={{ breakpoint: 'lg' }}
     topNav={<TopNav label="SWDR" heading={heading} startContent={crumbs || undefined} endContent={end} />}
     sideNav={sideNav}
   >
-    <div className={`shell-content${writing ? ' is-writing' : ''}`} data-view={route.view}>{children}</div>
+    <div className={`shell-content${writing ? ' is-writing' : ''}`} data-view={route.view}>
+      {crumbs && <div className="shell-context-bar">{crumbs}</div>}
+      {children}
+    </div>
   </AppShell>;
 }

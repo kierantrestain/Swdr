@@ -5,7 +5,7 @@ import { createStaticSource } from '@astryxdesign/core/Typeahead';
 import { useMemo } from 'react';
 import type { DocumentModel, Project } from '../model';
 import { sceneList } from '../model';
-import { projectNavigation } from './navigation';
+import { projectNavigation, workspaceTabs } from './navigation';
 import { documentForEpisode, episodeCode, orderedEpisodes } from './routes';
 import type { Route } from './routes';
 
@@ -35,6 +35,8 @@ export function CommandMenu({ isOpen, onOpenChange, projects, project, document,
         for (const entry of group.entries) list.push({ id: `go-${entry.id}`, label: `${group.title === 'Production' ? 'Production · ' : ''}${entry.label}`,
           auxiliaryData: { group: 'Go to', hint: project.title, keys: entry.key ? `g ${entry.key}` : undefined, run: () => navigate(entry.route) } });
       }
+      for (const entry of workspaceTabs(project, document)) list.push({ id: `go-${entry.id}`, label: entry.label,
+        auxiliaryData: { group: 'Go to', hint: project.title, run: () => navigate(entry.route) } });
       if (document) for (const scene of sceneList(document)) list.push({
         id: `scene-${scene.id}`, label: `Scene ${scene.number} · ${scene.heading || 'Untitled scene'}`,
         auxiliaryData: { group: 'Scenes in this script', run: () => openScene(scene.id, scene.blockId) }

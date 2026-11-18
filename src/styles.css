@@ -14,9 +14,9 @@
   --line: var(--color-border-emphasized);
   --accent: var(--color-accent);
   --accent-soft: var(--color-accent-muted);
-  --sage: var(--color-success-muted);
+  --sage: color-mix(in srgb, var(--color-success) 12%, var(--color-background-surface));
   --sage-ink: var(--color-text-success);
-  --warm: var(--color-warning-muted);
+  --warm: color-mix(in srgb, var(--color-warning) 12%, var(--color-background-surface));
   --danger: var(--color-error);
   --slate: var(--color-text-primary);
   --header: var(--color-background-surface);
@@ -64,7 +64,9 @@
   textarea { resize: vertical; }
   a { color: var(--color-text-accent); text-underline-offset: 2px; }
   h1, h2, h3, p { margin-top: 0; }
+  h1, h2, h3, h4, h5, h6 { color: inherit; }
   h1, h2 { font-family: var(--font-family-heading); font-weight: 400; letter-spacing: -.015em; }
+  h3, h4, h5, h6 { font-family: var(--font-family-body); font-weight: 650; letter-spacing: 0; }
   h1 { font-size: clamp(30px, 3.2vw, 42px); line-height: 1.08; margin-bottom: var(--spacing-2); }
   h2 { font-size: var(--font-size-xl); }
   p { line-height: 1.5; }
@@ -108,7 +110,7 @@
   transform: rotate(1.2deg);
 }
 .home-preview-page { text-align: right; margin-bottom: 10px; }
-.home-preview-sheet p { margin-bottom: 5px; line-height: 1.4; }
+.home-preview-sheet p { margin-bottom: 5px; line-height: 1.4; font: inherit; }
 .preview-scene { font-weight: 700; }
 .preview-character, .preview-dialogue { text-align: center; }
 
