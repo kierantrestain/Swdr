@@ -446,3 +446,61 @@ export function measurePages(view: EditorView, contentHeight: number, topPadding
   }
   return starts;
 }
+
+// ---------------------------------------------------------------- anchored comments
+
+export const commentsKey = new PluginKey<DecorationSet>('swdr-comments');
+
+/** Comment highlights are inline decorations, so ProseMirror maps them through every edit. */
+export const commentsPlugin = new Plugin<DecorationSet>({
+  key: commentsKey,
+  state: {
+    init: () => DecorationSet.empty,
+    apply(tr, value) {
+      const meta = tr.getMeta(commentsKey) as DecorationSet | undefined;
+      return meta ?? value.map(tr.mapping, tr.doc);
+    }
+  },
+  props: { decorations: state => commentsKey.getState(state) }
+});
+
+export interface CommentAnchor { id: string; resolved?: boolean; blockId: string; from: number; to: number }
+
+export function commentDecorations(doc: PMNode, comments: CommentAnchor[], current?: string): DecorationSet {
+  const positions = new Map<string, { pos: number; size: number }>();
+  doc.descendants((node, pos) => {
+    if (node.type !== schema.nodes.element) return true;
+    positions.set(node.attrs.id, { pos, size: node.content.size });
+    return false;
+  });
+  const decorations: Decoration[] = [];
+  for (const comment of comments) {
+    const target = positions.get(comment.blockId);
+    if (!target || comment.resolved) continue;
+    const from = Math.min(comment.from, target.size);
+    const to = Math.min(Math.max(comment.to, from), target.size);
+    if (to <= from) continue;
+    decorations.push(Decoration.inline(target.pos + 1 + from, target.pos + 1 + to, {
+      class: comment.id === current ? 'swdr-comment swdr-comment-current' : 'swdr-comment', 'data-comment-id': comment.id
+    }, { id: comment.id, inclusiveStart: false, inclusiveEnd: false }));
+  }
+  return DecorationSet.create(doc, decorations);
+}
+
+/** Current anchors (element id + offsets) read back from the mapped highlights. */
+export function commentAnchors(state: EditorState): Map<string, { blockId: string; from: number; to: number }> {
+  const anchors = new Map<string, { blockId: string; from: number; to: number }>();
+  const set = commentsKey.getState(state);
+  if (!set) return anchors;
+  for (const decoration of set.find()) {
+    const id = (decoration.spec as { id?: string }).id;
+    if (!id) continue;
+    const $from = state.doc.resolve(decoration.from);
+    const element = currentElement($from);
+    if (!element) continue;
+    const start = element.pos + 1;
+    const end = Math.min(decoration.to, start + element.node.content.size);
+    anchors.set(id, { blockId: element.node.attrs.id, from: decoration.from - start, to: end - start });
+  }
+  return anchors;
+}

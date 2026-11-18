@@ -205,6 +205,48 @@ test('shows the title page as the first sheet and opens its details', async ({ p
   expect(pageFaults).toEqual([]);
 });
 
+test('anchors a comment to a passage, keeps it through edits and reloads, then resolves it', async ({ page, pageFaults }) => {
+  await loadDemo(page);
+  await page.getByRole('button', { name: 'Resume screenplay' }).click();
+  const dialogue = element(page, 'dialogue').first();
+  await expect(dialogue).toHaveText('Tell me which boat.');
+  await dialogue.click();
+  await dialogue.evaluate(node => {
+    const text = node.firstChild!;
+    const range = node.ownerDocument.createRange();
+    range.setStart(text, 8);
+    range.setEnd(text, 18);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+  });
+  const add = page.getByRole('button', { name: 'Add comment' });
+  await expect(add).not.toHaveAttribute('aria-disabled', 'true');
+  await add.click();
+  const panel = page.getByRole('complementary', { name: 'Comments' });
+  await expect(panel.getByRole('button', { name: 'Show passage: which boat' })).toBeVisible();
+  await panel.getByRole('textbox', { name: 'Comment' }).fill('Make the boat a name she knows.');
+  await expect(page.locator('.swdr-comment')).toHaveText('which boat');
+
+  // Typing before the passage moves the anchor with the words.
+  await dialogue.click();
+  await page.keyboard.press('Home');
+  await page.keyboard.type('Just ');
+  await expect(page.locator('.swdr-comment')).toHaveText('which boat');
+  await expect(page.getByText('Saved on this device', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.locator('.swdr-comment')).toHaveText('which boat');
+  await page.getByRole('button', { name: 'Comments 1' }).click();
+  await expect(panel.getByRole('textbox', { name: 'Comment' })).toHaveValue('Make the boat a name she knows.');
+  await panel.getByRole('button', { name: 'Resolve' }).click();
+  await expect(page.locator('.swdr-comment')).toHaveCount(0);
+  await panel.getByRole('checkbox', { name: /Show resolved/ }).check();
+  await panel.getByRole('button', { name: 'Reopen' }).click();
+  await expect(page.locator('.swdr-comment')).toHaveText('which boat');
+  await panel.getByRole('button', { name: 'Delete' }).click();
+  await expect(page.locator('.swdr-comment')).toHaveCount(0);
+  expect(pageFaults).toEqual([]);
+});
+
 test('finds and replaces across the manuscript', async ({ page, pageFaults }) => {
   await loadDemo(page);
   await page.getByRole('button', { name: 'Resume screenplay' }).click();

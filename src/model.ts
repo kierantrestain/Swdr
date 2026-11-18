@@ -48,6 +48,21 @@ export interface LockedPage {
   firstBlockId: string;
 }
 
+/** A note anchored to a passage of one screenplay element (offsets into its text). */
+export interface ScriptComment {
+  id: string;
+  blockId: string;
+  from: number;
+  to: number;
+  quote: string;
+  text: string;
+  author?: string;
+  createdAt: string;
+  resolved?: boolean;
+  /** The anchored text was deleted; the comment keeps its last known place. */
+  detached?: boolean;
+}
+
 export interface DocumentModel {
   id: string;
   episodeId?: string;
@@ -62,6 +77,7 @@ export interface DocumentModel {
   lockedPages?: LockedPage[];
   revisionLabel?: string;
   showSceneNumbers?: boolean;
+  comments?: ScriptComment[];
 }
 
 export interface Episode {

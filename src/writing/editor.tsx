@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import {
-  Check, ChevronDown, CircleCheck, Columns2, Expand, FileText, List, MessageSquareText, Printer, Redo2, Replace, Search, Undo2, X
+  Check, ChevronDown, CircleCheck, MessageSquarePlus, NotebookPen, Columns2, Expand, FileText, List, MessageSquareText, Printer, Redo2, Replace, Search, Undo2, X
 } from 'lucide-react';
 import { baseKeymap } from 'prosemirror-commands';
 import { closeHistory, history, redo, redoDepth, undo, undoDepth } from 'prosemirror-history';
@@ -13,7 +13,8 @@ import { DropdownMenu } from '@astryxdesign/core/DropdownMenu';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { Kbd } from '@astryxdesign/core/Kbd';
 import { sceneList } from '../model';
-import type { Block, BlockKind, DocumentModel, SourceRef, WorkspaceViewProps } from '../model';
+import { newId } from '../model';
+import type { Block, BlockKind, DocumentModel, ScriptComment, SourceRef, WorkspaceViewProps } from '../model';
 import { geometryFor, paginateDocument } from './layout';
 import { pairDialogue } from './keyboard';
 import { WritingContext } from './writing-context';
@@ -21,7 +22,7 @@ import { useScriptPrint } from './print';
 import { blocksToDoc, docToBlocks } from './pm/convert';
 import { ELEMENTS, ELEMENT_ORDER, shortcutLabel } from './pm/elements';
 import {
-  bracketPlugin, clipboardProps, currentElement, enterCommand, integrityPlugin, measurePages, pageDecorations, pagesKey,
+  bracketPlugin, clipboardProps, commentAnchors, commentDecorations, commentsKey, commentsPlugin, currentElement, enterCommand, integrityPlugin, measurePages, pageDecorations, pagesKey,
   pagesPlugin, presentationPlugin, searchKey, searchPlugin, searchTransaction, setKind, tabCommand
 } from './pm/plugins';
 import { indexScript, suggest } from './pm/smarttype';
@@ -78,7 +79,11 @@ export function WritingView(props: WritingProps) {
   const measureFrame = useRef(0);
 
   const [active, setActive] = useState<{ id: string; kind: BlockKind }>({ id: document.blocks[0]?.id ?? '', kind: document.blocks[0]?.kind ?? 'scene' });
-  const [drawer, setDrawer] = useState<'scenes' | 'notes' | null>(null);
+  const [drawer, setDrawer] = useState<'scenes' | 'notes' | 'comments' | null>(null);
+  const [activeComment, setActiveComment] = useState('');
+  const [showResolved, setShowResolved] = useState(false);
+  const [hasSelection, setHasSelection] = useState(false);
+  const emittedComments = useRef<ScriptComment[] | undefined>(document.comments);
   const [focused, setFocused] = useState(false);
   const [finder, setFinder] = useState<{ open: boolean; replace: string }>({ open: false, replace: '' });
   const [search, setSearch] = useState({ query: '', count: 0, current: 0 });
@@ -130,6 +135,7 @@ export function WritingView(props: WritingProps) {
       const next = { undo: undoDepth(state), redo: redoDepth(state) };
       return previous.undo === next.undo && previous.redo === next.redo ? previous : next;
     });
+    setHasSelection(previous => previous === !state.selection.empty ? previous : !state.selection.empty);
     const found2 = searchKey.getState(state);
     if (found2) setSearch(previous => previous.query === found2.query && previous.count === found2.matches.length && previous.current === found2.current
       ? previous : { query: found2.query, count: found2.matches.length, current: found2.current });
@@ -172,6 +178,7 @@ export function WritingView(props: WritingProps) {
     bracketPlugin,
     presentationPlugin({ placeholderFor: kind => ELEMENTS[kind].label, sceneNumbers: () => latest.current.document.showSceneNumbers !== false }),
     searchPlugin,
+    commentsPlugin,
     pagesPlugin
   ], []);
 
@@ -183,6 +190,7 @@ export function WritingView(props: WritingProps) {
       keys[`Mod-Alt-${digit}`] = setKind(kind);
     }
     keys['Mod-e'] = (_state, dispatch) => { if (dispatch) openElementMenu(); return true; };
+    keys['Mod-Alt-m'] = (state, dispatch) => { if (state.selection.empty) return false; if (dispatch) addComment(); return true; };
     return keys;
   }
 
@@ -267,7 +275,9 @@ export function WritingView(props: WritingProps) {
           const { document: current, onDocumentChange: emit } = latest.current;
           const blocks = docToBlocks(next.doc, emitted.current, current.revisionLabel);
           emitted.current = blocks;
-          emit(working => ({ ...working, blocks }));
+          const comments = reanchor(current.comments, commentAnchors(next));
+          emittedComments.current = comments;
+          emit(working => comments === working.comments ? { ...working, blocks } : { ...working, blocks, comments });
         }
         refreshUi(next, editor);
         if (tr.docChanged || tr.getMeta(pagesKey)) measure();
@@ -288,6 +298,11 @@ export function WritingView(props: WritingProps) {
         // Copy and cut read the editor selection; adopt the browser's first (see syncSelection).
         copy: () => { syncSelection(editor); return false; },
         cut: () => { syncSelection(editor); return false; },
+        click: (_view, event) => {
+          const id = (event.target as HTMLElement | null)?.closest?.('[data-comment-id]')?.getAttribute('data-comment-id');
+          if (id) { setActiveComment(id); setDrawer('comments'); }
+          return false;
+        },
         focus: () => { refreshUi(editor.state, editor); return false; },
         blur: () => { window.setTimeout(() => { if (!editor.hasFocus() && popoverRef.current?.mode === 'suggest') setPopover(null); }, 120); return false; }
       }
@@ -312,9 +327,19 @@ export function WritingView(props: WritingProps) {
     const selection = Selection.near(state.doc.resolve(Math.min(anchor, state.doc.content.size - 1)));
     state = state.apply(state.tr.setSelection(selection).setMeta('swdr-external', true));
     editor.updateState(state);
-    editor.dispatch(editor.state.tr.setMeta(pagesKey, pageDecorations(editor.state.doc, layout.pages)).setMeta('swdr-external', true).setMeta('addToHistory', false));
+    editor.dispatch(editor.state.tr.setMeta(pagesKey, pageDecorations(editor.state.doc, layout.pages))
+      .setMeta(commentsKey, commentDecorations(editor.state.doc, document.comments ?? [], activeComment)).setMeta('swdr-external', true).setMeta('addToHistory', false));
     refreshUi(editor.state, editor);
   }, [document.blocks, plugins, refreshUi, layout.pages]);
+
+  // Comments added, edited, resolved or deleted outside the text (the Comments panel).
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+    emittedComments.current = document.comments;
+    editor.dispatch(editor.state.tr.setMeta(commentsKey, commentDecorations(editor.state.doc, document.comments ?? [], activeComment))
+      .setMeta('swdr-external', true).setMeta('addToHistory', false));
+  }, [document.comments, activeComment]);
 
   // Page breaks follow the (deferred) layout; widgets map through intermediate edits.
   useEffect(() => {
@@ -346,6 +371,61 @@ export function WritingView(props: WritingProps) {
     if (element) setCompact(element.clientWidth < Math.max(COMPACT_WIDTH * value / 100, 600));
     requestAnimationFrame(() => view.current?.focus());
   }
+
+  // ------------------------------------------------------------ comments
+  function addComment() {
+    const editor = view.current;
+    if (!editor || latest.current.readOnly) return;
+    const { from, to, empty } = editor.state.selection;
+    const found = currentElement(editor.state.selection.$from);
+    if (empty || !found) { props.onStatus('Select the words you want to comment on.'); return; }
+    const start = found.pos + 1;
+    const end = Math.min(to, start + found.node.content.size);
+    const comment: ScriptComment = {
+      id: newId(), blockId: found.node.attrs.id, from: from - start, to: end - start,
+      quote: editor.state.doc.textBetween(from, end, ' '), text: '', createdAt: new Date().toISOString()
+    };
+    onDocumentChange(current => ({ ...current, comments: [...(current.comments ?? []), comment] }));
+    setActiveComment(comment.id);
+    setDrawer('comments');
+    requestAnimationFrame(() => globalThis.document.querySelector<HTMLTextAreaElement>(`[data-comment-editor="${comment.id}"]`)?.focus());
+  }
+
+  function updateComment(id: string, change: Partial<ScriptComment> | null) {
+    onDocumentChange(current => ({
+      ...current,
+      comments: change === null ? (current.comments ?? []).filter(item => item.id !== id)
+        : (current.comments ?? []).map(item => item.id === id ? { ...item, ...change } : item)
+    }));
+  }
+
+  function showComment(comment: ScriptComment) {
+    setActiveComment(comment.id);
+    const editor = view.current;
+    if (!editor) return;
+    let start = -1;
+    editor.state.doc.descendants((node, pos) => {
+      if (start >= 0) return false;
+      if (node.type === schema.nodes.element && node.attrs.id === comment.blockId) { start = pos + 1; return false; }
+      return true;
+    });
+    if (start < 0) return;
+    const size = editor.state.doc.resolve(start).parent.content.size;
+    const selection = TextSelection.create(editor.state.doc, start + Math.min(comment.from, size), start + Math.min(comment.to, size));
+    editor.dispatch(editor.state.tr.setSelection(selection));
+    const dom = editor.domAtPos(start).node as HTMLElement;
+    const element = dom.nodeType === 1 ? dom : dom.parentElement;
+    if (element && scroller.current) {
+      const frame = scroller.current.getBoundingClientRect();
+      scroller.current.scrollTop += element.getBoundingClientRect().top - frame.top - frame.height * 0.3;
+    }
+  }
+
+  const orderedComments = useMemo(() => {
+    const order = new Map(document.blocks.map((block, index) => [block.id, index]));
+    return (document.comments ?? []).slice().sort((a, b) => (order.get(a.blockId) ?? 1e9) - (order.get(b.blockId) ?? 1e9) || a.from - b.from);
+  }, [document.blocks, document.comments]);
+  const openComments = orderedComments.filter(comment => !comment.resolved);
 
   // ------------------------------------------------------------ navigation
   const jump = useCallback((blockId: string, edit = true) => {
@@ -517,6 +597,8 @@ export function WritingView(props: WritingProps) {
         <IconButton label="Undo" tooltip="Undo (Ctrl+Z)" icon={<Undo2 size={16} />} variant="ghost" size="sm" isDisabled={readOnly || !depth.undo} onClick={() => runHistory('undo')} />
         <IconButton label="Redo" tooltip="Redo (Ctrl+Shift+Z)" icon={<Redo2 size={16} />} variant="ghost" size="sm" isDisabled={readOnly || !depth.redo} onClick={() => runHistory('redo')} />
         {active.kind === 'character' && !readOnly && <Button label="Dual" variant="ghost" size="sm" icon={<Columns2 size={15} />} tooltip="Pair this speech with the next one" onClick={toggleDual} />}
+        <IconButton label="Add comment" tooltip="Comment on the selected words (Ctrl+Alt+M)" icon={<MessageSquarePlus size={16} />} variant="ghost" size="sm"
+          isDisabled={readOnly || !hasSelection} onClick={addComment} />
         <DropdownMenu
           menuWidth={120}
           button={{ label: `${zoom}%`, variant: 'ghost', size: 'sm', tooltip: 'Zoom' }}
@@ -526,7 +608,12 @@ export function WritingView(props: WritingProps) {
         <IconButton label="Find and replace" tooltip="Find and replace (Ctrl+F)" icon={<Search size={16} />} variant="ghost" size="sm"
           onClick={() => { setFinder(previous => ({ ...previous, open: !previous.open })); requestAnimationFrame(() => globalThis.document.querySelector<HTMLInputElement>('#swdr-find-input')?.focus()); }} />
         <Button label="Scenes" variant={drawer === 'scenes' ? 'secondary' : 'ghost'} size="sm" icon={<List size={16} />} onClick={() => setDrawer(previous => previous === 'scenes' ? null : 'scenes')} />
-        <Button label="Notes" variant={drawer === 'notes' ? 'secondary' : 'ghost'} size="sm" icon={<MessageSquareText size={15} />} onClick={() => { setNotesSection(undefined); setDrawer(previous => previous === 'notes' ? null : 'notes'); }} />
+        <IconButton label="Notes" tooltip="Draft notes, title page and revisions" variant={drawer === 'notes' ? 'secondary' : 'ghost'} size="sm" icon={<NotebookPen size={16} />} onClick={() => { setNotesSection(undefined); setDrawer(previous => previous === 'notes' ? null : 'notes'); }} />
+        <span className="swdr-w-count-host">
+          <IconButton label={openComments.length ? `Comments ${openComments.length}` : 'Comments'} tooltip="Comments" variant={drawer === 'comments' ? 'secondary' : 'ghost'} size="sm" icon={<MessageSquareText size={16} />}
+            onClick={() => setDrawer(previous => previous === 'comments' ? null : 'comments')} />
+          {openComments.length > 0 && <span className="swdr-w-count" aria-hidden="true">{openComments.length}</span>}
+        </span>
         <Button label="Focus" variant="secondary" size="sm" icon={<Expand size={14} />} tooltip="Focus mode (Ctrl+Shift+F)" onClick={() => setFocus(true)} />
         {toolbarEnd || <Button label="Print" variant="secondary" size="sm" icon={<Printer size={14} />} onClick={print.requestPrint} />}
       </div>}
@@ -580,6 +667,28 @@ export function WritingView(props: WritingProps) {
           }}><small>{scene.number}</small><span>{scene.heading.toUpperCase() || 'Untitled scene'}</span></button>
         </li>)}</ol> : <p>Add a scene heading to start the scene list.</p>}
       </aside>}
+      {!focused && drawer === 'comments' && <aside className="swdr-w-drawer swdr-w-context swdr-w-comments" aria-label="Comments">
+        <div className="swdr-w-drawer-head"><h2>Comments <small>{openComments.length}</small></h2><button className="swdr-w-quiet" aria-label="Close comments" onClick={() => setDrawer(null)}><X size={17} /></button></div>
+        {!orderedComments.length && <p>Select words in the script and choose <strong>Add comment</strong> (<Kbd keys="mod+alt+m" />) to leave a note on that passage.</p>}
+        {orderedComments.length > openComments.length && <label className="swdr-w-check swdr-w-resolved-toggle"><input type="checkbox" checked={showResolved} onChange={event => setShowResolved(event.target.checked)} /> Show resolved ({orderedComments.length - openComments.length})</label>}
+        <ol className="swdr-comment-list">{orderedComments.filter(comment => showResolved || !comment.resolved).map(comment => <li key={comment.id}
+          className={`swdr-comment-card${comment.id === activeComment ? ' is-current' : ''}${comment.resolved ? ' is-resolved' : ''}`}>
+          <button type="button" className="swdr-comment-quote" onClick={() => showComment(comment)} aria-label={`Show passage: ${comment.quote}`}>
+            “{comment.quote.length > 120 ? comment.quote.slice(0, 117) + '…' : comment.quote}”
+            {comment.detached && <small> · passage deleted</small>}
+          </button>
+          <label className="swdr-sr" htmlFor={`comment-${comment.id}`}>Comment</label>
+          <textarea id={`comment-${comment.id}`} data-comment-editor={comment.id} rows={2} placeholder="Write a comment" value={comment.text} readOnly={readOnly}
+            onFocus={() => setActiveComment(comment.id)} onChange={event => updateComment(comment.id, { text: event.target.value })} />
+          <div className="swdr-comment-actions">
+            <small>{comment.author ?? 'You'} · {new Date(comment.createdAt).toLocaleDateString()}</small>
+            {!readOnly && <>
+              <Button label={comment.resolved ? 'Reopen' : 'Resolve'} variant="ghost" size="sm" onClick={() => updateComment(comment.id, { resolved: !comment.resolved })} />
+              <Button label="Delete" variant="ghost" size="sm" onClick={() => updateComment(comment.id, null)} />
+            </>}
+          </div>
+        </li>)}</ol>
+      </aside>}
       {!focused && drawer === 'notes' && activeBlock && <WritingContext {...props} key={notesSection ?? 'notes'} section={notesSection} active={activeBlock} onClose={() => { setDrawer(null); setNotesSection(undefined); }} onDocumentChange={commit} onResetHistory={() => undefined} onPrint={print.requestPrint} />}
 
       <footer className="swdr-write-footer">
@@ -616,6 +725,25 @@ function syncSelection(editor: EditorView) {
   } catch {
     // A focus node inside a widget has no document position; keep the editor's selection.
   }
+}
+
+/** Moves comments to their mapped anchors; a comment whose passage was deleted is kept, marked detached. */
+function reanchor(comments: ScriptComment[] | undefined, anchors: Map<string, { blockId: string; from: number; to: number }>): ScriptComment[] | undefined {
+  if (!comments?.length) return comments;
+  let changed = false;
+  const next = comments.map(comment => {
+    if (comment.resolved) return comment;
+    const anchor = anchors.get(comment.id);
+    if (!anchor) {
+      if (comment.detached) return comment;
+      changed = true;
+      return { ...comment, detached: true };
+    }
+    if (anchor.blockId === comment.blockId && anchor.from === comment.from && anchor.to === comment.to && !comment.detached) return comment;
+    changed = true;
+    return { ...comment, ...anchor, detached: undefined };
+  });
+  return changed ? next : comments;
 }
 
 function activeSceneOf(blocks: Block[], blockId: string): string | undefined {
