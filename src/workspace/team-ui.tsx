@@ -151,7 +151,7 @@ export function TeamWorkspace({ localProjects, onHome, renderWorkspace }: TeamWo
           await forget();
         } else if (cause instanceof TeamRequestError && cause.status === 0) {
           const cachedEmail = await resume().catch(() => undefined);
-          if (!cancelled && cachedEmail) setAccount({ email: cachedEmail, name: '', method: 'password', hasPassword: false });
+          if (!cancelled && cachedEmail) setAccount({ email: cachedEmail, name: '', method: 'password', hasPassword: true });
         } else {
           setMessage(errorMessage(cause));
         }
