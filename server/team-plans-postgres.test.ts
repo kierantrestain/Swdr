@@ -43,9 +43,9 @@ test('plans, Stripe checkout and webhook, password reset by email and the MCP co
   const fake = `http://127.0.0.1:${(fakes.address() as { port: number }).port}`;
   Object.assign(process.env, {
     SWDR_TEAM_DATABASE_URL: databaseUrl, SWDR_TEAM_SIGNUP: 'open', STRIPE_SECRET_KEY: 'sk_test_x', SWDR_STRIPE_API: fake, STRIPE_WEBHOOK_SECRET: 'whsec_test',
-    RESEND_API_KEY: 're_test', RESEND_FROM: 'SWDR <hello@swdr.test>', SWDR_RESEND_API: fake
+    RESEND_API_KEY: 're_test', RESEND_FROM: 'SWDR <hello@swdr.test>', SWDR_RESEND_API: fake, SWDR_RECOVERY_KEY: 'owner-recovery-key-0123456789abcdef'
   });
-  t.after(() => { for (const key of ['SWDR_TEAM_DATABASE_URL', 'SWDR_TEAM_SIGNUP', 'STRIPE_SECRET_KEY', 'SWDR_STRIPE_API', 'STRIPE_WEBHOOK_SECRET', 'RESEND_API_KEY', 'RESEND_FROM', 'SWDR_RESEND_API']) delete process.env[key]; });
+  t.after(() => { for (const key of ['SWDR_TEAM_DATABASE_URL', 'SWDR_TEAM_SIGNUP', 'STRIPE_SECRET_KEY', 'SWDR_STRIPE_API', 'STRIPE_WEBHOOK_SECRET', 'RESEND_API_KEY', 'RESEND_FROM', 'SWDR_RESEND_API', 'SWDR_RECOVERY_KEY']) delete process.env[key]; });
 
   const app = createServer((request: IncomingMessage, response: ServerResponse) => {
     if (request.url === '/api/team') void team(request, response);
@@ -132,4 +132,10 @@ test('plans, Stripe checkout and webhook, password reset by email and the MCP co
   assert.equal((await call('reset-password', { token, password: 'a new lamp for the pier' }, '')).status, 410);
   assert.equal((await call('session')).status, 401);
   assert.equal((await call('sign-in', { email, password: 'a new lamp for the pier' }, '')).status, 200);
+
+  // Without email, the workspace owner's recovery key resets a password.
+  assert.equal((await call('recovery-reset', { email, key: 'wrong-key', password: 'the harbour at night' }, '')).status, 401);
+  assert.deepEqual((await call('recovery-reset', { email, key: 'owner-recovery-key-0123456789abcdef', password: 'the harbour at night' }, '')).data, { email });
+  assert.equal((await call('sign-in', { email, password: 'the harbour at night' }, '')).status, 200);
+  assert.equal((await call<{ reset: string }>('config', {}, '')).data?.reset, 'email');
 });

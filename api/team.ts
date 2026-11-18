@@ -5,7 +5,7 @@ import { getPool } from '../server/team-db.js';
 import { asObject, TeamFault } from '../server/team-model.js';
 import { aiAllowance, createCheckout, requirePro } from '../server/team-billing.js';
 import { connectorStatus, createConnectorLink, revokeConnectorLinks } from '../server/team-mcp.js';
-import { completeReset, requestReset } from '../server/team-reset.js';
+import { completeReset, recoverWithKey, requestReset } from '../server/team-reset.js';
 import { aiModels, chargeAi, openRouterKey, readAiRequest, readKeys, streamAi } from '../server/team-ai.js';
 import { conflictDetails, readAccounts, requireAccount, runTeamAction } from '../server/team-service.js';
 
@@ -89,6 +89,10 @@ export default async function handler(req: TeamRequest, res: ServerResponse): Pr
     const origin = req.headers.origin!;
     if (request.action === 'request-reset') {
       res.end(JSON.stringify({ data: await requestReset(database, request, origin, clientAddress(req)) }));
+      return;
+    }
+    if (request.action === 'recovery-reset') {
+      res.end(JSON.stringify({ data: { email: await recoverWithKey(database, request, clientAddress(req)) } }));
       return;
     }
     if (request.action === 'reset-password') {

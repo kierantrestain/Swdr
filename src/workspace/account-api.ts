@@ -26,6 +26,7 @@ export const accountApi = {
     teamRequest<TeamSignedIn>('sign-up', fields),
   signOut: () => teamRequest<null>('logout'),
   requestReset: (email: string) => teamRequest<{ sent: true }>('request-reset', { email }),
+  recoverWithKey: (email: string, key: string, password: string) => teamRequest<{ email: string }>('recovery-reset', { email, key, password }),
   resetPassword: (token: string, password: string) => teamRequest<{ email: string }>('reset-password', { token, password }),
   setPassword: (password: string, name?: string) => teamRequest<TeamAccount>('set-password', { password, name }),
   previewInvite: (token: string) => teamRequest<TeamInvitePreview>('invitation', { token }),

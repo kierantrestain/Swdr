@@ -14,6 +14,7 @@ import {
   reissueInvitation, revokeInvitation, roleField
 } from './team-invitations.js';
 import { billingEnabled, effectivePlan, LIMITS, requirePro } from './team-billing.js';
+import { recoveryEnabled, resetEnabled } from './team-reset.js';
 import {
   applyProjection, asObject, canReadEpisode, canWrite, currentBlock, emailField, idField,
   integerField, mergeTeamProjects, preserveSnapshots, TeamFault, textField, toVisibleProject,
@@ -668,7 +669,7 @@ export async function runTeamAction(
 ): Promise<TeamResult> {
   switch (request.action) {
     case 'config':
-      return { data: { signup: context.signup, accessKeys: accounts.size > 0 } satisfies TeamConfig };
+      return { data: { signup: context.signup, accessKeys: accounts.size > 0, reset: resetEnabled() ? 'email' : recoveryEnabled() ? 'recovery' : 'none' } satisfies TeamConfig };
     case 'login':
       return signIn(pool, accounts, request);
     case 'sign-in':

@@ -101,6 +101,8 @@ export function TeamAuthPage({ config, invite, inviteToken, inviteError, onSigne
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [resetToken] = useState(readResetToken);
+  const [recoveryKey, setRecoveryKey] = useState('');
+  const byKey = config?.reset === 'recovery';
   const [recovery, setRecovery] = useState<'forgot' | 'sent' | 'reset' | undefined>(resetToken ? 'reset' : undefined);
 
   useEffect(() => {
@@ -144,7 +146,9 @@ export function TeamAuthPage({ config, invite, inviteToken, inviteError, onSigne
     event.preventDefault();
     setBusy(true);
     setError(undefined);
-    const work = recovery === 'reset' && resetToken
+    const work = recovery === 'forgot' && byKey
+      ? accountApi.recoverWithKey(email, recoveryKey, password).then(async ({ email: address }) => onSignedIn(await accountApi.signIn(address, password)))
+      : recovery === 'reset' && resetToken
       ? accountApi.resetPassword(resetToken, password).then(async ({ email: address }) => {
         window.history.replaceState(window.history.state, '', '#team');
         return onSignedIn(await accountApi.signIn(address, password));
@@ -165,10 +169,17 @@ export function TeamAuthPage({ config, invite, inviteToken, inviteError, onSigne
                 {recovery === 'reset'
                   ? <TextInput label="New password" type="password" value={password} onChange={setPassword} autoComplete="new-password" isRequired
                     description="At least 10 characters. Signing in elsewhere ends when you change it." />
+                  : byKey ? <>
+                    <TextInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" isRequired />
+                    <TextInput label="Workspace recovery key" type="password" value={recoveryKey} onChange={setRecoveryKey} autoComplete="off" isRequired
+                      description="The SWDR_RECOVERY_KEY value from the hosting settings. Only the workspace owner has it." />
+                    <TextInput label="New password" type="password" value={password} onChange={setPassword} autoComplete="new-password" isRequired
+                      description="At least 10 characters." />
+                  </>
                   : <TextInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" isRequired
                     description="We'll email a link to choose a new password." />}
                 {error && <Banner status="error" title={error} collapsible={false} />}
-                <Button type="submit" variant="primary" isLoading={busy} width="100%" label={recovery === 'reset' ? 'Save and sign in' : 'Send reset link'} />
+                <Button type="submit" variant="primary" isLoading={busy} width="100%" label={recovery === 'reset' || byKey ? 'Save and sign in' : 'Send reset link'} />
               </VStack>
             </form>}
           <Button variant="ghost" label="Back to sign in" onClick={() => { setRecovery(undefined); setError(undefined); if (resetToken) window.history.replaceState(window.history.state, '', '#team'); }} />
@@ -206,7 +217,7 @@ export function TeamAuthPage({ config, invite, inviteToken, inviteError, onSigne
                   label={useKey ? 'Sign in' : tab === 'create' ? (invite?.projectTitle ? 'Create account and join' : 'Create account') : (invite?.projectTitle ? 'Sign in and join' : 'Sign in')} />
               </VStack>
             </form>}
-          {tab === 'sign-in' && !useKey && <Button variant="ghost" label="Forgot your password?" onClick={() => { setRecovery('forgot'); setError(undefined); }} />}
+          {tab === 'sign-in' && !useKey && config?.reset !== 'none' && <Button variant="ghost" label="Forgot your password?" onClick={() => { setRecovery('forgot'); setError(undefined); }} />}
           {config?.accessKeys && <Button variant="ghost" icon={<KeyRound size={16} aria-hidden />}
             label={useKey ? 'Use email and password instead' : 'Use a team access key'}
             onClick={() => { setUseKey(!useKey); setError(undefined); }} />}

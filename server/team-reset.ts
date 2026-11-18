@@ -3,11 +3,15 @@
  * a digest, and the response never reveals whether an email has an account. Completing a reset signs
  * out every other session for that account.
  */
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Pool } from 'pg';
 import { assertNotThrottled, hashPassword, newToken, recordAttempt, requirePassword, TOKEN, tokenDigest } from './team-auth.js';
 import { emailField, TeamFault } from './team-model.js';
 
 type Env = Record<string, string | undefined>;
+
+/** The workspace owner's recovery key (SWDR_RECOVERY_KEY, at least 24 characters): resets a password without email. */
+export const recoveryEnabled = (env: Env = process.env) => (env.SWDR_RECOVERY_KEY?.trim().length ?? 0) >= 24;
 
 export const resetEnabled = (env: Env = process.env) => Boolean(env.RESEND_API_KEY?.trim() && env.RESEND_FROM?.trim());
 
@@ -57,6 +61,33 @@ export async function completeReset(db: Pool, body: Record<string, unknown>): Pr
   const claimed = await db.query('UPDATE swdr_team_resets SET used_at = now() WHERE digest = $1 AND used_at IS NULL AND expires_at > now()', [tokenDigest(token)]);
   if (claimed.rowCount !== 1) throw expired();
   await db.query('UPDATE swdr_team_credentials SET scheme = $2, salt = $3, hash = $4 WHERE email = $1', [email, credential.scheme, credential.salt, credential.hash]);
+  await db.query('DELETE FROM swdr_team_sessions WHERE email = $1', [email]);
+  return email;
+}
+
+/**
+ * Resets a password with the workspace recovery key instead of an email link. Only someone who can read
+ * the hosting settings knows the key. Attempts are rate-limited, and every other session ends.
+ */
+export async function recoverWithKey(db: Pool, body: Record<string, unknown>, address: string, env: Env = process.env): Promise<string> {
+  if (!recoveryEnabled(env)) throw new TeamFault(503, 'Password recovery is not set up on this workspace.');
+  const rules = [{ scope: `recovery-ip:${tokenDigest(address)}`, limit: 5 }];
+  await assertNotThrottled(db, rules);
+  const digest = (value: string) => createHash('sha256').update(value).digest();
+  const given = typeof body.key === 'string' ? body.key.trim() : '';
+  if (!given || !timingSafeEqual(digest(given), digest(env.SWDR_RECOVERY_KEY!.trim()))) {
+    await recordAttempt(db, rules);
+    throw new TeamFault(401, 'That recovery key is not right.');
+  }
+  const email = emailField(body.email);
+  const user = await db.query('SELECT 1 FROM swdr_team_users WHERE email = $1', [email]);
+  if (!user.rows[0]) throw new TeamFault(404, 'There is no account with that email.');
+  const credential = await hashPassword(requirePassword(body.password, email));
+  await db.query(
+    `INSERT INTO swdr_team_credentials (email, scheme, salt, hash) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (email) DO UPDATE SET scheme = EXCLUDED.scheme, salt = EXCLUDED.salt, hash = EXCLUDED.hash`,
+    [email, credential.scheme, credential.salt, credential.hash]
+  );
   await db.query('DELETE FROM swdr_team_sessions WHERE email = $1', [email]);
   return email;
 }

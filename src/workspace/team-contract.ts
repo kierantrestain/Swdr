@@ -75,6 +75,8 @@ export interface TeamConfig {
   signup: TeamSignupMode;
   /** True when operator-provisioned access keys (SWDR_TEAM_ACCOUNTS) are configured. */
   accessKeys: boolean;
+  /** How a forgotten password is reset: by email (Resend), with the workspace recovery key, or not at all. */
+  reset?: 'email' | 'recovery' | 'none';
 }
 
 export interface TeamAccount {
