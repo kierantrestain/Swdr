@@ -20,6 +20,12 @@ Results from the REA-led rebuild run on 18 November 2026: Linux x64, Node 22.23.
 | Production | Strips scheduled by keyboard, menu and drag and drop, with the call sheet following. Script changes after release are flagged on strips and the breakdown. Cast clash, costs, call sheet issue and reissue, and reimport of a moved and omitted shooting draft. |
 | Save, share and recover | Archive restore in a clean profile with its exact issued line. The service-worker shell reopens a saved screenplay offline. |
 
+## Deployment
+
+The preview deployment `swdr-9lav5h53j-kierantrestain-9646s-projects.vercel.app` (`dpl_CcZ9p7nCDaXSzGGXBbyREnvHh21y`) was created with Vercel CLI 66.0.0 and reported **READY**. The build ran `npm ci` and `npm run build` on Node 26.x, and the `api/team` function was packaged with `server/team-model.js`, `server/team-service.js` and `src/model.js`. Running `vercel build` locally produced the same function, which was then loaded and invoked as the runtime does. It answers `503 Private team access is not configured.` instead of failing to import.
+
+Vercel Deployment Protection covers every preview, so the URL needs a Vercel sign-in. The project has no environment variables. The hosted team workspace stays unavailable until `SWDR_TEAM_DATABASE_URL` and `SWDR_TEAM_ACCOUNTS` are set and the [schema](../server/team-schema.sql) is applied ([team guide](workspace.md)). Local writing, series, factual and production work do not depend on it.
+
 ## Defects fixed in this run
 
 - **Team API on Vercel** failed with `ERR_MODULE_NOT_FOUND: /var/task/server/team-model`. Runtime relative imports in `api/` and `server/` now include their `.js` extension. `tests/api-esm.test.ts` compiles the handler one file at a time, as Vercel does, and loads it as native ESM.
