@@ -76,6 +76,8 @@ export function Shell(props: ShellProps) {
   const episodes = project ? orderedEpisodes(project) : [];
   const index = episode ? episodes.findIndex(item => item.id === episode.id) : -1;
   const showEpisodes = Boolean(project && episodes.length && route.view !== 'import');
+  // Projects without episodes switch between their documents from the same place.
+  const showDocuments = Boolean(project && !episodes.length && project.documents.length > 1 && route.view !== 'import' && route.view !== 'project');
   const writing = route.view === 'write' || route.view === 'av';
 
   const heading = <span className="shell-brand">
@@ -90,7 +92,12 @@ export function Shell(props: ShellProps) {
     <Breadcrumbs label="You are here" separator={<ChevronRight size={14} aria-hidden="true" />}>
       <BreadcrumbItem {...linkProps({ view: 'home' }, navigate)} isCurrent={false}>Projects</BreadcrumbItem>
       {project && <BreadcrumbItem isCurrent={false} onClick={() => navigate({ view: 'project', projectId: project.id, documentId: document?.id })}>{project.title}</BreadcrumbItem>}
-      {(route.view !== 'project' || !project) && <BreadcrumbItem isCurrent={!showEpisodes}>{sectionLabel(route)}</BreadcrumbItem>}
+      {(route.view !== 'project' || !project) && <BreadcrumbItem isCurrent={!showEpisodes && !showDocuments}>{sectionLabel(route)}</BreadcrumbItem>}
+      {showDocuments && project && <BreadcrumbItem isCurrent menu={project.documents.map(item => ({
+        id: item.id, label: item.title, endContent: item.id === document?.id ? 'Current' : undefined,
+        onClick: () => navigate({ view: route.view === 'write' || route.view === 'av' ? (item.kind === 'av' ? 'av' : 'write') : route.view,
+          projectId: project.id, documentId: item.id, tab: route.tab })
+      }))}>{document?.title ?? 'Choose document'}</BreadcrumbItem>}
       {showEpisodes && project && <BreadcrumbItem isCurrent menu={episodeMenu(project, document, switchEpisode)}>
         {episode ? `${episodeCode(episode)} · ${episode.title}` : 'Choose episode'}
       </BreadcrumbItem>}

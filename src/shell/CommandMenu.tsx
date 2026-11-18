@@ -41,6 +41,11 @@ export function CommandMenu({ isOpen, onOpenChange, projects, project, document,
         id: `scene-${scene.id}`, label: `Scene ${scene.number} · ${scene.heading || 'Untitled scene'}`,
         auxiliaryData: { group: 'Scenes in this script', run: () => openScene(scene.id, scene.blockId) }
       });
+      if (!project.episodes.length) for (const item of project.documents) list.push({
+        id: `document-${item.id}`, label: item.title,
+        auxiliaryData: { group: 'Documents', hint: item.id === document?.id ? 'Current' : item.kind === 'av' ? 'AV script' : 'Script',
+          run: () => navigate({ view: item.kind === 'av' ? 'av' : 'write', projectId: project.id, documentId: item.id }) }
+      });
       for (const episode of orderedEpisodes(project)) {
         const target = documentForEpisode(project, episode.id, document);
         if (!target) continue;
