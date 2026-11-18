@@ -19,3 +19,10 @@
 .ai-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-3); flex-wrap: wrap; padding-top: var(--spacing-3); border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: var(--font-size-xs); }
 .ai-foot span { max-width: 52ch; }
 .ai-dataset { min-height: 28px; padding: 2px var(--spacing-2); font-size: var(--font-size-xs); }
+.ai-accounts { padding: var(--spacing-3) var(--spacing-4); border: 1px solid var(--color-border); border-radius: var(--radius-element); }
+.ai-accounts summary { display: flex; align-items: center; gap: var(--spacing-2); cursor: pointer; font-size: var(--font-size-sm); font-weight: 600; }
+.ai-accounts p { margin: var(--spacing-2) 0 var(--spacing-3); color: var(--color-text-secondary); font-size: var(--font-size-xs); }
+.ai-accounts ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: var(--spacing-3); margin: var(--spacing-3) 0 0; padding: 0; list-style: none; }
+.ai-accounts label { display: grid; gap: 2px; font-size: var(--font-size-xs); font-weight: 600; color: var(--color-text-secondary); }
+.ai-accounts input { width: 100%; font-size: var(--font-size-sm); font-weight: 400; color: var(--color-text-primary); }
+.ai-accounts small { color: var(--color-text-secondary); font-size: var(--font-size-2xs); }

@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 import { readSignupMode } from '../server/team-auth.js';
 import { ensureSchema, teamDatabaseUrl } from '../server/team-migrate.js';
 import { asObject, TeamFault } from '../server/team-model.js';
-import { aiModels, chargeAi, readAiRequest, streamAi } from '../server/team-ai.js';
+import { aiModels, chargeAi, openRouterKey, readAiRequest, readKeys, streamAi } from '../server/team-ai.js';
 import { conflictDetails, readAccounts, requireAccount, runTeamAction } from '../server/team-service.js';
 
 /**
@@ -101,16 +101,22 @@ export default async function handler(req: TeamRequest, res: ServerResponse): Pr
     const signup = readSignupMode(process.env.SWDR_TEAM_SIGNUP);
     const database = getPool();
     await ensureSchema(database);
+    if (request.action === 'openrouter-key') {
+      // The OpenRouter sign-in hands back a code; exchanging it here keeps the browser's CSP to this origin.
+      res.end(JSON.stringify({ data: await openRouterKey(request) }));
+      return;
+    }
     if (request.action === 'ai-models') {
       await requireAccount(database, accounts, cookie);
-      res.end(JSON.stringify({ data: await aiModels() }));
+      res.end(JSON.stringify({ data: await aiModels(process.env, readKeys(request.keys)) }));
       return;
     }
     if (request.action === 'ai') {
       // The AI partner streams plain text; everything up to the first byte can still fail as JSON.
       const account = await requireAccount(database, accounts, cookie);
       const ask = readAiRequest(request);
-      await chargeAi(database, account.email);
+      // Requests on the user's own key cost the workspace nothing; a higher ceiling still stops misuse.
+      await chargeAi(database, account.email, ask.model?.startsWith('mine-') ? 500 : undefined);
       const abort = new AbortController();
       req.on('close', () => abort.abort());
       let started = false;

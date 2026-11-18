@@ -13,6 +13,8 @@ It works offline in the browser, keeps your projects on your device by default, 
 ### AI partner
 - **A writing partner that knows your project**: ideas, plot structure, continue a scene in your voice, sharpen dialogue, development notes, loglines and creator hooks — grounded in your outline, characters and the scene you are in, streamed as it writes, and inserted into the script with one click.
 - **Any model**: Claude, plus every model on OpenRouter, Groq, Google Gemini, Mistral and OpenAI, or your own. Free models are marked in the picker.
+- **Free to start**: add one free Gemini or OpenRouter key on the server and every signed-in user can use it with no setup.
+- **Users' own accounts**: Connect OpenRouter in one click, or paste their own Claude, GPT, Gemini, Groq or Mistral key, kept only in their browser.
 - **Your own fine-tuned model**: export your scenes as training data, fine-tune an open model, and connect it. See [docs/ai.md](docs/ai.md).
 
 ### Smart, on your device

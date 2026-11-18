@@ -36,9 +36,13 @@ const MODE_INSTRUCTIONS: Record<AiMode, string> = {
   ask: 'Answer the writer\'s question directly, using the project context.'
 };
 
+/** API keys a user brings from their own provider accounts. Sent with each request, never stored. */
+export type UserKeys = Partial<Record<'anthropic' | 'openrouter' | 'groq' | 'gemini' | 'mistral' | 'openai', string>>;
+
 export interface AiRequest {
-  /** provider:model, such as anthropic:claude-opus-5-5 or groq:llama-3.3-70b-versatile. */
+  /** provider:model, such as anthropic:claude-opus-5-5 or groq:llama-3.3-70b-versatile; mine-<provider> for the user's own key. */
   model?: string;
+  keys: UserKeys;
   mode: AiMode;
   prompt: string;
   context: string;
@@ -60,8 +64,20 @@ export function readAiRequest(body: Record<string, unknown>): AiRequest {
     }
     return { role: item.role as 'user' | 'assistant', content: item.content };
   }) : [];
-  const model = typeof body.model === 'string' && /^[a-z]+:[\w./:@-]{1,160}$/.test(body.model) ? body.model : undefined;
-  return { model, mode, prompt, context, history };
+  const model = typeof body.model === 'string' && /^[a-z-]+:[\w./:@-]{1,160}$/.test(body.model) ? body.model : undefined;
+  return { model, keys: readKeys(body.keys), mode, prompt, context, history };
+}
+
+export function readKeys(value: unknown): UserKeys {
+  if (!value || typeof value !== 'object') return {};
+  const keys: UserKeys = {};
+  for (const preset of PRESETS) {
+    const key = (value as Record<string, unknown>)[preset.id];
+    if (key === undefined || key === '') continue;
+    if (typeof key !== 'string' || key.length < 10 || key.length > 400 || !/^[\x21-\x7e]+$/.test(key)) throw new TeamFault(400, `That ${preset.label} key does not look right.`);
+    keys[preset.id as keyof UserKeys] = key;
+  }
+  return keys;
 }
 
 /** Counts this request against the account's daily allowance (SWDR_AI_DAILY_LIMIT, default 60). */
@@ -97,7 +113,7 @@ interface Provider {
   models: string[];
 }
 
-const PRESETS: Array<{ id: string; label: string; keyVar: string; baseUrl?: string }> = [
+const PRESETS: Array<{ id: keyof UserKeys; label: string; keyVar: string; baseUrl?: string }> = [
   { id: 'anthropic', label: 'Claude', keyVar: 'ANTHROPIC_API_KEY' },
   { id: 'openrouter', label: 'OpenRouter', keyVar: 'OPENROUTER_API_KEY', baseUrl: 'https://openrouter.ai/api/v1' },
   { id: 'groq', label: 'Groq', keyVar: 'GROQ_API_KEY', baseUrl: 'https://api.groq.com/openai/v1' },
@@ -111,8 +127,9 @@ const CLAUDE_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5
 /** Providers whose key (or, for a custom server, base URL) is set. */
 export function aiProviders(env: Record<string, string | undefined> = process.env): Provider[] {
   const list = (value?: string) => (value ?? '').split(',').map(item => item.trim()).filter(Boolean);
+  const base = (preset: (typeof PRESETS)[number]) => env[`SWDR_AI_${preset.id.toUpperCase()}_BASE_URL`]?.trim() || preset.baseUrl;
   const providers: Provider[] = PRESETS.filter(preset => env[preset.keyVar]?.trim()).map(preset => ({
-    id: preset.id, label: preset.label, baseUrl: preset.baseUrl, key: env[preset.keyVar]!.trim(),
+    id: preset.id, label: preset.label, baseUrl: base(preset), key: env[preset.keyVar]!.trim(),
     models: list(env[`SWDR_AI_${preset.id.toUpperCase()}_MODELS`]).length ? list(env[`SWDR_AI_${preset.id.toUpperCase()}_MODELS`]) : preset.id === 'anthropic' ? CLAUDE_MODELS : []
   }));
   // Your own model: a fine-tuned open model on Ollama, Hugging Face, Together, Fireworks or any OpenAI-compatible server.
@@ -123,47 +140,59 @@ export function aiProviders(env: Record<string, string | undefined> = process.en
   return providers;
 }
 
+/** The user's own accounts, ahead of the server's. Model IDs take a mine- prefix so the two never mix. */
+export function userProviders(keys: UserKeys, env: Record<string, string | undefined> = process.env): Provider[] {
+  return PRESETS.filter(preset => keys[preset.id]).map(preset => ({
+    id: `mine-${preset.id}`, label: `${preset.label} (your account)`,
+    baseUrl: env[`SWDR_AI_${preset.id.toUpperCase()}_BASE_URL`]?.trim() || preset.baseUrl, key: keys[preset.id],
+    models: preset.id === 'anthropic' ? CLAUDE_MODELS : []
+  }));
+}
+
 export interface AiModel { id: string; label: string; provider: string; free: boolean }
 
 const modelCache = new Map<string, { at: number; models: AiModel[] }>();
 
 /** Every model the connected providers offer, asked from each provider and cached for ten minutes. */
-export async function aiModels(env: Record<string, string | undefined> = process.env): Promise<{ models: AiModel[]; defaultModel?: string }> {
+export async function aiModels(env: Record<string, string | undefined> = process.env, keys: UserKeys = {}): Promise<{ models: AiModel[]; defaultModel?: string }> {
   const out: AiModel[] = [];
-  for (const provider of aiProviders(env)) {
+  for (const provider of [...userProviders(keys, env), ...aiProviders(env)]) {
     if (provider.models.length || !provider.baseUrl) {
       out.push(...provider.models.map(model => ({ id: `${provider.id}:${model}`, label: model, provider: provider.label, free: /:free$/.test(model) })));
       continue;
     }
-    const cached = modelCache.get(provider.id);
+    const cacheKey = `${provider.id}:${provider.baseUrl}:${provider.key?.slice(-6) ?? ''}`;
+    const cached = modelCache.get(cacheKey);
     if (cached && Date.now() - cached.at < 600_000) { out.push(...cached.models); continue; }
     try {
       const response = await fetch(`${provider.baseUrl}/models`, { headers: provider.key ? { Authorization: `Bearer ${provider.key}` } : {}, signal: AbortSignal.timeout(6000) });
       const body = await response.json() as { data?: Array<{ id: string; name?: string; pricing?: { prompt?: string; completion?: string } }> };
-      const models = (body.data ?? []).slice(0, 400).map(item => ({
-        id: `${provider.id}:${item.id}`, label: item.name || item.id, provider: provider.label,
+      // Writing needs chat models; leave out embedding, speech, image and moderation models.
+      const models = (body.data ?? []).filter(item => !/embed|tts|whisper|transcri|audio|speech|image|imagen|dall-e|moderation|guard|rerank|veo|aqa/i.test(item.id)).slice(0, 400).map(item => ({
+        id: `${provider.id}:${item.id.replace(/^models\//, '')}`, label: item.name || item.id.replace(/^models\//, ''), provider: provider.label,
         free: /:free$/.test(item.id) || (item.pricing?.prompt === '0' && item.pricing?.completion === '0')
       }));
-      modelCache.set(provider.id, { at: Date.now(), models });
+      modelCache.set(cacheKey, { at: Date.now(), models });
       out.push(...models);
     } catch {
       // A provider that cannot list its models is left out rather than breaking the picker.
     }
   }
   const preferred = env.SWDR_AI_DEFAULT_MODEL?.trim();
-  return { models: out, defaultModel: out.find(model => model.id === preferred)?.id ?? out.find(model => model.id === 'anthropic:claude-opus-5-5')?.id ?? out[0]?.id };
+  const own = out.find(model => model.id.startsWith('mine-'));
+  return { models: out, defaultModel: own?.id ?? out.find(model => model.id === preferred)?.id ?? out.find(model => model.id === 'anthropic:claude-opus-5-5')?.id ?? out[0]?.id };
 }
 
 /** Streams the answer as plain text through `write`. Throws TeamFault before the first byte on setup errors. */
 export async function streamAi(request: AiRequest, write: (text: string) => void, signal?: AbortSignal, env: Record<string, string | undefined> = process.env): Promise<void> {
-  const providers = aiProviders(env);
-  if (!providers.length) throw new TeamFault(503, 'The AI partner is not set up on this server yet.');
+  const providers = [...userProviders(request.keys, env), ...aiProviders(env)];
+  if (!providers.length) throw new TeamFault(503, 'No AI model is connected yet. Add your own key, or ask the workspace owner to connect a provider.');
   const chosen = request.model ?? env.SWDR_AI_DEFAULT_MODEL?.trim() ?? (providers[0].id === 'anthropic' ? 'anthropic:claude-opus-5-5' : `${providers[0].id}:${providers[0].models[0] ?? ''}`);
   const split = chosen.indexOf(':');
   const provider = providers.find(item => item.id === chosen.slice(0, split));
   const model = chosen.slice(split + 1);
   if (!provider || !model) throw new TeamFault(400, 'That AI model is not available on this server.');
-  if (provider.id === 'anthropic') return streamClaude(request, model, provider.key!, write, signal);
+  if (provider.id === 'anthropic' || provider.id === 'mine-anthropic') return streamClaude(request, model, provider.key!, write, signal);
   return streamCompatible(request, provider, model, write, signal);
 }
 
@@ -223,4 +252,19 @@ async function streamCompatible(request: AiRequest, provider: Provider, model: s
       } catch { /* keep-alive or partial line */ }
     }
   }
+}
+
+/** Exchanges an OpenRouter sign-in code (PKCE) for a key tied to the user's own OpenRouter account. */
+export async function openRouterKey(body: Record<string, unknown>, env: Record<string, string | undefined> = process.env): Promise<{ key: string }> {
+  const code = typeof body.code === 'string' && /^[\w-]{8,200}$/.test(body.code) ? body.code : undefined;
+  const verifier = typeof body.verifier === 'string' && /^[\w-]{43,128}$/.test(body.verifier) ? body.verifier : undefined;
+  if (!code || !verifier) throw new TeamFault(400, 'The OpenRouter sign-in could not be completed.');
+  const base = env.SWDR_AI_OPENROUTER_BASE_URL?.trim() || 'https://openrouter.ai/api/v1';
+  const response = await fetch(`${base}/auth/keys`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: 'S256' }), signal: AbortSignal.timeout(10_000)
+  });
+  const result = await response.json().catch(() => ({})) as { key?: string };
+  if (!response.ok || typeof result.key !== 'string') throw new TeamFault(502, 'OpenRouter did not approve the connection. Try again.');
+  return { key: result.key };
 }

@@ -23,11 +23,13 @@ test.beforeAll(async () => {
   await new Promise<void>(resolve => provider.listen(0, '127.0.0.1', resolve));
   process.env.SWDR_AI_CUSTOM_BASE_URL = `http://127.0.0.1:${(provider.address() as { port: number }).port}/v1`;
   process.env.SWDR_AI_CUSTOM_LABEL = 'House voice';
+  process.env.SWDR_AI_OPENROUTER_BASE_URL = process.env.SWDR_AI_CUSTOM_BASE_URL;
   server = await startTeamServer({ signup: 'open' });
 });
 test.afterAll(async () => {
   delete process.env.SWDR_AI_CUSTOM_BASE_URL;
   delete process.env.SWDR_AI_CUSTOM_LABEL;
+  delete process.env.SWDR_AI_OPENROUTER_BASE_URL;
   await server?.stop();
   await new Promise<void>(resolve => provider?.close(() => resolve()));
 });
@@ -61,8 +63,9 @@ test('the AI partner streams a scene continuation from the chosen model and inse
     const editor = manuscript(page);
     await editor.locator('.swdr-el-dialogue').last().click();
     await page.getByRole('button', { name: 'AI partner' }).click();
-    await expect(dialog.getByRole('combobox', { name: 'Model' })).toHaveValue('custom:house-voice');
-    await expect(dialog.getByRole('option', { name: 'house-voice · free' })).toBeAttached();
+    // One connected model: nothing to choose, so no picker.
+    await expect(dialog.getByRole('button', { name: 'Generate' })).toBeEnabled();
+    await expect(dialog.getByRole('combobox', { name: 'Model' })).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Direction for the AI partner' }).fill('quieter');
     await dialog.getByRole('button', { name: 'Generate' }).click();
@@ -70,6 +73,16 @@ test('the AI partner streams a scene continuation from the chosen model and inse
     await dialog.getByRole('button', { name: 'Insert into script' }).click();
     await expect(editor).toContainText('The last boat never left.');
     await expect(editor).toContainText('She pockets the ticket.');
+
+    // Bring your own key: the user's OpenRouter account appears ahead of the workspace's models.
+    await page.getByRole('button', { name: 'AI partner' }).click();
+    await dialog.getByText(/Your AI accounts/).click();
+    await dialog.getByRole('textbox', { name: 'OpenRouter API key' }).fill('sk-or-user-key-0001');
+    await dialog.getByRole('textbox', { name: 'OpenRouter API key' }).blur();
+    await expect(dialog.getByRole('combobox', { name: 'Model' })).toHaveValue('mine-openrouter:house-voice');
+    await expect(dialog.getByRole('option', { name: 'house-voice · free' }).first()).toBeAttached();
+    await expect(dialog.getByText('Your AI accounts (1 connected)')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('swdr-ai-keys'))).toContain('sk-or-user-key-0001');
     expect(faults).toEqual([]);
   } finally {
     await context.close();

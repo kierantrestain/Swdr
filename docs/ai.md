@@ -2,6 +2,21 @@
 
 The AI partner helps with ideas, structure, drafting, dialogue, notes, loglines and creator hooks. Open it from **AI partner** in the Script, AV script and Outline toolbars, the team workspace, or **AI hooks & titles** in Creator studio.
 
+## Simplest setup (free)
+
+1. Get a free Gemini key at [aistudio.google.com](https://aistudio.google.com) → **Get API key** (no card needed), or a free OpenRouter key at [openrouter.ai](https://openrouter.ai) → **Keys**.
+2. In Vercel → Settings → Environment Variables, add `GEMINI_API_KEY` (or `OPENROUTER_API_KEY`) and redeploy.
+
+That's all. Signed-in users click **AI partner** and it works; they never see a key. When only one model is connected there is no model picker.
+
+Free tiers are rate-limited, and on Google's free tier prompts may be used to improve Google's products. For private scripts, use a paid tier (Gemini or OpenRouter credits) or Claude (`ANTHROPIC_API_KEY`).
+
+## Users' own accounts (optional)
+
+Under **Your AI accounts** in the AI partner, a user can connect their own provider account so their requests are billed to them: **Connect OpenRouter** signs in to OpenRouter and returns a key for their account, or they paste an Anthropic, OpenAI, Gemini, Groq or Mistral API key. Keys stay in that browser and are sent only with their AI requests; the server uses them for that request and stores nothing. Once connected, their account's models come first.
+
+Consumer subscriptions (Claude Pro or Max, ChatGPT Plus or Pro) cannot be used inside other apps; neither company offers that. The route that does use a subscription is the other way round: an SWDR connector (an MCP server) added to Claude or ChatGPT, so people work on their SWDR projects from inside those apps.
+
 ## How it works
 
 Every request carries the project's own context, built in the browser: title, synopsis, logline, genre and comparable titles, characters ranked by dialogue, locations, the outline by act, the scene where the cursor is, any selected text, and a sample of the writer's pages so the model matches their voice. The server adds the house rules for the chosen mode and streams the answer back. Drafts from **Continue** and **Dialogue** can be inserted into the script at the cursor and undone like any edit.

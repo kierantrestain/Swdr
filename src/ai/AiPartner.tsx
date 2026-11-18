@@ -1,10 +1,12 @@
 import { Button } from '@astryxdesign/core/Button';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
 import { Layout, LayoutContent } from '@astryxdesign/core/Layout';
-import { Copy, Database, LogIn, Send, Sparkles, Square, TextCursorInput } from 'lucide-react';
+import { Copy, Database, KeyRound, Link2, LogIn, Send, Sparkles, Square, TextCursorInput } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { decodeFountain } from '../interchange/screenplay';
 import type { DocumentModel, Project, WorkspaceViewProps } from '../model';
+import { KEY_PROVIDERS, loadKeys, saveKeys, startOpenRouter } from './byok';
+import type { KeyProvider, Keys } from './byok';
 import { aiContext } from './context';
 import { trainingExamples, trainingJsonl } from './dataset';
 import './ai.css';
@@ -70,23 +72,28 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
   const [problem, setProblem] = useState<{ status: number; message: string }>();
   const [models, setModels] = useState<Model[]>();
   const [model, setModel] = useState(() => { try { return localStorage.getItem(MODEL_KEY) ?? ''; } catch { return ''; } });
+  const [keys, setKeys] = useState<Keys>(loadKeys);
+  const [accounts, setAccounts] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const spec = MODES.find(item => item.id === mode)!;
 
   useEffect(() => {
     let live = true;
-    void fetch('/api/team', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ai-models' }) })
+    void fetch('/api/team', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ai-models', keys }) })
       .then(async response => {
         const body = await response.json().catch(() => ({})) as { data?: { models: Model[]; defaultModel?: string }; error?: string };
         if (!live) return;
         if (!response.ok) { setProblem({ status: response.status, message: body.error ?? 'The AI partner is unavailable.' }); setModels([]); return; }
         setModels(body.data?.models ?? []);
-        setModel(current => body.data?.models.some(item => item.id === current) ? current : body.data?.defaultModel ?? '');
-        if (!body.data?.models.length) setProblem({ status: 503, message: 'No AI models are connected yet. An owner adds a provider key in the hosting settings.' });
+        // Keep the writer's choice, unless they have just connected their own account, which then takes over.
+        const list = body.data?.models ?? [];
+        const own = list.some(item => item.id.startsWith('mine-'));
+        setModel(current => list.some(item => item.id === current) && (!own || current.startsWith('mine-')) ? current : body.data?.defaultModel ?? '');
+        if (!body.data?.models.length) { setAccounts(true); setProblem({ status: 503, message: 'No AI model is connected yet. Connect your own account below, or ask the workspace owner to add a provider.' }); }
       })
       .catch(() => { if (live) { setModels([]); setProblem({ status: 0, message: 'The AI partner needs a connection.' }); } });
     return () => { live = false; abort.current?.abort(); };
-  }, []);
+  }, [keys]);
 
   async function run(followUp?: string) {
     const ask = followUp ?? prompt;
@@ -101,7 +108,7 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
     try {
       const response = await fetch('/api/team', {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, signal: abort.current.signal,
-        body: JSON.stringify({ action: 'ai', model: model || undefined, mode: followUp ? 'ask' : mode, prompt: ask, history: turns,
+        body: JSON.stringify({ action: 'ai', keys, model: model || undefined, mode: followUp ? 'ask' : mode, prompt: ask, history: turns,
           context: aiContext(project, document, { ...caret, extra: extraContext }) })
       });
       if (!response.ok || !response.body || response.headers.get('content-type')?.includes('application/json')) {
@@ -150,7 +157,7 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
             <div className="ai-modes" role="group" aria-label="What do you want help with">
               {MODES.map(item => <button key={item.id} type="button" aria-pressed={mode === item.id} onClick={() => setMode(item.id)}>{item.label}</button>)}
             </div>
-            {models && models.length > 0 && <label className="ai-model">Model
+            {models && models.length > 1 && <label className="ai-model">Model
               <select value={model} onChange={event => { setModel(event.target.value); try { localStorage.setItem(MODEL_KEY, event.target.value); } catch { /* optional */ } }}>
                 {[...new Set(models.map(item => item.provider))].map(provider => <optgroup key={provider} label={provider}>
                   {models.filter(item => item.provider === provider).map(item => <option key={item.id} value={item.id}>{item.label}{item.free ? ' · free' : ''}</option>)}
@@ -181,6 +188,24 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
               <Button label="Send" size="sm" variant="secondary" type="submit" icon={<Send size={14} aria-hidden="true" />} />
             </form>}
           </section>}
+          <details className="ai-accounts" open={accounts} onToggle={event => setAccounts(event.currentTarget.open)}>
+            <summary><KeyRound size={14} aria-hidden="true" /> Your AI accounts{Object.keys(keys).length ? ` (${Object.keys(keys).length} connected)` : ''}</summary>
+            <p>Use your own provider account, so requests are billed to you, not the workspace. Keys stay in this browser and are only sent with your AI requests; SWDR never stores them. Consumer plans such as Claude Pro or ChatGPT Plus cannot be used by other apps, so these need an API key.</p>
+            <Button label={keys.openrouter ? 'OpenRouter connected' : 'Connect OpenRouter'} size="sm" variant={keys.openrouter ? 'secondary' : 'primary'} icon={<Link2 size={14} aria-hidden="true" />}
+              isDisabled={!!keys.openrouter} onClick={() => void startOpenRouter()} />
+            <ul>{KEY_PROVIDERS.map(item => <li key={item.id}>
+              <label>{item.label}<input type="password" autoComplete="off" spellCheck={false} placeholder={item.hint} defaultValue={keys[item.id] ?? ''}
+                aria-label={`${item.label} API key`} onBlur={event => {
+                  const value = event.target.value.trim();
+                  if ((keys[item.id] ?? '') === value) return;
+                  const next = { ...keys };
+                  if (value) next[item.id as KeyProvider] = value; else delete next[item.id as KeyProvider];
+                  saveKeys(next); setKeys(next); setModels(undefined);
+                  onStatus(value ? `${item.label} key saved in this browser.` : `${item.label} key removed.`);
+                }} /></label>
+              <small>{item.where}</small>
+            </li>)}</ul>
+          </details>
           <footer className="ai-foot">
             <span>The AI partner reads this project to help; nothing is saved on the AI provider by SWDR. Suggestions are yours to keep, change or ignore.</span>
             <button type="button" className="ai-dataset" disabled={!examples} onClick={() => { download(`${project.title || 'swdr'} - training data.jsonl`, trainingJsonl([project])); onStatus(`${examples} training examples exported.`); }}

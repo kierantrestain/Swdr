@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
-import { aiModels, aiProviders, readAiRequest, streamAi } from './team-ai';
+import { aiModels, aiProviders, openRouterKey, readAiRequest, readKeys, streamAi } from './team-ai';
 import { trainingExamples } from '../src/ai/dataset';
 import { aiContext } from '../src/ai/context';
 import { newBlock } from '../src/model';
@@ -11,6 +11,16 @@ import { createProject } from '../src/workspace/project';
 async function fakeProvider() {
   const seen: Array<Record<string, unknown>> = [];
   const server = createServer((request, response) => {
+    if (request.url === '/v1/auth/keys') {
+      let body = '';
+      request.on('data', chunk => { body += chunk; });
+      request.on('end', () => {
+        const sent = JSON.parse(body) as { code: string; code_verifier: string; code_challenge_method: string };
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify(sent.code === 'good-code-123' && sent.code_challenge_method === 'S256' && sent.code_verifier.length >= 43 ? { key: 'sk-or-user-key-0001' } : { error: 'bad' }));
+      });
+      return;
+    }
     if (request.url === '/v1/models') {
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify({ data: [{ id: 'my-voice-lora', pricing: { prompt: '0', completion: '0' } }, { id: 'big-model:paid' }] }));
@@ -58,7 +68,7 @@ test('requests are validated and need a configured provider', async () => {
   assert.throws(() => readAiRequest({ mode: 'ask', prompt: ' ' }), /Type a question/);
   assert.throws(() => readAiRequest({ mode: 'notes', context: 'x'.repeat(60_001) }), /too long/);
   assert.equal(readAiRequest({ mode: 'notes', model: 'bad model!' }).model, undefined);
-  await assert.rejects(streamAi(readAiRequest({ mode: 'notes' }), () => undefined, undefined, {}), /not set up/);
+  await assert.rejects(streamAi(readAiRequest({ mode: 'notes' }), () => undefined, undefined, {}), /No AI model is connected yet/);
   await assert.rejects(streamAi(readAiRequest({ mode: 'notes', model: 'openai:gpt' }), () => undefined, undefined, { GROQ_API_KEY: 'g', SWDR_AI_GROQ_MODELS: 'x' }), /not available/);
 });
 
@@ -76,4 +86,25 @@ test("context carries the scene at the cursor, and training data pairs each head
   assert.equal(examples.length, 2);
   assert.match(examples[1].messages[1].content, /Previous scene:[\s\S]*Write the scene that begins: EXT\. PIER - DAY/);
   assert.match(examples[1].messages[2].content, /^EXT\. PIER - DAY/);
+});
+
+test("a user's own key runs requests on their account, and OpenRouter sign-in returns their key", async t => {
+  const fake = await fakeProvider();
+  t.after(fake.close);
+  const env = { SWDR_AI_OPENROUTER_BASE_URL: fake.url, GROQ_API_KEY: 'workspace-key', SWDR_AI_GROQ_MODELS: 'llama' };
+  assert.throws(() => readKeys({ openai: 'short' }), /That OpenAI key does not look right/);
+  assert.deepEqual(readKeys({ openrouter: 'sk-or-user-key-0001', unknown: 'x' }), { openrouter: 'sk-or-user-key-0001' });
+
+  const listed = await aiModels(env, { openrouter: 'sk-or-user-key-0001' });
+  assert.equal(listed.defaultModel, 'mine-openrouter:my-voice-lora');
+  assert.deepEqual(listed.models.map(item => item.provider), ['OpenRouter (your account)', 'OpenRouter (your account)', 'Groq']);
+
+  let text = '';
+  await streamAi(readAiRequest({ mode: 'ask', prompt: 'Who lies?', model: 'mine-openrouter:my-voice-lora', keys: { openrouter: 'sk-or-user-key-0001' } }), chunk => { text += chunk; }, undefined, env);
+  assert.equal(text, 'NORA\nI kept the ticket.');
+  assert.equal((fake.seen[0] as { authorization: string }).authorization, 'Bearer sk-or-user-key-0001');
+
+  assert.deepEqual(await openRouterKey({ code: 'good-code-123', verifier: 'v'.repeat(64) }, env), { key: 'sk-or-user-key-0001' });
+  await assert.rejects(openRouterKey({ code: 'wrong-code-456', verifier: 'v'.repeat(64) }, env), /did not approve/);
+  await assert.rejects(openRouterKey({ code: 'x', verifier: 'short' }, env), /could not be completed/);
 });
