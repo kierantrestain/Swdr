@@ -158,12 +158,13 @@ export function ProjectView({ project, current, open, update, archive }: Props) 
           {filtered.map(document => {
             const episode = episodeOf(document);
             const destination = project.kind === 'documentary' && episode ? 'editorial' : document.kind === 'av' ? 'av' : 'write';
-            const count = document.kind === 'av' ? `${document.avRows.length} cues` : `${sceneList(document).length} scenes · ${document.beats.length} beats`;
+            const scenes = sceneList(document).length;
+            const count = document.kind === 'av' ? `${document.avRows.length} cue${document.avRows.length === 1 ? '' : 's'}` : `${scenes} scene${scenes === 1 ? '' : 's'} · ${document.beats.length} beat${document.beats.length === 1 ? '' : 's'}`;
             return <TableRow className={`document-row${document.id === current?.id ? ' is-current' : ''}`} key={document.id}>
               <TableCell>
                 <span className="project-cell">
                   <span className="document-icon" aria-hidden="true">{document.kind === 'av' ? <Rows3 size={16} /> : <FileText size={16} />}</span>
-                  <span className="project-name"><strong>{document.title}</strong>{document.id === current?.id && <span className="row-tag">Current</span>}</span>
+                  <span className="project-name"><strong>{document.title}{document.id === current?.id && <span className="row-tag">Current</span>}</strong></span>
                 </span>
               </TableCell>
               <TableCell><span className="row-meta">{episodeLabel(episode).split(' · ')[0] || FORMAT_LABELS[document.kind]}</span></TableCell>

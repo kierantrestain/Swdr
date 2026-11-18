@@ -2,7 +2,7 @@ import { CommandPalette, CommandPaletteInput } from '@astryxdesign/core/CommandP
 import { Kbd } from '@astryxdesign/core/Kbd';
 import { Text } from '@astryxdesign/core/Text';
 import { createStaticSource } from '@astryxdesign/core/Typeahead';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { DocumentModel, Project } from '../model';
 import { sceneList } from '../model';
 import { projectNavigation, workspaceTabs } from './navigation';
@@ -58,6 +58,26 @@ export function CommandMenu({ isOpen, onOpenChange, projects, project, document,
     return list;
   }, [actions, document, navigate, openScene, project, projects, switchEpisode]);
   const source = useMemo(() => createStaticSource(items, { keywords: item => item.auxiliaryData.keywords ?? [item.auxiliaryData.group] }), [items]);
+
+  // Enter runs the top result when nothing has been highlighted with the arrow keys yet.
+  useEffect(() => {
+    if (!isOpen) return;
+    function onKey(event: KeyboardEvent) {
+      const input = event.target;
+      if (event.key !== 'Enter' || event.isComposing || !(input instanceof HTMLInputElement) || input.getAttribute('role') !== 'combobox') return;
+      if (input.getAttribute('aria-activedescendant')) return;
+      const list = window.document.getElementById(input.getAttribute('aria-controls') ?? '');
+      const first = list?.querySelector<HTMLElement>('[role="option"][data-value]:not([aria-disabled="true"])');
+      const item = first && items.find(entry => entry.id === first.dataset.value);
+      if (!item) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenChange(false);
+      item.auxiliaryData.run();
+    }
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [isOpen, items, onOpenChange]);
 
   return <CommandPalette<CommandAction>
     isOpen={isOpen}
