@@ -1,5 +1,19 @@
 # Release verification
 
+## Round 2 (owner feedback: Astryx, navigation, shortcuts, accounts)
+
+| Check | Result |
+| --- | --- |
+| `npm run typecheck`, `npm run lint`, `npm run build` | Pass (React 19.3.1, Astryx 0.7.16) |
+| `npm test` | 67 pass, 0 fail, 2 skipped (PostgreSQL suites without a database) |
+| Team suites on a real PostgreSQL 18.6 (embedded) | 35 pass, 0 fail, 0 skipped |
+| `npm run test:browser` | **35 of 35 pass**, including shell navigation, team accounts and invitations, element menu, comments, styles, alternates and title page |
+| Typing on a 175-page script | p95 37.7 ms alone and 39.5 ms under full-suite load. The metric ends at the second animation frame, so about 33 ms is the floor. |
+| Navigation audit | 20 findings: 16 fixed, 1 partly fixed, 3 minor open ([audit](audit-navigation.md)). 423 buttons on 23 pages clicked with no script errors. |
+| Vercel preview | `swdr-lc3pcdwb4-kierantrestain-9646s-projects.vercel.app` READY. The packaged team function loads as ESM and answers 503 until the database is configured. |
+
+## Round 1
+
 Results from the REA-led rebuild run on 18 November 2026: Linux x64, Node 22.23.5 and Chromium 153.0.8010.12. The project pins `@playwright/test` 1.60, whose bundled browser build is not on this host, so the suite ran with `SWDR_CHROMIUM=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`.
 
 | Check | Result |

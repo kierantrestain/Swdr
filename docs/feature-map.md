@@ -57,7 +57,7 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 | Call sheets | Celtx print types (Bundle), StudioBinder (Docs) | ✅ Issue, acknowledge, reissue, CSV |
 | Day out of days, sides, shot lists | Celtx print types (Bundle) | ✅ |
 | Budget | Celtx "Budget" (Owner) | 🟡 Budget lines with planned vs actual; no account-code templates |
-| Cast & Crew directory | Celtx (Owner), StudioBinder (Docs) | 🟡 People are in production data and call sheets. The shell exposes the section ⏳. |
+| Cast & Crew directory | Celtx (Owner), StudioBinder (Docs) | 🟡 People live in production data, call sheets and cast IDs; no standalone directory page yet |
 | Files & Media | Celtx (Owner) | 🟡 Project assets and imports; no media browser yet |
 | Script revision impact on schedule | StudioBinder (Docs) | ✅ Script-change flags and review |
 
@@ -65,10 +65,10 @@ Status: ✅ shipped and tested · 🟡 partial · ⏳ in progress this round · 
 
 | Capability | Reference | SWDR |
 | --- | --- | --- |
-| Project sidebar with sections | Celtx (Owner) | ⏳ Shell agent |
-| Episode switcher that drives every section | (Owner request) | ⏳ Shell agent |
-| Back/breadcrumbs everywhere; command palette; shortcuts help | (Owner request) | ⏳ Shell agent |
-| Sign-up, sign-in, invitations, members, roles | Celtx/WriterDuet/Arc/StudioBinder (Runtime: login and sign-up screens) | ⏳ Accounts agent |
+| Project sidebar with sections | Celtx (Owner) | ✅ Write / Develop / Production / Project groups by project type; collapses to an icon rail in Write (Ctrl/⌘+\\) |
+| Episode switcher that drives every section | (Owner request) | ✅ Trail menu, ‹ › and `[` `]`; keeps the current section and tab |
+| Back/breadcrumbs everywhere; command palette; shortcuts help | (Owner request) | ✅ Back and trail on every shell page, Ctrl/⌘+K palette, `?` shortcuts dialog, `g`+letter jumps |
+| Sign-up, sign-in, invitations, members, roles | Celtx/WriterDuet/Arc/StudioBinder (Runtime: login and sign-up screens) | ✅ Email/password accounts, invite links with role and episode scope, members table. Needs a configured Postgres database. |
 | Share for review (read-only links) | WriterDuet view-only (Docs) | ✅ Expiring review links from issued revisions |
 | Offline writing and recovery | WriterDuet localforage, FD Cloud IndexedDB journal (Bundle) | ✅ IndexedDB plus journal; installable offline shell |
 
