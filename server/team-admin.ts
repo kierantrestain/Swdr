@@ -10,6 +10,7 @@
 import { pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
 import { createWorkspaceInvitation } from './team-invitations.js';
+import { teamDatabaseUrl } from './team-migrate.js';
 
 export function invitationLink(origin: string, token: string): string {
   const base = new URL(origin);
@@ -30,7 +31,7 @@ async function main(argv: string[]): Promise<void> {
     process.exitCode = 2;
     return;
   }
-  const connectionString = process.env.SWDR_TEAM_DATABASE_URL;
+  const connectionString = teamDatabaseUrl();
   if (!connectionString) {
     console.error('Set SWDR_TEAM_DATABASE_URL in the environment (it is not printed).');
     process.exitCode = 2;

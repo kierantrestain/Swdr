@@ -46,7 +46,7 @@ Episode scope applies to Writer, Reviewer and Viewer. A scoped member sees only 
 
 | Variable | Required | Value |
 |----------|----------|-------|
-| `SWDR_TEAM_DATABASE_URL` | Yes | PostgreSQL connection string for the application role. Without it the team route answers 503. |
+| `SWDR_TEAM_DATABASE_URL` | No | PostgreSQL connection string. Falls back to `DATABASE_URL`, then `POSTGRES_URL` (set by a Vercel Postgres integration). With none of them the team route answers 503. Tables are created on first use. |
 | `SWDR_TEAM_SIGNUP` | No | `invite` (default): accounts only through a valid invitation link. `open`: anyone can create an account and sees only projects they own or were invited to. Any other value disables the workspace. |
 | `SWDR_TEAM_ACCOUNTS` | No | Legacy operator-provisioned access keys: JSON mapping each email to the SHA-256 hex digest of a 32-byte key. Existing deployments keep working unchanged. Leave unset when everyone uses passwords. |
 

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Pool } from 'pg';
 import { readSignupMode } from '../server/team-auth.js';
+import { ensureSchema, teamDatabaseUrl } from '../server/team-migrate.js';
 import { asObject, TeamFault } from '../server/team-model.js';
 import { conflictDetails, readAccounts, runTeamAction } from '../server/team-service.js';
 
@@ -21,7 +22,7 @@ type TeamRequest = IncomingMessage & { body?: unknown };
 let pool: Pool | undefined;
 
 function getPool(): Pool {
-  const connectionString = process.env.SWDR_TEAM_DATABASE_URL;
+  const connectionString = teamDatabaseUrl();
   if (!connectionString) throw new TeamFault(503, 'Private team access is not configured.');
   if (!pool) {
     pool = new Pool({ connectionString, max: 4, idleTimeoutMillis: 10000, connectionTimeoutMillis: 5000 });
@@ -90,7 +91,9 @@ export default async function handler(req: TeamRequest, res: ServerResponse): Pr
     const cookie = req.headers.cookie?.match(/(?:^|;\s*)swdr_session=([A-Za-z0-9_-]+)/)?.[1];
     const accounts = readAccounts(process.env.SWDR_TEAM_ACCOUNTS);
     const signup = readSignupMode(process.env.SWDR_TEAM_SIGNUP);
-    const result = await runTeamAction(getPool(), accounts, request, cookie, { signup, address: clientAddress(req) });
+    const database = getPool();
+    await ensureSchema(database);
+    const result = await runTeamAction(database, accounts, request, cookie, { signup, address: clientAddress(req) });
     if (result.cookie) res.setHeader('Set-Cookie', result.cookie);
     res.end(JSON.stringify({ data: result.data }));
   } catch (error) {

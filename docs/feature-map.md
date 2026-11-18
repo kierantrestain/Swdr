@@ -2,7 +2,7 @@
 
 This map compares SWDR with the six reference products, capability by capability. **Source** says how the reference behaviour is known:
 
-- **Runtime** — REA drove the running app.
+- **Runtime** — observed in the running app.
 - **Bundle** — read in the code each app ships before sign-in.
 - **Owner** — the authenticated Celtx screen the product owner shared on 18 November 2026.
 - **Docs** — public help pages.

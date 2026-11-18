@@ -6,8 +6,11 @@ import { IconButton } from '@astryxdesign/core/IconButton';
 import { Kbd } from '@astryxdesign/core/Kbd';
 import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from '@astryxdesign/core/SideNav';
 import { TopNav } from '@astryxdesign/core/TopNav';
-import { ArrowLeft, ChevronLeft, ChevronRight, Home as HomeIcon, Keyboard, Moon, Search, Share2, Sun } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Home as HomeIcon, Keyboard, LogIn, Moon, Search, Share2, Sun, UserRound } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
+import { accountApi } from '../workspace/account-api';
+import type { TeamAccount } from '../workspace/team-contract';
 import type { DocumentModel, Episode, Project } from '../model';
 import { PROJECT_LABELS } from '../Home';
 import { isCurrent, projectNavigation } from './navigation';
@@ -35,6 +38,17 @@ export interface ShellProps {
 }
 
 /** Follow an in-app link without a page load, keeping modified clicks (new tab) native. */
+/** Who is signed in to the hosted workspace, checked once per shell; quietly signed out when the service is absent. */
+function useSignedIn(): TeamAccount | undefined {
+  const [account, setAccount] = useState<TeamAccount>();
+  useEffect(() => {
+    let live = true;
+    accountApi.session().then(value => { if (live) setAccount(value); }, () => undefined);
+    return () => { live = false; };
+  }, []);
+  return account;
+}
+
 export function linkProps(route: Route, navigate: (route: Route) => void) {
   return {
     href: encodeRoute(route),
@@ -73,6 +87,7 @@ export function Shell(props: ShellProps) {
   const { route, project, document, episode, navigate, onBack, onPalette, onShortcuts, switchEpisode, stepEpisode,
     sidebarCollapsed, onSidebarCollapsedChange, mode, onModeChange, children } = props;
   const isHome = route.view === 'home';
+  const account = useSignedIn();
   const episodes = project ? orderedEpisodes(project) : [];
   const index = episode ? episodes.findIndex(item => item.id === episode.id) : -1;
   const showEpisodes = Boolean(project && episodes.length && route.view !== 'import');
@@ -118,6 +133,10 @@ export function Shell(props: ShellProps) {
     <IconButton label="Keyboard shortcuts" tooltip="Keyboard shortcuts (?)" variant="ghost" icon={<Keyboard size={17} aria-hidden="true" />} onClick={onShortcuts} />
     <IconButton label={mode === 'dark' ? 'Use light appearance' : 'Use dark appearance'} variant="ghost"
       icon={mode === 'dark' ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />} onClick={() => onModeChange(mode === 'dark' ? 'light' : 'dark')} />
+    {account ? <Button label={account.name || account.email} size="sm" variant="ghost" icon={<UserRound size={15} aria-hidden="true" />}
+      tooltip={`Signed in as ${account.email}`} {...linkProps({ view: 'team' }, navigate)} /> :
+      <Button label="Sign in" size="sm" variant="secondary" icon={<LogIn size={15} aria-hidden="true" />} tooltip="Sign in or create an account"
+        {...linkProps({ view: 'team' }, navigate)} />}
     {project && <Button label="Share" size="sm" variant="primary" icon={<Share2 size={14} aria-hidden="true" />} tooltip="Share through the private team workspace"
       {...linkProps({ view: 'team' }, navigate)} />}
   </span>;
