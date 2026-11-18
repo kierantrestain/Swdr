@@ -26,3 +26,6 @@
 .ai-accounts label { display: grid; gap: 2px; font-size: var(--font-size-xs); font-weight: 600; color: var(--color-text-secondary); }
 .ai-accounts input { width: 100%; font-size: var(--font-size-sm); font-weight: 400; color: var(--color-text-primary); }
 .ai-accounts small { color: var(--color-text-secondary); font-size: var(--font-size-2xs); }
+.ai-groups { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--color-border); border-radius: var(--radius-element); background: var(--color-background-muted); }
+.ai-groups button { min-height: 32px; padding: var(--spacing-1) var(--spacing-4); border: 0; background: transparent; color: var(--color-text-secondary); font-size: var(--font-size-sm); font-weight: 600; }
+.ai-groups button[aria-selected='true'] { background: var(--color-background-surface); color: var(--color-text-primary); box-shadow: var(--shadow-low, 0 1px 2px rgb(0 0 0 / .12)); }

@@ -9,7 +9,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Pool } from 'pg';
 import { TeamFault } from './team-model.js';
 
-export const AI_MODES = ['brainstorm', 'plot', 'continue', 'dialogue', 'notes', 'logline', 'creator', 'ask'] as const;
+export const AI_MODES = ['brainstorm', 'outline', 'characters', 'plot', 'continue', 'dialogue', 'notes', 'logline', 'creator', 'ask'] as const;
 export type AiMode = (typeof AI_MODES)[number];
 
 const MAX_CONTEXT = 60_000;
@@ -23,10 +23,13 @@ How you work:
 - Ground everything in the project context you are given: its characters, outline, tone and the writer's own pages. Do not contradict established facts; if something is unknown, say what you are assuming.
 - Match the writer's voice, vocabulary and spelling conventions (British or American) from their pages.
 - Be specific. Name characters, scenes and beats. Avoid generic advice.
-- Keep answers tight. No preamble, no closing summary, no markdown headings.`;
+- Keep answers tight. No preamble, no closing summary, no markdown headings.
+- When the writer adds their own request, it comes first: do what they ask, using the mode below only as a guide to format.`;
 
 const MODE_INSTRUCTIONS: Record<AiMode, string> = {
   brainstorm: 'Brainstorm. Give 6 distinct, surprising options as a numbered list, each one or two sentences, ranging from safe to bold. Mark the one you would pick with ★ and say why in one line at the end.',
+  outline: 'Build or extend the outline. Write 8 to 15 beats across three acts that turn the premise into a working story, keeping any beats already in the outline. Put each beat on its own line in exactly this form, with nothing else on the line: I | Beat title | One sentence on what happens and why it matters. Use I, II or III for the act. After the beats, add one short line naming the biggest open question.',
+  characters: 'Character work. For the main characters (or the one the writer names), give for each: what they want, what they need, the lie they believe, their flaw, how they change, and a line of dialogue that sounds like them. Use the name as a label on its own line, then short labelled lines.',
   plot: 'Story structure. Diagnose the structure from the outline and pages: where the stakes, turns and midpoint sit, what is missing or sagging. Then propose concrete beats to fix it as a numbered list, each starting with the act (I, II or III).',
   continue: 'Continue the scene from where the current scene ends, for about half a page. Write only screenplay text in Fountain format: scene headings in capitals starting INT. or EXT., action lines, character cues in capitals on their own line, parentheticals in brackets, dialogue under the cue, blank lines between elements. No commentary.',
   dialogue: 'Rewrite the selected dialogue (or the dialogue in the current scene) so each character sounds more distinct and the subtext does more work. Keep the same beats and length or shorter. Write only Fountain screenplay text: character cue in capitals, optional parenthetical, dialogue. No commentary.',
@@ -175,11 +178,7 @@ export async function aiModels(env: Record<string, string | undefined> = process
     try {
       const response = await fetch(`${provider.baseUrl}/models`, { headers: provider.key ? { Authorization: `Bearer ${provider.key}` } : {}, signal: AbortSignal.timeout(6000) });
       const body = await response.json() as { data?: Array<{ id: string; name?: string; pricing?: { prompt?: string; completion?: string } }> };
-      // Writing needs chat models; leave out embedding, speech, image and moderation models.
-      const models = (body.data ?? []).filter(item => !/embed|tts|whisper|transcri|audio|speech|image|imagen|dall-e|moderation|guard|rerank|veo|aqa/i.test(item.id)).slice(0, 400).map(item => ({
-        id: `${provider.id}:${item.id.replace(/^models\//, '')}`, label: item.name || item.id.replace(/^models\//, ''), provider: provider.label,
-        free: /:free$/.test(item.id) || (item.pricing?.prompt === '0' && item.pricing?.completion === '0')
-      }));
+      const models = writingModels(provider, body.data ?? []);
       modelCache.set(cacheKey, { at: Date.now(), models });
       out.push(...models);
     } catch {
@@ -189,6 +188,34 @@ export async function aiModels(env: Record<string, string | undefined> = process
   const preferred = env.SWDR_AI_DEFAULT_MODEL?.trim();
   const own = out.find(model => model.id.startsWith('mine-'));
   return { models: out, defaultModel: own?.id ?? out.find(model => model.id === preferred)?.id ?? out.find(model => model.id === 'anthropic:claude-opus-5-5')?.id ?? out[0]?.id };
+}
+
+/** Gemini text models only, newest first, stable before preview, Flash before Pro (quick and generous on free tiers). */
+const GEMINI_TEXT = /^gemini-(\d+(?:\.\d+)?)-(flash-lite|flash|pro)(-preview(?:-\d\d-\d{4})?)?$/;
+// Writing needs chat models: leave out embedding, speech, image, video, music, robotics, live and agent models.
+const NOT_WRITING = /embed|tts|whisper|transcri|audio|speech|image|imagen|dall-e|moderation|guard|rerank|veo|aqa|live|realtime|robotics|computer-use|nano-banana|lyria|deep-research|antigravity|omni|decision|customtools|learnlm|search/i;
+
+function pretty(id: string): string {
+  const gemini = id.match(GEMINI_TEXT);
+  if (gemini) return `Gemini ${gemini[1]} ${gemini[2] === 'flash-lite' ? 'Flash-Lite' : gemini[2] === 'pro' ? 'Pro' : 'Flash'}${gemini[3] ? ' (preview)' : ''}`;
+  return id;
+}
+
+export function writingModels(provider: { id: string; label: string }, items: Array<{ id: string; name?: string; pricing?: { prompt?: string; completion?: string } }>): AiModel[] {
+  const ids = items.map(item => ({ ...item, id: item.id.replace(/^models\//, '') }));
+  let kept = ids.filter(item => !NOT_WRITING.test(item.id));
+  if (provider.id.endsWith('gemini')) {
+    kept = ids.filter(item => GEMINI_TEXT.test(item.id)).sort((a, b) => {
+      const [, va, ta, pa] = a.id.match(GEMINI_TEXT)!;
+      const [, vb, tb, pb] = b.id.match(GEMINI_TEXT)!;
+      const tier = (t: string) => ({ flash: 0, pro: 1, 'flash-lite': 2 } as Record<string, number>)[t];
+      return Number(vb) - Number(va) || Number(!!pa) - Number(!!pb) || tier(ta) - tier(tb);
+    });
+  }
+  return kept.slice(0, 200).map(item => ({
+    id: `${provider.id}:${item.id}`, label: item.name && !provider.id.endsWith('gemini') ? item.name : pretty(item.id), provider: provider.label,
+    free: /:free$/.test(item.id) || (item.pricing?.prompt === '0' && item.pricing?.completion === '0')
+  }));
 }
 
 /** Streams the answer as plain text through `write`. Throws TeamFault before the first byte on setup errors. */
@@ -201,7 +228,19 @@ export async function streamAi(request: AiRequest, write: (text: string) => void
   const model = chosen.slice(split + 1);
   if (!provider || !model) throw new TeamFault(400, 'That AI model is not available on this server.');
   if (provider.id === 'anthropic' || provider.id === 'mine-anthropic') return streamClaude(request, model, provider.key!, write, signal);
-  return streamCompatible(request, provider, model, write, signal);
+  // If the chosen model refuses before writing anything (retired, not on this key, overloaded), try the next ones.
+  const listed = (await aiModels(env, request.keys)).models.filter(item => item.id.startsWith(`${provider.id}:`)).map(item => item.id.slice(provider.id.length + 1));
+  const candidates = [model, ...listed.filter(item => item !== model)].slice(0, 3);
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return await streamCompatible(request, provider, candidate, write, signal);
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof TeamFault) || error.status === 401 || error.status === 503) throw error;
+    }
+  }
+  throw lastError;
 }
 
 async function streamClaude(request: AiRequest, model: string, apiKey: string, write: (text: string) => void, signal?: AbortSignal): Promise<void> {
@@ -232,14 +271,22 @@ async function streamCompatible(request: AiRequest, provider: Provider, model: s
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(provider.key ? { Authorization: `Bearer ${provider.key}` } : {}), 'X-Title': 'SWDR' },
     body: JSON.stringify({
-      model, stream: true, max_tokens: 4000,
+      model, stream: true, max_tokens: 8192,
       messages: [{ role: 'system', content: system.map(block => block.text).join('\n\n') }, ...messages.map(item => ({ role: item.role, content: String(item.content) }))]
     }),
     signal
   });
   if (!response.ok || !response.body) {
+    // Pass on the provider's own reason, trimmed; it never contains the key.
+    const detail = await response.text().then(text => {
+      try { const parsed = JSON.parse(text) as { error?: { message?: string } } | Array<{ error?: { message?: string } }>; return (Array.isArray(parsed) ? parsed[0]?.error?.message : parsed.error?.message) ?? text; } catch { return text; }
+    }).catch(() => '');
+    console.error('SWDR AI provider refused', provider.id, model, response.status);
+    const reason = detail.replace(/\s+/g, ' ').trim().slice(0, 240);
     const status = response.status === 429 ? 429 : response.status === 401 || response.status === 403 ? 503 : 502;
-    throw new TeamFault(status, status === 429 ? `${provider.label} is rate-limiting requests. Try again shortly or pick another model.` : `${provider.label} could not run ${model}.`);
+    throw new TeamFault(status, status === 429 ? `${provider.label} is busy or your free quota is used up for now${reason ? ` (${reason})` : ''}. Try again shortly or pick another model.`
+      : status === 503 ? `${provider.label} rejected the key. Check the key in the hosting settings${reason ? ` (${reason})` : ''}.`
+      : `${provider.label} could not run ${pretty(model)}${reason ? `: ${reason}` : ''}.`);
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();

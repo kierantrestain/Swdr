@@ -8,22 +8,27 @@ import type { DocumentModel, Project, WorkspaceViewProps } from '../model';
 import { KEY_PROVIDERS, loadKeys, saveKeys, startOpenRouter } from './byok';
 import type { KeyProvider, Keys } from './byok';
 import { aiContext } from './context';
+import { parseBeats } from './beats';
 import { trainingExamples, trainingJsonl } from './dataset';
 import './ai.css';
 
-type Mode = 'brainstorm' | 'plot' | 'continue' | 'dialogue' | 'notes' | 'logline' | 'creator' | 'ask';
+type Mode = 'brainstorm' | 'outline' | 'characters' | 'plot' | 'continue' | 'dialogue' | 'notes' | 'logline' | 'creator' | 'ask';
+type Group = 'plan' | 'write';
 interface Model { id: string; label: string; provider: string; free: boolean }
 interface Turn { role: 'user' | 'assistant'; content: string }
 
-const MODES: Array<{ id: Mode; label: string; hint: string; writes?: boolean }> = [
-  { id: 'brainstorm', label: 'Ideas', hint: 'Six options for what could happen next, from safe to bold.' },
-  { id: 'plot', label: 'Plot', hint: 'Diagnose the structure and suggest beats to fix it.' },
-  { id: 'continue', label: 'Continue', hint: 'Draft the next half page of this scene in your voice.', writes: true },
-  { id: 'dialogue', label: 'Dialogue', hint: 'Sharpen the selected dialogue: more distinct voices, more subtext.', writes: true },
-  { id: 'notes', label: 'Notes', hint: 'Development notes on the current scene, with specific fixes.' },
-  { id: 'logline', label: 'Loglines', hint: 'Five loglines in different tones.' },
-  { id: 'creator', label: 'Hooks', hint: 'Hooks, titles and tighter beats for a short or YouTube video.' },
-  { id: 'ask', label: 'Ask', hint: 'Ask anything about the project.' }
+/** Planning helps shape the story; writing works on the pages. */
+const MODES: Array<{ id: Mode; group: Group; label: string; hint: string; writes?: boolean; outline?: boolean }> = [
+  { id: 'outline', group: 'plan', label: 'Build outline', hint: 'Beats across three acts, ready to add to your Outline.', outline: true },
+  { id: 'brainstorm', group: 'plan', label: 'Story ideas', hint: 'Six options for what could happen next, from safe to bold.' },
+  { id: 'characters', group: 'plan', label: 'Characters', hint: 'Wants, needs, flaws and arcs for your main characters.' },
+  { id: 'plot', group: 'plan', label: 'Fix structure', hint: 'What is sagging or missing, and beats to fix it.' },
+  { id: 'logline', group: 'plan', label: 'Loglines', hint: 'Five loglines in different tones.' },
+  { id: 'creator', group: 'plan', label: 'Hooks & titles', hint: 'Hooks, titles and tighter beats for a short or YouTube video.' },
+  { id: 'continue', group: 'write', label: 'Continue scene', hint: 'Drafts the next half page of this scene in your voice.', writes: true },
+  { id: 'dialogue', group: 'write', label: 'Polish dialogue', hint: 'Sharper, more distinct voices with more subtext — select lines first to focus it.', writes: true },
+  { id: 'notes', group: 'write', label: 'Scene notes', hint: 'Development notes on the scene you are in, with specific fixes.' },
+  { id: 'ask', group: 'write', label: 'Ask anything', hint: 'Ask a question about your story or script.' }
 ];
 
 const MODEL_KEY = 'swdr-ai-model';
@@ -147,6 +152,14 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
     onClose();
   }
 
+  function addBeats() {
+    if (!onDocumentChange || !document) return;
+    const beats = parseBeats(output).map(beat => ({ id: crypto.randomUUID(), ...beat }));
+    onDocumentChange(current => ({ ...current, beats: [...current.beats, ...beats] }));
+    onStatus(`${beats.length} beats added to the outline.`);
+    onClose();
+  }
+
   const examples = trainingExamples([project]).length;
   return <Dialog isOpen onOpenChange={value => { if (!value) onClose(); }} width={820}>
     <Layout
@@ -154,8 +167,9 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
       content={<LayoutContent>
         <div className="ai">
           <div className="ai-top">
-            <div className="ai-modes" role="group" aria-label="What do you want help with">
-              {MODES.map(item => <button key={item.id} type="button" aria-pressed={mode === item.id} onClick={() => setMode(item.id)}>{item.label}</button>)}
+            <div className="ai-groups" role="tablist" aria-label="Plan or write">
+              {(['plan', 'write'] as const).map(group => <button key={group} type="button" role="tab" aria-selected={spec.group === group}
+                onClick={() => setMode(MODES.find(item => item.group === group)!.id)}>{group === 'plan' ? 'Plan the story' : 'Write the script'}</button>)}
             </div>
             {models && models.length > 1 && <label className="ai-model">Model
               <select value={model} onChange={event => { setModel(event.target.value); try { localStorage.setItem(MODEL_KEY, event.target.value); } catch { /* optional */ } }}>
@@ -164,10 +178,13 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
                 </optgroup>)}
               </select></label>}
           </div>
+          <div className="ai-modes" role="group" aria-label="What do you want help with">
+            {MODES.filter(item => item.group === spec.group).map(item => <button key={item.id} type="button" aria-pressed={mode === item.id} onClick={() => setMode(item.id)}>{item.label}</button>)}
+          </div>
           <p className="ai-hint">{spec.hint}{caret.selection ? ' Using your selected text.' : ''}</p>
           <form className="ai-ask" onSubmit={event => { event.preventDefault(); void run(); }}>
             <textarea rows={2} value={prompt} onChange={event => setPrompt(event.target.value)} aria-label="Direction for the AI partner"
-              placeholder={mode === 'ask' ? 'Ask about your story…' : 'Optional direction — “darker”, “Nora should lie here”, “more comedy”…'}
+              placeholder={mode === 'ask' ? 'Ask about your story…' : 'Tell it what you need (optional) — “a twist for act two”, “Nora should lie here”, “funnier”…'}
               onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void run(); } }} />
             {busy ? <Button label="Stop" variant="secondary" icon={<Square size={14} aria-hidden="true" />} onClick={() => abort.current?.abort()} />
               : <Button label="Generate" variant="primary" type="submit" icon={<Sparkles size={14} aria-hidden="true" />} isDisabled={models !== undefined && !models.length} />}
@@ -180,6 +197,7 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
             <pre className={spec.writes ? 'is-script' : undefined}>{output || 'Thinking…'}</pre>
             {!busy && output && <div className="ai-actions">
               <Button label="Copy" size="sm" variant="secondary" icon={<Copy size={14} aria-hidden="true" />} onClick={() => { void navigator.clipboard?.writeText(output); onStatus('Copied.'); }} />
+              {spec.outline && onDocumentChange && document && parseBeats(output).length > 0 && <Button label={`Add ${parseBeats(output).length} beats to outline`} size="sm" variant="primary" icon={<TextCursorInput size={14} aria-hidden="true" />} onClick={addBeats} />}
               {spec.writes && onDocumentChange && document?.kind !== 'av' && <Button label="Insert into script" size="sm" variant="primary" icon={<TextCursorInput size={14} aria-hidden="true" />} onClick={insert} />}
               <Button label="Try again" size="sm" variant="ghost" onClick={() => void run()} />
             </div>}

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
-import { aiModels, aiProviders, openRouterKey, readAiRequest, readKeys, streamAi } from './team-ai';
+import { aiModels, aiProviders, openRouterKey, readAiRequest, readKeys, streamAi, writingModels } from './team-ai';
+import { parseBeats } from '../src/ai/beats';
 import { trainingExamples } from '../src/ai/dataset';
 import { aiContext } from '../src/ai/context';
 import { newBlock } from '../src/model';
@@ -108,4 +109,35 @@ test("a user's own key runs requests on their account, and OpenRouter sign-in re
   assert.deepEqual(await openRouterKey({ code: 'good-code-123', verifier: 'v'.repeat(64) }, env), { key: 'sk-or-user-key-0001' });
   await assert.rejects(openRouterKey({ code: 'wrong-code-456', verifier: 'v'.repeat(64) }, env), /did not approve/);
   await assert.rejects(openRouterKey({ code: 'x', verifier: 'short' }, env), /could not be completed/);
+});
+
+test('Gemini lists only writing models, best first; a failing model falls through to the next; outline beats parse', async t => {
+  const listed = writingModels({ id: 'gemini', label: 'Google Gemini' }, ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.8-pro', 'gemini-3.1-pro-preview', 'lyria-3.5', 'gemini-robotics-er-2-preview',
+    'gemini-3.8-live', 'nano-banana-pro-preview', 'deep-research-preview-04-2026', 'gemini-3.8-flash-lite', 'models/gemini-3.9-flash-preview', 'antigravity-preview-latest', 'gemini-embedding-2'].map(id => ({ id })));
+  assert.deepEqual(listed.map(item => item.label), ['Gemini 3.9 Flash (preview)', 'Gemini 3.8 Flash', 'Gemini 3.8 Pro', 'Gemini 3.8 Flash-Lite', 'Gemini 3.1 Pro (preview)', 'Gemini 2.5 Flash']);
+  assert.equal(listed[1].id, 'gemini:gemini-3.8-flash');
+
+  // A provider whose first model is retired: SWDR moves to the next model and says nothing went wrong.
+  const server = createServer((request, response) => {
+    if (request.url === '/v1/models') { response.end(JSON.stringify({ data: [{ id: 'retired-model' }, { id: 'working-model' }] })); return; }
+    let body = '';
+    request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      if (JSON.parse(body).model === 'retired-model') { response.statusCode = 404; response.end(JSON.stringify({ error: { message: 'models/retired-model is not found' } })); return; }
+      response.setHeader('Content-Type', 'text/event-stream');
+      response.end(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Plan ready.' } }] })}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
+  const env = { SWDR_AI_CUSTOM_BASE_URL: `http://127.0.0.1:${(server.address() as { port: number }).port}/v1` };
+  let text = '';
+  await streamAi(readAiRequest({ mode: 'outline', model: 'custom:retired-model' }), chunk => { text += chunk; }, undefined, env);
+  assert.equal(text, 'Plan ready.');
+
+  assert.deepEqual(parseBeats('I | The last boat | Nora misses the ferry and finds a ticket.\n- II | Lies | She covers for Elias.\nIII: Reckoning | The tide turns.\nBiggest question: who sold the ticket?'), [
+    { act: 1, title: 'The last boat', notes: 'Nora misses the ferry and finds a ticket.' },
+    { act: 2, title: 'Lies', notes: 'She covers for Elias.' },
+    { act: 3, title: 'Reckoning', notes: 'The tide turns.' }
+  ]);
 });

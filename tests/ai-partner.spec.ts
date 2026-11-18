@@ -66,10 +66,12 @@ test('the AI partner streams a scene continuation from the chosen model and inse
     // One connected model: nothing to choose, so no picker.
     await expect(dialog.getByRole('button', { name: 'Generate' })).toBeEnabled();
     await expect(dialog.getByRole('combobox', { name: 'Model' })).toHaveCount(0);
-    await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(dialog.getByRole('tab', { name: 'Write the script' })).toHaveAttribute('aria-selected', 'true');
+    await dialog.getByRole('button', { name: 'Continue scene', exact: true }).click();
     await dialog.getByRole('textbox', { name: 'Direction for the AI partner' }).fill('quieter');
     await dialog.getByRole('button', { name: 'Generate' }).click();
     await expect(dialog.getByRole('region', { name: 'AI partner response' })).toContainText('The last boat never left.');
+    if (process.env.SWDR_SCREENSHOTS) await page.screenshot({ path: `${process.env.SWDR_SCREENSHOTS}/ai-partner.png` });
     await dialog.getByRole('button', { name: 'Insert into script' }).click();
     await expect(editor).toContainText('The last boat never left.');
     await expect(editor).toContainText('She pockets the ticket.');
