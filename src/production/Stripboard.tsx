@@ -10,6 +10,8 @@ import {
 } from './model';
 import type { ProductionScene, ShootDay, Strip } from './model';
 import { ScriptChangeBadge, ScriptChangeBanner, ScriptChangeDialog } from './ScriptChanges';
+import { DayScenePicker } from './DayScenePicker';
+import { PersonAvatar } from './media';
 import { ActionMenu, CastIds, StripLegend } from './StripParts';
 import type { MenuAction } from './StripParts';
 
@@ -60,7 +62,10 @@ export function Stripboard(pane: PaneProps) {
     eighths: estimateEighths(target.blocks),
     synopsis: target.blocks.find(block => block.kind === 'action' && block.text.trim())?.text.trim() ?? ''
   }])), [project, snapshot]);
-  const scriptFor = (scene: ProductionScene) => script.get(scene.source.sceneId ?? scene.source.shotId ?? '');
+  const scriptFor = (scene: ProductionScene) => {
+    const found = script.get(scene.source.sceneId ?? scene.source.shotId ?? '');
+    return found ? { ...found, eighths: scene.eighths ?? found.eighths } : scene.eighths ? { eighths: scene.eighths, synopsis: '' } : undefined;
+  };
   const dayNumber = (dayId: string) => days.findIndex(day => day.id === dayId) + 1;
   const unitName = (unitId: string) => plan.units.find(unit => unit.id === unitId)?.name ?? '';
   const locationName = (id?: string) => plan.locations.find(location => location.id === id)?.name ?? '';
@@ -196,10 +201,21 @@ export function Stripboard(pane: PaneProps) {
         id, date, label, unitId, callTime, notes: readText(form, 'notes'), source,
         weather: readText(form, 'weather') || undefined, hospital: readText(form, 'hospital') || undefined, parking: readText(form, 'parking') || undefined
       };
-      if (update(current => ({
-        ...current,
-        days: edit.detail ? current.days.map(item => item.id === id ? day : item) : [...current.days, day]
-      }), 'Shoot day saved.')) setEdit(undefined);
+      const chosen = new Set(form.getAll('scenes').map(String));
+      const offered = form.has('scene-picker');
+      if (update(current => {
+        let next = { ...current, days: edit.detail ? current.days.map(item => item.id === id ? day : item) : [...current.days, day] };
+        if (!offered) return next;
+        for (const strip of dayStrips(next, id).filter(item => !chosen.has(item.sceneId))) {
+          next = placeStrip(next, { stripId: strip.id, sceneId: strip.sceneId }, null, 0);
+        }
+        const already = new Set(dayStrips(next, id).map(strip => strip.sceneId));
+        for (const scene of scenes.filter(item => chosen.has(item.id) && !already.has(item.id))) {
+          const existing = next.strips.find(strip => strip.sceneId === scene.id);
+          next = placeStrip(next, { stripId: existing?.id, sceneId: scene.id }, id, dayStrips(next, id).length, scriptFor(scene)?.eighths ?? 1);
+        }
+        return next;
+      }, chosen.size ? `Shoot day saved with ${chosen.size} ${chosen.size === 1 ? 'scene' : 'scenes'}.` : 'Shoot day saved.')) setEdit(undefined);
       return;
     }
     const selected = scenes.find(scene => scene.id === readText(form, 'scene'));
@@ -251,7 +267,7 @@ export function Stripboard(pane: PaneProps) {
       {!readOnly ? <button type="button" className="production-grip" data-grip={strip.id} aria-label={`Reorder scene ${scene.number}`}
         aria-describedby={hintId} onKeyDown={event => gripKeys(event, strip, scene)}><GripVertical size={15} aria-hidden="true" /></button>
         : <span className="production-grip" aria-hidden="true" />}
-      {stripCells(scene, strip.eighths, locationName(strip.locationId))}
+      {stripCells(scene, strip.eighths, locationName(strip.locationId ?? scene.locationId))}
       <span className="production-strip-time">{strip.startTime}<small>{strip.minutes} min</small></span>
       <span className="production-strip-flags">
         {conflictedStrips.has(strip.id) && <span className="production-strip-conflict" title="Review the schedule conflict for this scene">
@@ -395,6 +411,7 @@ export function Stripboard(pane: PaneProps) {
         {castPeople.length > 0 && <div className="production-cast-key">
           <h3>Cast IDs</h3>
           <ul>{castPeople.map(person => <li key={person.id}><span className="production-cast-id">{castIds.get(person.id)}</span>
+            <PersonAvatar project={project} person={person} size={32} decorative />
             <span><strong>{person.name}</strong>{person.role && <small>{person.role}</small>}</span></li>)}</ul>
         </div>}
       </aside>
@@ -460,6 +477,7 @@ export function Stripboard(pane: PaneProps) {
             <label>Nearest hospital<input name="hospital" defaultValue={edit.detail?.hospital} placeholder="Name, address and A&E distance" /></label>
           </div>
           <label>Parking and basecamp<input name="parking" defaultValue={edit.detail?.parking} placeholder="Unit base, crew parking and shuttle" /></label>
+          <DayScenePicker project={project} plan={plan} dayId={edit.detail?.id} scenes={scenes} eighthsOf={scene => scriptFor(scene)?.eighths ?? 1} />
         </>}
         {edit.type === 'strip' && <StripFields edit={edit} scenes={scenes} unscheduled={unscheduled} days={days} plan={plan}
           estimate={scene => scriptFor(scene)?.eighths ?? 1} />}

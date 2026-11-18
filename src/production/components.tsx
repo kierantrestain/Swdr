@@ -15,6 +15,10 @@ export interface PaneProps {
   source: SourceRef;
   readOnly?: boolean;
   update: (change: (plan: ProductionPlan, project: Project) => ProductionPlan, message?: string) => boolean;
+  /** Changes the project and this plan together, such as adding a photo asset and linking it. */
+  /** Builds or refreshes cast, locations and page counts from the issued script. */
+  syncScript?: () => void;
+  updateProject: (change: (project: Project, plan: ProductionPlan) => Project, message?: string) => boolean;
   onOpenSource: WorkspaceViewProps['onOpenSource'];
   onProjectChange: WorkspaceViewProps['onProjectChange'];
   onStatus: WorkspaceViewProps['onStatus'];

@@ -1,8 +1,11 @@
-import { Download, FileCheck2, GitCompareArrows } from 'lucide-react';
+import { Download, FileCheck2, GitCompareArrows, Sparkles } from 'lucide-react';
+import { Banner } from '@astryxdesign/core/Banner';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { sourceFor } from '../model';
 import type { Project, WorkspaceViewProps } from '../model';
+import { summaryMessage, syncBreakdown } from './autobreakdown';
+import type { BreakdownSummary } from './autobreakdown';
 import { Breakdown } from './Breakdown';
 import { CallSheets } from './CallSheets';
 import { Dialog, Empty, SourceButton, downloadText } from './components';
@@ -58,6 +61,7 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
   const [target, setTarget] = useState('');
   const [review, setReview] = useState<RevisionPreview>();
   const [error, setError] = useState('');
+  const [synced, setSynced] = useState<BreakdownSummary>();
   const issued = project.snapshots.filter(item => item.kind === 'issued' && item.document.id === document.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const otherReleases = issued.filter(item => item.id !== snapshot?.id);
   const episode = project.episodes.find(item => item.id === document.episodeId);
@@ -90,6 +94,32 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
     return setProductionPlan(current, change(active, current));
   }, message);
 
+  const updateProject: PaneProps['updateProject'] = (change, message = 'Production saved.') => changeProject(current => {
+    const active = getProductionPlan(current, document.id);
+    if (!active || active.activeSnapshotId !== plan?.activeSnapshotId) throw new Error('The production baseline changed. Reopen this panel.');
+    return change(current, active);
+  }, message);
+
+  /** Builds cast, locations, scene tags and page eighths from the issued script, then reports what it found. */
+  function syncScript(start?: (current: Project) => Project, startMessage?: string) {
+    let summary: BreakdownSummary | undefined;
+    const done = changeProject(current => {
+      const started = start ? start(current) : current;
+      const active = getProductionPlan(started, document.id);
+      if (!active || (!start && active.activeSnapshotId !== plan?.activeSnapshotId)) throw new Error('The production baseline changed. Reopen this panel.');
+      const snapshotKind = releasedScript(started, document.id, active.activeSnapshotId)?.document.kind;
+      if (snapshotKind === 'av') return started;
+      const result = syncBreakdown(started, active);
+      summary = result.summary;
+      return setProductionPlan(started, result.plan);
+    }, startMessage ?? 'Breakdown built from the script.');
+    if (done && summary) {
+      setSynced(summary);
+      onStatus(summaryMessage(summary));
+    }
+    return done;
+  }
+
   function issueOutput(kind: ProductionOutput['kind'], filename: string, content: string) {
     if (!plan || readOnly) return;
     if (update((current, currentProject) => ({
@@ -102,23 +132,35 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
     if (readOnly) return;
     const label = String(new FormData(event.currentTarget).get('label') ?? '');
     let preview: RevisionPreview | undefined;
+    let built: BreakdownSummary | undefined;
     if (changeProject(current => {
       const active = getProductionPlan(current, document.id);
       if (active?.activeSnapshotId !== plan?.activeSnapshotId) throw new Error('The production baseline changed. Review the current production plan.');
       const release = issueScriptSnapshot(current, document, label);
       const next = { ...current, snapshots: [...current.snapshots, release] };
-      if (!active) return startProduction(next, document.id, release.id);
+      if (!active) {
+        const started = startProduction(next, document.id, release.id);
+        const startedPlan = getProductionPlan(started, document.id)!;
+        if (release.document.kind === 'av') return started;
+        const result = syncBreakdown(started, startedPlan);
+        built = result.summary;
+        return setProductionPlan(started, result.plan);
+      }
       preview = previewRevision(next, active, release.id);
       return next;
-    }, plan ? 'Script issued. Review the production links.' : 'Script issued for production.')) {
+    }, plan ? 'Script issued. Review the production links.' : 'Script issued for production. Cast, locations and page counts were read from the script.')) {
       setReleasePanel(false);
       setReview(preview);
+      if (built) setSynced(built);
     }
   }
 
+  const needsBreakdown = Boolean(plan && snapshot && snapshot.document.kind !== 'av' && !plan.breakdownSyncedAt &&
+    !plan.people.some(person => person.type === 'Cast') && !plan.locations.length && plan.scenes.length);
   const openRevisions = () => { setReleasePanel(true); setTarget(''); setError(''); };
   const paneProps: PaneProps | undefined = plan && snapshot ? {
-    project, plan, snapshot, source: sourceFor(project, snapshot.document), readOnly, update, onOpenSource, onProjectChange, onStatus, issueOutput,
+    project, plan, snapshot, source: sourceFor(project, snapshot.document), readOnly, update, updateProject, onOpenSource, onProjectChange, onStatus, issueOutput,
+    syncScript: snapshot.document.kind === 'av' ? undefined : () => { syncScript(); },
     changes: scriptChanges(project, plan, document), reviewScript: readOnly ? undefined : openRevisions
   } : undefined;
 
@@ -141,10 +183,10 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
     {!paneProps && <section className="production-card production-release">
       <div className="production-release-icon"><FileCheck2 size={25} aria-hidden="true" /></div>
       <h2>Release a script for production</h2>
-      <p>Breakdown, shots and schedules reference an issued snapshot of the script.</p>
+      <p>Breakdown, shots and schedules reference an issued snapshot of the script. Issuing reads every scene, speaking role and location from it, with page counts from the page layout.</p>
       {!readOnly && <div className="production-actions">
         <button type="button" className="production-button production-primary" onClick={() => { setReleasePanel(true); setError(''); }}>Issue writing draft</button>
-        {issued.length > 0 && <button type="button" className="production-button" onClick={() => changeProject(
+        {issued.length > 0 && <button type="button" className="production-button" onClick={() => syncScript(
           current => startProduction(current, document.id, issued[0].id), 'Issued script linked to production.'
         )}>Use {issued[0].label}</button>}
       </div>}
@@ -161,6 +203,13 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
           <GitCompareArrows size={16} /> Script revisions{paneProps.changes.length > 0 && <span className="production-count" aria-hidden="true">{paneProps.changes.length}</span>}
         </button>}
       </div>
+      {synced && <section className="production-synced" aria-label="Breakdown summary"><BreakdownBanner summary={synced} onDismiss={() => setSynced(undefined)} /></section>}
+      {!synced && !readOnly && needsBreakdown && <section className="production-callout" aria-label="Build breakdown from script">
+        <Sparkles size={20} aria-hidden="true" />
+        <div><strong>Build the breakdown from the script</strong>
+          <p>Read every speaking role, location and scene length from {snapshot?.label} so the stripboard, cast list and call sheets start filled in.</p></div>
+        <button type="button" className="production-button production-primary" onClick={() => paneProps.syncScript?.()}>Build breakdown from script</button>
+      </section>}
       {pane === 'Stripboard' && <Stripboard {...paneProps} />}
       {pane === 'Breakdown' && <Breakdown {...paneProps} />}
       {pane === 'Shots & storyboard' && <Shots {...paneProps} />}
@@ -201,4 +250,11 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
       }}
     />}
   </div>;
+}
+
+function BreakdownBanner({ summary, onDismiss }: { summary: BreakdownSummary; onDismiss: () => void }) {
+  const flagged = [...summary.removedCast, ...summary.removedLocations];
+  return <Banner status="success" title="Breakdown built from the script" isDismissable onDismiss={onDismiss} dismissLabel="Dismiss breakdown summary"
+    description={`${summary.scenes} scenes over ${summary.pages} pages · ${summary.cast} speaking roles${summary.addedCast.length ? ` (${summary.addedCast.length} added)` : ''} · ${summary.locations} locations${summary.addedLocations.length ? ` (${summary.addedLocations.length} added)` : ''} · ${summary.tagsAdded} cast tags added${flagged.length ? ` · No longer in the script: ${flagged.join(', ')}` : ''}`}
+    collapsible={false} />;
 }

@@ -4,7 +4,9 @@ import { newId } from '../model';
 import { Dialog, Empty, SourceButton, displayDate, downloadText } from './components';
 import type { PaneProps } from './components';
 import { acknowledgeTestDelivery, callSheetCsv, dayStrips, eighthsLabel, issueCallSheet, orderedDays, previewCallSheet, recordTestDelivery, scheduleConflicts } from './model';
-import type { CallSheet } from './model';
+import type { CallSheet, ProductionPlan } from './model';
+import type { Project } from '../model';
+import { PersonAvatar } from './media';
 
 export function CallSheets({ project, plan, readOnly, update, onOpenSource }: PaneProps) {
   const days = orderedDays(plan);
@@ -68,7 +70,7 @@ export function CallSheets({ project, plan, readOnly, update, onOpenSource }: Pa
         </section>
       </div>}
     {show && visible && <Dialog title={currentSheet ? `Issued call sheet V${visible.version}` : `Preview call sheet V${visible.version}`} onClose={() => setShow(false)} print>
-      <CallSheetDocument sheet={visible} superseded={Boolean(superseded)} issued={Boolean(currentSheet)} />
+      <CallSheetDocument sheet={visible} superseded={Boolean(superseded)} issued={Boolean(currentSheet)} project={project} plan={plan} />
       <div className="production-actions production-screen-only">
         <SourceButton source={visible.source} onOpenSource={onOpenSource}>Open issued script</SourceButton>
         <button type="button" className="production-button" onClick={() => window.print()}><Printer size={16} /> Print call sheet</button>
@@ -102,7 +104,11 @@ export function CallSheets({ project, plan, readOnly, update, onOpenSource }: Pa
   </>;
 }
 
-function CallSheetDocument({ sheet, superseded, issued }: { sheet: CallSheet; superseded: boolean; issued: boolean }) {
+function CallSheetDocument({ sheet, superseded, issued, project, plan }: { sheet: CallSheet; superseded: boolean; issued: boolean; project: Project; plan: ProductionPlan }) {
+  const face = (id: string, name: string) => {
+    const person = plan.people.find(item => item.id === id);
+    return <PersonAvatar project={project} person={{ name, photoAssetId: person?.photoAssetId }} size={32} decorative />;
+  };
   // Sheets issued before cast and crew were recorded separately keep one combined personnel list.
   const legacy = sheet.recipients.every(person => !person.type);
   const cast = legacy ? [] : sheet.recipients.filter(person => person.type === 'Cast');
@@ -150,13 +156,13 @@ function CallSheetDocument({ sheet, superseded, issued }: { sheet: CallSheet; su
     </table></div>
     {cast.length > 0 && <><h3>Cast</h3>
       <div className="production-table-scroll"><table className="production-table">
-        <thead><tr><th>ID</th><th>Name</th><th>Character</th><th>Call</th></tr></thead>
-        <tbody>{cast.map(person => <tr key={person.id}><td>{person.castId ?? '—'}</td><td>{person.name}</td><td>{person.role}</td><td><strong>{person.callTime}</strong></td></tr>)}</tbody>
+        <thead><tr><th>ID</th><th>Character</th><th>Artist</th><th>Call</th></tr></thead>
+        <tbody>{cast.map(person => <tr key={person.id}><td>{person.castId ?? '—'}</td><td><span className="production-person">{face(person.id, person.name)}{person.name}</span></td><td>{person.role}</td><td><strong>{person.callTime}</strong></td></tr>)}</tbody>
       </table></div></>}
     {crew.length > 0 && <><h3>{legacy ? 'Personnel calls' : 'Crew'}</h3>
       <div className="production-table-scroll"><table className="production-table">
         <thead><tr><th>Name</th><th>Role</th><th>Call</th></tr></thead>
-        <tbody>{crew.map(person => <tr key={person.id}><td>{person.name}</td><td>{person.role}</td><td>{person.callTime}</td></tr>)}</tbody>
+        <tbody>{crew.map(person => <tr key={person.id}><td><span className="production-person">{face(person.id, person.name)}{person.name}</span></td><td>{person.role}</td><td>{person.callTime}</td></tr>)}</tbody>
       </table></div></>}
     <p className="production-revision-meta">Source revision {sheet.source.revisionId}{issued && ` · Issued ${sheet.issuedAt}`}</p>
   </article>;
