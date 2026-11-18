@@ -9,10 +9,11 @@ import {
   saveEvidence, saveSegment, segmentTimes
 } from './editorial-model';
 import type { Claim, EditorialIssue, Evidence, Output, Segment, SourceVersion, VisualCue } from './editorial-model';
+import { ClaimBoard } from './ClaimBoard';
 import { SourceButton } from './StoryControls';
 import { downloadText, episodeCode, fileStem, orderedEpisodes, upsert } from './source';
 
-const panes = ['Segments', 'Sources', 'Host guide', 'Producer rundown', 'Graphics', 'Issues', 'Branded brief'] as const;
+const panes = ['Segments', 'Sources', 'Claims', 'Host guide', 'Producer rundown', 'Graphics', 'Issues', 'Branded brief'] as const;
 type Pane = (typeof panes)[number];
 type FormState = { kind: 'segment'; segment?: Segment }
   | { kind: 'evidence'; item?: Evidence }
@@ -244,6 +245,13 @@ export function EditorialView({ project, document, onProjectChange, onOpenSource
           {!store.claims.length && <p className="swdr-story-muted">A shared claim can be linked from more than one episode.</p>}
         </section>
       </div>
+    </div>}
+    {!focus && pane === 'Claims' && <div className="swdr-story-stack">
+      {form?.kind === 'claim' && canEdit && <ClaimForm project={project} key={form.item?.id ?? 'new-claim'} item={form.item} close={close}
+        save={(claim, id, correction) => update(value => saveClaim(value, claim, id, correction), 'Claim version saved.')} />}
+      <ClaimBoard project={project} store={store} documentId={current.id} onOpen={onOpenSource}
+        openSegment={(documentId, id) => { setSelectedDocumentId(documentId); setSegmentId(id); setIssueId(''); go('Segments'); }}
+        correct={canEdit ? id => setForm({ kind: 'claim', item: store.claims.find(claim => claim.id === id) }) : undefined} />
     </div>}
     {!focus && (pane === 'Host guide' || pane === 'Producer rundown') && <div className="swdr-story-stack">
       <div className="actions"><button onClick={() => exportOutput(preview, pane === 'Host guide' ? 'host' : 'rundown')}><Download size={15} /> Download working preview</button></div>
