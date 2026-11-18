@@ -30,8 +30,8 @@ Actual captures from the seeded app.
 | Import | [1440 × 900](screenshots/04-import-1440x900.png) |
 | AV | [1440 × 900](screenshots/05-av-1440x900.png) |
 | Outline | [1440 × 900](screenshots/06-outline-1440x900.png) |
-| Series Intelligence | [1440 × 900](screenshots/07-series-1440x900.png) |
-| Character dossier | [1440 × 900](screenshots/08-dossier-1440x900.png) |
+| Series Intelligence | [1440 × 900](screenshots/07-series-intelligence-1440x900.png) |
+| Character dossier | [1440 × 900](screenshots/08-character-dossier-1440x900.png) |
 | Editorial | [1440 × 900](screenshots/09-editorial-1440x900.png) |
 | Stripboard | [1440 × 900](screenshots/10-stripboard-1440x900.png) |
 
