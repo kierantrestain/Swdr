@@ -1,6 +1,6 @@
-import type { Block, DocumentModel, Project } from '../src/model';
-import { BLOCK_KINDS, DOCUMENT_KINDS, PROJECT_KINDS } from '../src/model';
-import type { TeamGrant } from '../src/workspace/team-contract';
+import type { Block, DocumentModel, Project } from '../src/model.js';
+import { BLOCK_KINDS, DOCUMENT_KINDS, PROJECT_KINDS } from '../src/model.js';
+import type { TeamGrant } from '../src/workspace/team-contract.js';
 
 export class TeamFault extends Error {
   constructor(public readonly status: number, message: string) {

@@ -1,14 +1,14 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import type { DocumentModel, Project } from '../src/model';
+import type { DocumentModel, Project } from '../src/model.js';
 import type {
   LineChange, ReviewDocument, TeamGrant, TeamListing, TeamNote, TeamProject, TeamRole
-} from '../src/workspace/team-contract';
+} from '../src/workspace/team-contract.js';
 import {
   applyProjection, asObject, canReadEpisode, canWrite, currentBlock, emailField, idField,
   integerField, mergeTeamProjects, preserveSnapshots, TeamFault, textField, toVisibleProject,
   validateProject, visibleDocument
-} from './team-model';
+} from './team-model.js';
 
 const SESSION_HOURS = 12;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;

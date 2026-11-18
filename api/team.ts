@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Pool } from 'pg';
-import { asObject, TeamFault } from '../server/team-model';
-import { conflictDetails, readAccounts, runTeamAction } from '../server/team-service';
+import { asObject, TeamFault } from '../server/team-model.js';
+import { conflictDetails, readAccounts, runTeamAction } from '../server/team-service.js';
 
 const MAX_BYTES = 4_000_000;
 type TeamRequest = IncomingMessage & { body?: unknown };
