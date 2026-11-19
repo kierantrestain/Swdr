@@ -31,7 +31,8 @@
   body { margin: 0; min-width: 300px; background: var(--color-background-body); color: var(--color-text-primary); }
   button, input, textarea, select { font: inherit; color: inherit; }
   button, select { cursor: pointer; }
-  button {
+  /* Legacy app buttons only: Astryx components (astryx-* classes) own their own surface, size and states. */
+  button:not([class*='astryx-']) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -47,8 +48,8 @@
     line-height: 1.25;
     transition: background-color var(--duration-fast, 120ms) ease, border-color var(--duration-fast, 120ms) ease;
   }
-  button:hover { background: var(--color-background-muted); }
-  button:disabled { cursor: default; opacity: .5; }
+  button:not([class*='astryx-']):hover { background: var(--color-background-muted); }
+  button:not([class*='astryx-']):disabled { cursor: default; opacity: .5; }
   button.primary { border-color: var(--color-accent); background: var(--color-accent); color: var(--color-on-accent); }
   button.primary:hover { filter: brightness(1.08); background: var(--color-accent); }
   button.selected, button[aria-pressed=true].selectable { border-color: color-mix(in srgb, var(--color-accent) 35%, transparent); background: var(--color-accent-muted); color: var(--color-text-accent); }

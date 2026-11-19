@@ -9,9 +9,8 @@ test('resolves a cast clash, verifies costs and issues an acknowledged and reiss
   await page.screenshot({ path: testInfo.outputPath('10-stripboard-1440x900.png'), animations: 'disabled' });
 
   await page.getByRole('button', { name: 'Edit scheduled scene 1', exact: true }).click();
-  const day = page.getByRole('combobox', { name: /^Shoot day/ });
-  await day.selectOption({ index: 1 });
-  await page.getByLabel('Start time', { exact: true }).fill('09:30');
+  await choose(page, /^Shoot day/, { index: 1 });
+  await page.getByLabel(/^Start time/).fill('09:30');
   await page.getByRole('button', { name: 'Save scheduled scene', exact: true }).click();
   await expect(page.getByText(/schedule conflict/i)).toHaveCount(0);
 
@@ -20,7 +19,7 @@ test('resolves a cast clash, verifies costs and issues an acknowledged and reiss
   await expect(nora).toContainText('SW');
   await expect(nora).toContainText('WF');
   await expect(nora.getByRole('cell').last()).toHaveText('2');
-  await page.getByRole('button', { name: 'Budget', exact: true }).click();
+  await page.getByRole('radio', { name: 'Budget', exact: true }).click();
   await expect(page.getByText('£515.00', { exact: true })).toBeVisible();
   await expect(page.getByText('£465.00', { exact: true })).toBeVisible();
   await expect(page.getByText('£50.00', { exact: true })).toBeVisible();
@@ -70,11 +69,11 @@ test('reimports a moved and omitted shooting draft before applying the productio
   await page.getByRole('button', { name: 'Issue and review', exact: true }).click();
   await expect(page.getByText(/Moved/).first()).toBeVisible();
   await expect(page.getByText(/EXT\. DOCKS/).filter({ visible: true })).toBeVisible();
-  await page.getByRole('combobox', { name: 'Incoming source for scene 2', exact: true }).selectOption('__omit__');
+  await choose(page, 'Incoming source for scene 2', 'Omitted from this revision');
   await page.getByRole('button', { name: 'Apply reviewed revision', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Shooting Draft 2', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Shots & storyboard', exact: true }).click();
-  await page.getByRole('combobox', { name: /^Scene/ }).selectOption({ label: '2 · INT. FERRY OFFICE – NIGHT' });
+  await choose(page, /^Scene/, '2 · INT. FERRY OFFICE – NIGHT');
   await expect(page.getByRole('heading', { name: /The ferry ticket crosses the desk/ })).toBeVisible();
   expect(pageFaults).toEqual([]);
 });

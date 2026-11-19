@@ -68,13 +68,15 @@ export function SourceButton({ source, onOpenSource, children, label }: PropsWit
 }
 
 /**
- * Two working regions side by side. Responsive contract: from 1280px of window width the main region takes three
- * fifths and the side region two; below that the side region drops beneath the main one at full width.
+ * Two working regions side by side. Responsive contract: from 1280px of window width the regions share the row in the
+ * given ratio (main three fifths, side two by default); below that the side region drops beneath the main one at full
+ * width. With no side region (read-only views) the main region takes the full width.
  */
-export function Split({ main, side }: { main: ReactNode; side: ReactNode }) {
+export function Split({ main, side, ratio = [3, 2] }: { main: ReactNode; side?: ReactNode; ratio?: [number, number] }) {
   const wide = useMediaQuery('(min-width: 1280px)');
+  if (!side) return <>{main}</>;
   return wide
-    ? <Grid columns={5} gap={4} align="start"><GridSpan columns={3}>{main}</GridSpan><GridSpan columns={2}>{side}</GridSpan></Grid>
+    ? <Grid columns={ratio[0] + ratio[1]} gap={4} align="start"><GridSpan columns={ratio[0]}>{main}</GridSpan><GridSpan columns={ratio[1]}>{side}</GridSpan></Grid>
     : <VStack gap={4}>{main}{side}</VStack>;
 }
 

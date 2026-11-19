@@ -1,10 +1,23 @@
+import { Badge } from '@astryxdesign/core/Badge';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Button } from '@astryxdesign/core/Button';
+import { Card } from '@astryxdesign/core/Card';
+import { Grid } from '@astryxdesign/core/Grid';
+import { HStack } from '@astryxdesign/core/HStack';
+import { Link } from '@astryxdesign/core/Link';
+import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { ProgressBar } from '@astryxdesign/core/ProgressBar';
+import { Selector } from '@astryxdesign/core/Selector';
 import { Table, TableBody, TableCell, TableFooter, TableHeader, TableHeaderCell, TableRow } from '@astryxdesign/core/Table';
+import { Text } from '@astryxdesign/core/Text';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { Tooltip } from '@astryxdesign/core/Tooltip';
+import { VStack } from '@astryxdesign/core/VStack';
 import { ChevronDown, ChevronRight, Download, Eye, EyeOff, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { newId } from '../model';
-import { Dialog } from './components';
+import { Choice, Dialog, FormError, Glyph, Pane } from './components';
 import type { PaneProps } from './components';
 import { BUDGET_GROUPS, amountLabel, budgetCategory, budgetCsv, budgetTopSheet } from './budget';
 import { lineBase, lineFringe, linePlanned, moneyLabel } from './model';
@@ -36,15 +49,35 @@ function lineFormula(line: BudgetLine): string {
   return `${line.quantity} × £${amountLabel(line.unitCostPence)}${units !== 1 || line.unitLabel ? ` × ${units}${line.unitLabel ? ` ${line.unitLabel}` : ''}` : ''}${line.fringePercent ? ` + ${line.fringePercent}% fringes` : ''}`;
 }
 
-/** A thin bar showing how much of an account's plan has been spent. */
+/** Numbers in the top sheet: tabular, end-aligned, red when an account is over. */
+const END = { textAlign: 'end' } as const;
+const GROUP = { background: 'var(--color-background-muted)' } as const;
+function Num({ pence, strong, over, muted }: { pence?: number; strong?: boolean; over?: boolean; muted?: string }) {
+  return <Text hasTabularNumbers weight={strong ? 'semibold' : undefined} color={muted !== undefined ? 'secondary' : undefined}
+    style={over ? { color: 'var(--color-text-error)' } : undefined}>{muted ?? amountLabel(pence ?? 0)}</Text>;
+}
+
+/** How much of an account's plan has been spent, as a short bar and a percentage. */
 function Spend({ planned, actual }: { planned: number; actual: number }) {
-  if (!planned && !actual) return <span className="production-muted">—</span>;
+  if (!planned && !actual) return <Text color="secondary">—</Text>;
   const percent = planned > 0 ? Math.round(actual / planned * 100) : 100;
-  const tone = percent > 100 ? 'over' : percent > 85 ? 'near' : 'ok';
-  return <span className={`production-spend production-spend-${tone}`} title={`${percent}% of planned spent`}>
-    <span className="production-spend-track" aria-hidden="true"><span style={{ width: `${Math.min(100, percent)}%` }} /></span>
-    <small>{percent}%</small>
-  </span>;
+  return <Tooltip content={`${percent}% of planned spent`}>
+    <HStack gap={2} align="center" justify="end">
+      <VStack width={64}><ProgressBar label="Spent" isLabelHidden value={Math.min(100, percent)} variant={percent > 100 ? 'error' : percent > 85 ? 'warning' : 'success'} /></VStack>
+      <Text type="supporting" hasTabularNumbers>{percent}%</Text>
+    </HStack>
+  </Tooltip>;
+}
+
+/** One headline figure of the top sheet. */
+function Figure({ label, value, note, alert }: { label: string; value: string; note: string; alert?: boolean }) {
+  return <Card variant={alert ? 'red' : 'muted'} padding={4}>
+    <VStack gap={0.5}>
+      <Text type="supporting" color="secondary">{label}</Text>
+      <Text size="xl" weight="semibold" hasTabularNumbers>{value}</Text>
+      <Text type="supporting" color="secondary">{note}</Text>
+    </VStack>
+  </Card>;
 }
 
 type Editing = { line?: BudgetLine; category: string };
@@ -63,126 +96,113 @@ export function Budget({ project, plan, source, update, readOnly, issueOutput }:
 
   const toggleGroup = (name: string) => setCollapsed(list => list.includes(name) ? list.filter(item => item !== name) : [...list, name]);
 
-  return <div className="production-budget">
-    <section className="production-card production-budget-main" aria-label="Budget top sheet">
-      <div className="production-section-heading">
-        <div><h3>Budget top sheet</h3>
-          <p className="production-muted">{plan.budget.length} cost {plan.budget.length === 1 ? 'line' : 'lines'} across {used} of {categories} accounts · GBP</p></div>
-        <div className="production-actions">
-          <button type="button" className="production-button" aria-pressed={hideEmpty} onClick={() => setHideEmpty(value => !value)}>
-            {hideEmpty ? <Eye size={16} aria-hidden="true" /> : <EyeOff size={16} aria-hidden="true" />} {hideEmpty ? 'Show all accounts' : 'Hide empty accounts'}
-          </button>
-          {!readOnly && <button type="button" className="production-button" onClick={() =>
-            issueOutput('budget', 'swdr-cost-report.csv', budgetCsv(project, plan))
-          }><Download size={16} aria-hidden="true" /> Export CSV</button>}
-          {!readOnly && <button type="button" className="production-button production-primary" onClick={() => setEditing({ category: '' })}>
-            <Plus size={16} aria-hidden="true" /> New cost line</button>}
-        </div>
-      </div>
-      <div className="production-metrics production-metrics-4">
-        <div><small>Total budget</small><strong>{moneyLabel(sheet.total.planned)}</strong><span>incl. {sheet.contingencyPercent}% contingency{fringes ? ` · ${moneyLabel(fringes)} fringes` : ''}</span></div>
-        <div><small>Actual spend</small><strong>{moneyLabel(sheet.total.actual)}</strong><span>{spent}% of budget</span></div>
-        <div className={over ? 'production-metric-over' : undefined}><small>{over ? 'Over budget' : 'Remaining'}</small><strong>{moneyLabel(Math.abs(sheet.total.remaining))}</strong>
-          <span>{over ? 'Actuals exceed the plan' : 'Planned less actual'}</span></div>
-        <div className={overAccounts ? 'production-metric-over' : undefined}><small>Accounts over</small><strong>{overAccounts}</strong>
-          <span>{overAccounts ? 'Check the red rows below' : 'Every account within plan'}</span></div>
-      </div>
+  return <>
+    <Pane label="Budget top sheet" title="Budget top sheet"
+      description={`${plan.budget.length} cost ${plan.budget.length === 1 ? 'line' : 'lines'} across ${used} of ${categories} accounts · GBP`}
+      actions={<>
+        <Button label={hideEmpty ? 'Show all accounts' : 'Hide empty accounts'} icon={<Glyph icon={hideEmpty ? Eye : EyeOff} />} onClick={() => setHideEmpty(value => !value)} />
+        {!readOnly && <Button label="Export CSV" icon={<Glyph icon={Download} />} onClick={() => issueOutput('budget', 'swdr-cost-report.csv', budgetCsv(project, plan))} />}
+        {!readOnly && <Button variant="primary" label="New cost line" icon={<Glyph icon={Plus} />} onClick={() => setEditing({ category: '' })} />}
+      </>}>
+      <Grid columns={{ minWidth: 170, repeat: 'fit' }} gap={3}>
+        <Figure label="Total budget" value={moneyLabel(sheet.total.planned)} note={`incl. ${sheet.contingencyPercent}% contingency${fringes ? ` · ${moneyLabel(fringes)} fringes` : ''}`} />
+        <Figure label="Actual spend" value={moneyLabel(sheet.total.actual)} note={`${spent}% of budget`} />
+        <Figure label={over ? 'Over budget' : 'Remaining'} value={moneyLabel(Math.abs(sheet.total.remaining))} note={over ? 'Actuals exceed the plan' : 'Planned less actual'} alert={over} />
+        <Figure label="Accounts over" value={String(overAccounts)} note={overAccounts ? 'Check the red rows below' : 'Every account within plan'} alert={overAccounts > 0} />
+      </Grid>
       <ProgressBar label="Budget spent" isLabelHidden value={spent} variant={over ? 'error' : spent > 85 ? 'warning' : 'accent'} />
-      {!readOnly && !plan.budget.length && <div className="production-budget-hint">
-        <strong>Start your budget</strong>
-        <span>Choose <em>New cost line</em>, or <em>Add line</em> beside any account. Each line is quantity × rate × units, and the totals here update as you go.</span>
-      </div>}
-      <div className="production-table-scroll"><Table className="production-grid-table production-budget-table" dividers="rows">
+      {!readOnly && !plan.budget.length && <Banner status="info" title="Start your budget"
+        description="Choose New cost line, or Add line beside any account. Each line is quantity × rate × units, and the totals here update as you go." />}
+      <Table density="compact" dividers="rows">
         <TableHeader><TableRow isHeaderRow>
           <TableHeaderCell>Acct</TableHeaderCell><TableHeaderCell>Account and cost lines</TableHeaderCell>
-          <TableHeaderCell>Planned (£)</TableHeaderCell><TableHeaderCell>Actual (£)</TableHeaderCell>
-          <TableHeaderCell>Remaining (£)</TableHeaderCell><TableHeaderCell>Spent</TableHeaderCell><TableHeaderCell>Share</TableHeaderCell>
+          <TableHeaderCell style={END}>Planned (£)</TableHeaderCell><TableHeaderCell style={END}>Actual (£)</TableHeaderCell>
+          <TableHeaderCell style={END}>Remaining (£)</TableHeaderCell><TableHeaderCell style={END}>Spent</TableHeaderCell><TableHeaderCell style={END}>Share</TableHeaderCell>
         </TableRow></TableHeader>
         {sheet.groups.map(group => {
           const closed = collapsed.includes(group.name);
           const rows = hideEmpty ? group.rows.filter(row => row.lines.length) : group.rows;
           return <TableBody key={group.name}>
-            <TableRow><TableCell colSpan={7} className="production-group-row">
-              <button type="button" className="production-group-toggle" aria-expanded={!closed} onClick={() => toggleGroup(group.name)}>
-                {closed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}{group.name}
-              </button>
+            <TableRow><TableCell colSpan={7} style={GROUP}>
+              <Button variant="ghost" size="sm" label={group.name} aria-expanded={!closed} icon={<Glyph icon={closed ? ChevronRight : ChevronDown} />}
+                onClick={() => toggleGroup(group.name)}><Text type="label">{group.name}</Text></Button>
             </TableCell></TableRow>
             {!closed && rows.map(row => [
-              <TableRow key={`${row.code}-${row.name}`} className="production-account-row">
-                <TableCell><span className="production-account">{row.code}</span></TableCell>
-                <TableCell><span className="production-budget-category">
-                  <strong className={row.lines.length ? undefined : 'production-muted'}>{row.name}</strong>
-                  {!readOnly && <button type="button" className="production-chip-button" onClick={() => setEditing({ category: row.name })} aria-label={`Add cost line to ${row.name}`}>
-                    <Plus size={13} aria-hidden="true" /> Add line</button>}
-                </span></TableCell>
-                <TableCell><span className="production-num">{amountLabel(row.planned)}</span></TableCell>
-                <TableCell><span className="production-num">{amountLabel(row.actual)}</span></TableCell>
-                <TableCell><span className={`production-num${row.planned - row.actual < 0 ? ' production-negative' : ''}`}>{amountLabel(row.planned - row.actual)}</span></TableCell>
-                <TableCell><Spend planned={row.planned} actual={row.actual} /></TableCell>
-                <TableCell><span className="production-num production-muted">{share(row.planned, sheet.total.planned)}</span></TableCell>
+              <TableRow key={`${row.code}-${row.name}`}>
+                <TableCell><Text type="supporting" color="secondary" hasTabularNumbers>{row.code}</Text></TableCell>
+                <TableCell><HStack gap={2} align="center" wrap="wrap">
+                  <Text weight="semibold" color={row.lines.length ? 'primary' : 'secondary'}>{row.name}</Text>
+                  {!readOnly && <Button variant="ghost" size="sm" label={`Add cost line to ${row.name}`} icon={<Glyph icon={Plus} size="xsm" />}
+                    onClick={() => setEditing({ category: row.name })}>Add line</Button>}
+                </HStack></TableCell>
+                <TableCell style={END}><Num pence={row.planned} /></TableCell>
+                <TableCell style={END}><Num pence={row.actual} /></TableCell>
+                <TableCell style={END}><Num pence={row.planned - row.actual} over={row.planned - row.actual < 0} /></TableCell>
+                <TableCell style={END}><Spend planned={row.planned} actual={row.actual} /></TableCell>
+                <TableCell style={END}><Num muted={share(row.planned, sheet.total.planned)} /></TableCell>
               </TableRow>,
-              ...row.lines.map(line => <TableRow key={line.id} className="production-line-row">
+              ...row.lines.map(line => <TableRow key={line.id}>
                 <TableCell />
-                <TableCell><span className="production-budget-line">
-                  {readOnly ? <span>{line.name}<small>{lineFormula(line)}</small></span> :
-                    <button type="button" className="production-line-open" aria-label={`Edit ${line.name}`} onClick={() => setEditing({ line, category: line.category })}>
-                      <span>{line.name}<small>{lineFormula(line)}</small></span>
-                      <span className="production-line-edit"><Pencil size={13} aria-hidden="true" /> Edit</span>
-                    </button>}
-                </span></TableCell>
-                <TableCell><span className="production-num">{amountLabel(linePlanned(line))}</span></TableCell>
-                <TableCell><span className="production-num">{amountLabel(line.actualPence)}</span></TableCell>
-                <TableCell><span className={`production-num${linePlanned(line) - line.actualPence < 0 ? ' production-negative' : ''}`}>{amountLabel(linePlanned(line) - line.actualPence)}</span></TableCell>
-                <TableCell><Spend planned={linePlanned(line)} actual={line.actualPence} /></TableCell>
+                <TableCell><VStack gap={0} hAlign="start" paddingInlineStart={4}>
+                  {readOnly ? <Text>{line.name}</Text> : <Link label={`Edit ${line.name}`} onClick={() => setEditing({ line, category: line.category })}>
+                    {line.name} <Glyph icon={Pencil} size="xsm" /></Link>}
+                  <Text type="supporting" color="secondary">{lineFormula(line)}</Text>
+                </VStack></TableCell>
+                <TableCell style={END}><Num pence={linePlanned(line)} /></TableCell>
+                <TableCell style={END}><Num pence={line.actualPence} /></TableCell>
+                <TableCell style={END}><Num pence={linePlanned(line) - line.actualPence} over={linePlanned(line) - line.actualPence < 0} /></TableCell>
+                <TableCell style={END}><Spend planned={linePlanned(line)} actual={line.actualPence} /></TableCell>
                 <TableCell />
               </TableRow>)
             ])}
-            <TableRow className="production-total-row">
-              <TableCell /><TableCell><strong>Total {group.name.toLocaleLowerCase('en-GB')}</strong></TableCell>
-              <TableCell><strong className="production-num">{amountLabel(group.planned)}</strong></TableCell>
-              <TableCell><strong className="production-num">{amountLabel(group.actual)}</strong></TableCell>
-              <TableCell><strong className={`production-num${group.planned - group.actual < 0 ? ' production-negative' : ''}`}>{amountLabel(group.planned - group.actual)}</strong></TableCell>
-              <TableCell><Spend planned={group.planned} actual={group.actual} /></TableCell>
-              <TableCell><span className="production-num production-muted">{share(group.planned, sheet.total.planned)}</span></TableCell>
+            <TableRow>
+              <TableCell /><TableCell><Text weight="semibold">Total {group.name.toLocaleLowerCase('en-GB')}</Text></TableCell>
+              <TableCell style={END}><Num strong pence={group.planned} /></TableCell>
+              <TableCell style={END}><Num strong pence={group.actual} /></TableCell>
+              <TableCell style={END}><Num strong pence={group.planned - group.actual} over={group.planned - group.actual < 0} /></TableCell>
+              <TableCell style={END}><Spend planned={group.planned} actual={group.actual} /></TableCell>
+              <TableCell style={END}><Num muted={share(group.planned, sheet.total.planned)} /></TableCell>
             </TableRow>
           </TableBody>;
         })}
         <TableFooter>
           <TableRow>
             <TableCell /><TableCell>Subtotal</TableCell>
-            <TableCell><span className="production-num">{amountLabel(sheet.subtotal.planned)}</span></TableCell>
-            <TableCell><span className="production-num">{amountLabel(sheet.subtotal.actual)}</span></TableCell>
+            <TableCell style={END}><Num pence={sheet.subtotal.planned} /></TableCell>
+            <TableCell style={END}><Num pence={sheet.subtotal.actual} /></TableCell>
             <TableCell /><TableCell /><TableCell />
           </TableRow>
           <TableRow>
-            <TableCell /><TableCell><span className="production-budget-category">Contingency
-              {readOnly ? ` ${sheet.contingencyPercent}%` : <label className="production-inline-number"><input type="number" min={0} max={100} step={0.5} aria-label="Contingency percentage"
-                defaultValue={sheet.contingencyPercent} key={sheet.contingencyPercent} onBlur={event => {
-                  const value = Number(event.target.value);
+            <TableCell /><TableCell><HStack gap={2} align="center">
+              <Text>Contingency</Text>
+              {readOnly ? <Text>{sheet.contingencyPercent}%</Text> : <NumberInput key={sheet.contingencyPercent} label="Contingency percentage" isLabelHidden size="sm" width={96}
+                min={0} max={100} step={0.5} value={sheet.contingencyPercent} onChange={value => {
                   if (Number.isFinite(value) && value >= 0 && value <= 100 && value !== sheet.contingencyPercent) {
                     update(current => ({ ...current, contingencyPercent: value }), 'Contingency saved.');
                   }
-                }} />%</label>}</span></TableCell>
-            <TableCell><span className="production-num">{amountLabel(sheet.contingency)}</span></TableCell>
+                }} />}
+              {!readOnly && <Text color="secondary">%</Text>}
+            </HStack></TableCell>
+            <TableCell style={END}><Num pence={sheet.contingency} /></TableCell>
             <TableCell /><TableCell /><TableCell /><TableCell />
           </TableRow>
-          <TableRow className="production-grand-row">
-            <TableCell /><TableCell><strong>Grand total</strong></TableCell>
-            <TableCell><strong className="production-num">{amountLabel(sheet.total.planned)}</strong></TableCell>
-            <TableCell><strong className="production-num">{amountLabel(sheet.total.actual)}</strong></TableCell>
-            <TableCell><strong className={`production-num${over ? ' production-negative' : ''}`}>{amountLabel(sheet.total.remaining)}</strong></TableCell>
+          <TableRow>
+            <TableCell /><TableCell><Text weight="bold">Grand total</Text></TableCell>
+            <TableCell style={END}><Num strong pence={sheet.total.planned} /></TableCell>
+            <TableCell style={END}><Num strong pence={sheet.total.actual} /></TableCell>
+            <TableCell style={END}><Num strong pence={sheet.total.remaining} over={over} /></TableCell>
             <TableCell /><TableCell />
           </TableRow>
         </TableFooter>
-      </Table></div>
-    </section>
+      </Table>
+    </Pane>
     {editing && <CostLineDialog key={editing.line?.id ?? `new-${editing.category}`} line={editing.line} category={editing.category}
       onClose={() => setEditing(undefined)} save={(line, remove) => update(current => ({
         ...current,
         budget: remove ? current.budget.filter(item => item.id !== line.id) :
           current.budget.some(item => item.id === line.id) ? current.budget.map(item => item.id === line.id ? line : item) : [...current.budget, line]
       }), remove ? 'Cost line removed.' : 'Cost saved.')} source={source} />}
-  </div>;
+  </>;
 }
 
 function CostLineDialog({ line, category: preset, source, onClose, save }: {
@@ -212,7 +232,7 @@ function CostLineDialog({ line, category: preset, source, onClose, save }: {
   const planned = base + extra;
   const remaining = planned - actualPence;
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent) {
     event.preventDefault();
     if (!name.trim() || !category.trim() || !Number.isFinite(q) || q < 0 || !Number.isFinite(u) || u < 0 ||
         !Number.isSafeInteger(ratePence) || !Number.isSafeInteger(actualPence) || !Number.isSafeInteger(planned) || !Number.isFinite(f) || f < 0 || f > 100) {
@@ -225,62 +245,54 @@ function CostLineDialog({ line, category: preset, source, onClose, save }: {
     if (save(next)) onClose();
   }
 
-  return <Dialog title={line ? `Edit ${line.name}` : 'Add a cost line'} onClose={onClose}>
-    <form className="production-form production-cost-form" onSubmit={submit}>
-      <div className="production-cost-step">
-        <span className="production-step-number" aria-hidden="true">1</span>
-        <div className="production-form">
-          <label>Category<select name="category" required value={category} onChange={event => setCategory(event.target.value)} autoFocus={!preset}>
-            <option value="" disabled>Choose an account</option>
-            {BUDGET_GROUPS.map(group => <optgroup key={group.name} label={group.name}>
-              {group.categories.map(item => <option key={item.code} value={item.name}>{item.code} · {item.name}</option>)}
-            </optgroup>)}
-            {category && !budgetCategory(category) && <option value={category}>{category}</option>}
-          </select></label>
-          <label>Item name<input name="name" required value={name} onChange={event => setName(event.target.value)} placeholder="Camera package, lunch for crew, location fee…" autoFocus={!!preset} /></label>
-        </div>
-      </div>
-      <div className="production-cost-step">
-        <span className="production-step-number" aria-hidden="true">2</span>
-        <div className="production-form">
-          <p className="production-cost-hint">Planned cost = <strong>how many</strong> × <strong>rate</strong> × <strong>how long</strong></p>
-          <div className="production-cost-formula">
-            <label>Quantity<input name="quantity" type="number" inputMode="decimal" step="any" min="0" value={quantity} onChange={event => setQuantity(event.target.value)} required /></label>
-            <span aria-hidden="true">×</span>
-            <label>Rate (£)<input name="rate" type="number" inputMode="decimal" step="0.01" min="0" value={rate} placeholder="0.00" onChange={event => setRate(event.target.value)} required /></label>
-            <span aria-hidden="true">×</span>
-            <label>Units<input name="units" type="number" inputMode="decimal" step="any" min="0" value={units} onChange={event => setUnits(event.target.value)} required /></label>
-            <label>Unit<select name="unitLabel" value={unitLabel} onChange={event => setUnitLabel(event.target.value)}>
-              <option value="">—</option>
-              {[...new Set([...UNITS, ...(unitLabel ? [unitLabel] : [])])].map(unit => <option key={unit} value={unit}>{unit}</option>)}
-            </select></label>
-          </div>
-          <div className="production-form-row">
-            <label>Fringes<select name="fringePreset" value={FRINGES.some(item => item.value === fringe) ? fringe : 'custom'} onChange={event => setFringe(event.target.value === 'custom' ? fringe || '10' : event.target.value)}>
-              {FRINGES.map(item => <option key={item.label} value={item.value}>{item.label}</option>)}
-              <option value="custom">Custom…</option>
-            </select></label>
-            <label>Fringe (%)<input name="fringe" type="number" inputMode="decimal" step="any" min="0" max="100" value={fringe} placeholder="0" onChange={event => setFringe(event.target.value)} /></label>
-          </div>
-          <p className="production-cost-result" aria-live="polite">Planned <span>{extra > 0 && Number.isFinite(base) && <small>{moneyLabel(base)} + {moneyLabel(extra)} fringes = </small>}
-            <strong>{Number.isFinite(planned) ? moneyLabel(planned) : '—'}</strong></span></p>
-        </div>
-      </div>
-      <div className="production-cost-step">
-        <span className="production-step-number" aria-hidden="true">3</span>
-        <div className="production-form">
-          <label>Actual spend (£)<input name="actual" type="number" inputMode="decimal" step="0.01" min="0" value={actual} placeholder="0.00 — fill in once you have paid" onChange={event => setActual(event.target.value)} /></label>
-          {Number.isFinite(remaining) && <p className={`production-cost-result${remaining < 0 ? ' production-negative' : ''}`}>
-            {remaining < 0 ? 'Over by' : 'Left on this line'} <strong>{moneyLabel(Math.abs(remaining))}</strong></p>}
-        </div>
-      </div>
-      {error && <p className="production-form-error" role="alert">{error}</p>}
-      <div className="production-actions production-right">
-        {line && <button type="button" className="production-button production-danger" onClick={() => { if (save(line, true)) onClose(); }}>
-          <Trash2 size={16} aria-hidden="true" /> Remove line</button>}
-        <button type="button" className="production-button" onClick={onClose}>Cancel</button>
-        <button type="submit" className="production-button production-primary">{line ? 'Save cost line' : 'Add cost line'}</button>
-      </div>
-    </form>
+  const accounts = [
+    ...BUDGET_GROUPS.map(group => ({ type: 'section' as const, title: group.name, options: group.categories.map(item => ({ value: item.name, label: `${item.code} · ${item.name}` })) })),
+    ...(category && !budgetCategory(category) ? [{ value: category, label: category }] : [])
+  ];
+  const fringeChoice = FRINGES.some(item => item.value === fringe) ? fringe : 'custom';
+  const step = (number: number, title: string, children: ReactNode) => <Card variant="muted" padding={4}>
+    <HStack gap={3} align="start">
+      <Badge variant="info" label={String(number)} aria-hidden="true" />
+      <VStack gap={3} style={{ flex: 1, minWidth: 0 }}><Text weight="semibold">{title}</Text>{children}</VStack>
+    </HStack>
+  </Card>;
+
+  return <Dialog title={line ? `Edit ${line.name}` : 'Add a cost line'} width={640} onClose={onClose}>
+    <VStack as="form" gap={3} onSubmit={submit}>
+      {step(1, 'Choose the account', <>
+        <Selector label="Category" value={category} onChange={setCategory} placeholder="Choose an account" options={accounts} isRequired />
+        <TextInput label="Item name" value={name} onChange={setName} placeholder="Camera package, lunch for crew, location fee…" isRequired />
+      </>)}
+      {step(2, 'Planned cost = how many × rate × how long', <>
+        <Grid columns={{ minWidth: 110, repeat: 'fit' }} gap={2}>
+          <TextInput label="Quantity" value={quantity} onChange={setQuantity} isRequired />
+          <TextInput label="Rate (£)" value={rate} onChange={setRate} placeholder="0.00" isRequired />
+          <TextInput label="Units" value={units} onChange={setUnits} isRequired />
+          <Choice label="Unit" value={unitLabel} onChange={setUnitLabel}
+            options={[{ value: '', label: '—' }, ...[...new Set([...UNITS, ...(unitLabel ? [unitLabel] : [])])].map(unit => ({ value: unit, label: unit }))]} />
+        </Grid>
+        <Grid columns={{ minWidth: 200, repeat: 'fit' }} gap={2}>
+          <Choice label="Fringes" value={fringeChoice} onChange={value => setFringe(value === 'custom' ? fringe || '10' : value)}
+            options={[...FRINGES, { value: 'custom', label: 'Custom…' }]} />
+          <TextInput label="Fringe (%)" value={fringe} onChange={setFringe} placeholder="0" />
+        </Grid>
+        <HStack gap={2} align="center" wrap="wrap" aria-live="polite">
+          <Text color="secondary">Planned</Text>
+          {extra > 0 && Number.isFinite(base) && <Text type="supporting" color="secondary">{moneyLabel(base)} + {moneyLabel(extra)} fringes =</Text>}
+          <Text size="lg" weight="semibold" hasTabularNumbers>{Number.isFinite(planned) ? moneyLabel(planned) : '—'}</Text>
+        </HStack>
+      </>)}
+      {step(3, 'Record what was spent', <>
+        <TextInput label="Actual spend (£)" value={actual} onChange={setActual} placeholder="0.00 — fill in once you have paid" />
+        {Number.isFinite(remaining) && <Text style={remaining < 0 ? { color: 'var(--color-text-error)' } : undefined}>
+          {remaining < 0 ? 'Over by' : 'Left on this line'} <Text weight="semibold" hasTabularNumbers>{moneyLabel(Math.abs(remaining))}</Text></Text>}
+      </>)}
+      <FormError>{error}</FormError>
+      <HStack gap={2} justify="end" wrap="wrap">
+        {line && <Button variant="destructive" label="Remove line" icon={<Glyph icon={Trash2} />} onClick={() => { if (save(line, true)) onClose(); }} />}
+        <Button label="Cancel" onClick={onClose} />
+        <Button type="submit" variant="primary" label={line ? 'Save cost line' : 'Add cost line'} />
+      </HStack>
+    </VStack>
   </Dialog>;
 }

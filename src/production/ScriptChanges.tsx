@@ -1,28 +1,30 @@
+import { Badge } from '@astryxdesign/core/Badge';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Button } from '@astryxdesign/core/Button';
+import { Card } from '@astryxdesign/core/Card';
+import { HStack } from '@astryxdesign/core/HStack';
+import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList';
+import { Text } from '@astryxdesign/core/Text';
+import { VStack } from '@astryxdesign/core/VStack';
 import { FilePenLine, GitCompareArrows } from 'lucide-react';
-import { Dialog, displayDate } from './components';
+import { Dialog, Glyph, displayDate } from './components';
 import { eighthsLabel, orderedDays } from './model';
 import type { ProductionPlan, ScriptChange } from './model';
 
 /** A compact flag on a strip or breakdown scene whose script changed after release. */
 export function ScriptChangeBadge({ change, onOpen }: { change: ScriptChange; onOpen: () => void }) {
-  return <button type="button" className="production-change-badge" onClick={onOpen}
-    aria-label={`Review script change for scene ${change.number}`}>
-    <FilePenLine size={13} aria-hidden="true" /> {change.status === 'removed' ? 'Cut in draft' : 'Script changed'}
-  </button>;
+  return <Button size="sm" variant="ghost" label={`Review script change for scene ${change.number}`} onClick={onOpen}>
+    <Badge variant="purple" icon={<Glyph icon={FilePenLine} size="xsm" />} label={change.status === 'removed' ? 'Cut in draft' : 'Script changed'} />
+  </Button>;
 }
 
 /** Summary banner shown above the stripboard or breakdown while the draft is ahead of production. */
 export function ScriptChangeBanner({ changes, release, onOpen }: { changes: ScriptChange[]; release: string; onOpen: () => void }) {
   if (!changes.length) return null;
   const count = changes.length;
-  return <div className="production-change-banner" role="status">
-    <FilePenLine size={18} aria-hidden="true" />
-    <div>
-      <strong>Script changed since {release}</strong>
-      <span>{count} {count === 1 ? 'scene' : 'scenes'} in production {count === 1 ? 'has' : 'have'} edits in the writing draft: {changes.map(change => change.number).join(', ')}.</span>
-    </div>
-    <button type="button" className="production-button" onClick={onOpen}>Review script changes</button>
-  </div>;
+  return <Banner status="info" role="status" icon={<Glyph icon={FilePenLine} />} title={`Script changed since ${release}`}
+    description={`${count} ${count === 1 ? 'scene' : 'scenes'} in production ${count === 1 ? 'has' : 'have'} edits in the writing draft: ${changes.map(change => change.number).join(', ')}.`}
+    endContent={<Button label="Review script changes" onClick={onOpen} />} />;
 }
 
 function stripSummary(plan: ProductionPlan, sceneId: string): string {
@@ -44,37 +46,35 @@ export function ScriptChangeDialog({ plan, changes, focus, release, onClose, onR
   onReview?: () => void;
 }) {
   const ordered = focus ? [...changes].sort((a, b) => Number(b.sceneId === focus) - Number(a.sceneId === focus)) : changes;
-  return <Dialog title="Script changes since release" onClose={onClose}>
-    <p className="production-muted">
-      Production still uses {release}. Issue the current writing draft to confirm how each scene&rsquo;s breakdown, shots and strips carry forward.
-    </p>
-    <ul className="production-change-list">
+  return <Dialog title="Script changes since release" width={640} onClose={onClose}>
+    <Text color="secondary">Production still uses {release}. Issue the current writing draft to confirm how each scene&rsquo;s breakdown, shots and strips carry forward.</Text>
+    <VStack gap={3} role="list">
       {ordered.map(change => {
         const tags = plan.tags.filter(tag => tag.sceneId === change.sceneId).length;
         const shots = plan.shots.filter(shot => shot.sceneId === change.sceneId).length;
-        return <li key={change.sceneId} className={change.sceneId === focus ? 'is-focus' : undefined}>
-          <div className="production-change-heading">
-            <strong>{change.number} · {change.heading || 'Untitled scene'}</strong>
-            <span className={`production-change-state is-${change.status}`}>{change.status === 'removed' ? 'Removed from draft' : 'Edited'}</span>
-          </div>
-          <dl>
-            {change.headingAfter !== undefined && <><dt>Heading</dt><dd>{change.headingAfter || 'Untitled scene'}</dd></>}
-            {change.eighthsAfter !== undefined && <><dt>Est. length</dt><dd>
-              {change.eighthsAfter === change.eighthsBefore ? `${eighthsLabel(change.eighthsAfter)} pages (unchanged)` : `${eighthsLabel(change.eighthsBefore)} → ${eighthsLabel(change.eighthsAfter)} pages`}
-            </dd></>}
-            {change.charactersAdded.length > 0 && <><dt>New speaking roles</dt><dd>{change.charactersAdded.join(', ')}</dd></>}
-            {change.charactersRemoved.length > 0 && <><dt>No longer speaking</dt><dd>{change.charactersRemoved.join(', ')}</dd></>}
-            <dt>Schedule</dt><dd>{stripSummary(plan, change.sceneId)}</dd>
-            <dt>Linked work</dt><dd>{tags} breakdown {tags === 1 ? 'tag' : 'tags'} · {shots} {shots === 1 ? 'shot' : 'shots'}</dd>
-          </dl>
-        </li>;
+        return <Card role="listitem" key={change.sceneId} variant={change.sceneId === focus ? 'purple' : 'muted'} padding={4}>
+          <VStack gap={3}>
+            <HStack gap={2} justify="between" align="center" wrap="wrap">
+              <Text weight="semibold">{change.number} · {change.heading || 'Untitled scene'}</Text>
+              <Badge variant={change.status === 'removed' ? 'error' : 'purple'} label={change.status === 'removed' ? 'Removed from draft' : 'Edited'} />
+            </HStack>
+            <MetadataList>
+              {change.headingAfter !== undefined && <MetadataListItem label="Heading">{change.headingAfter || 'Untitled scene'}</MetadataListItem>}
+              {change.eighthsAfter !== undefined && <MetadataListItem label="Est. length">
+                {change.eighthsAfter === change.eighthsBefore ? `${eighthsLabel(change.eighthsAfter)} pages (unchanged)` : `${eighthsLabel(change.eighthsBefore)} → ${eighthsLabel(change.eighthsAfter)} pages`}
+              </MetadataListItem>}
+              {change.charactersAdded.length > 0 && <MetadataListItem label="New speaking roles">{change.charactersAdded.join(', ')}</MetadataListItem>}
+              {change.charactersRemoved.length > 0 && <MetadataListItem label="No longer speaking">{change.charactersRemoved.join(', ')}</MetadataListItem>}
+              <MetadataListItem label="Schedule">{stripSummary(plan, change.sceneId)}</MetadataListItem>
+              <MetadataListItem label="Linked work">{tags} breakdown {tags === 1 ? 'tag' : 'tags'} · {shots} {shots === 1 ? 'shot' : 'shots'}</MetadataListItem>
+            </MetadataList>
+          </VStack>
+        </Card>;
       })}
-    </ul>
-    <div className="production-actions production-right">
-      <button type="button" className="production-button" onClick={onClose}>Close</button>
-      {onReview && <button type="button" className="production-button production-primary" onClick={() => { onClose(); onReview(); }}>
-        <GitCompareArrows size={16} /> Issue draft and review links
-      </button>}
-    </div>
+    </VStack>
+    <HStack gap={2} justify="end">
+      <Button label="Close" onClick={onClose} />
+      {onReview && <Button variant="primary" icon={<Glyph icon={GitCompareArrows} />} label="Issue draft and review links" onClick={() => { onClose(); onReview(); }} />}
+    </HStack>
   </Dialog>;
 }

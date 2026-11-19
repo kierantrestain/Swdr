@@ -1,3 +1,4 @@
+import { InternationalizationProvider } from '@astryxdesign/core/i18n';
 import { Theme } from '@astryxdesign/core/theme';
 import { LoaderCircle } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -341,7 +342,7 @@ export function App() {
   // The manuscript stays paper-white in every appearance (writing.css); its chrome follows the theme.
 
   const loading = <div className="swdr-page page-loading" role="status"><LoaderCircle size={18} className="spinner" aria-hidden="true" /> Loading</div>;
-  return <Theme theme={themes[defaultThemeSlug]} mode={mode}>
+  return <InternationalizationProvider locale="en-GB"><Theme theme={themes[defaultThemeSlug]} mode={mode}>
     <div className={`app${focus ? ' is-focused' : ''}`} data-view={route.view}>
       {route.view === 'team' || route.view === 'review' ? <Suspense fallback={loading}>{page}</Suspense> : <Shell
         route={route} project={isProjectView ? active : undefined} document={head} episode={episode} navigate={navigate} onBack={back}
@@ -356,7 +357,7 @@ export function App() {
       {error && ready && <aside className="save-error" role="alert">{error}<button onClick={retrySave}>Retry save</button></aside>}
       {message && <div className="status-toast" role="status">{message}</div>}
     </div>
-  </Theme>;
+  </Theme></InternationalizationProvider>;
 }
 
 

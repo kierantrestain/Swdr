@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { choose, expect, loadDemo, test } from './support/browser';
+import { expect, loadDemo, test } from './support/browser';
 
 async function openProduction(page: Page) {
   await loadDemo(page);

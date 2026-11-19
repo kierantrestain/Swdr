@@ -1,6 +1,13 @@
+import { Button } from '@astryxdesign/core/Button';
+import { HStack } from '@astryxdesign/core/HStack';
+import { Item } from '@astryxdesign/core/Item';
+import { Text } from '@astryxdesign/core/Text';
+import { VStack } from '@astryxdesign/core/VStack';
 import { useState } from 'react';
-import { Dialog } from './components';
+import { Choice, Dialog, FormError, Pane } from './components';
 import type { RevisionPreview } from './model';
+
+const OMIT = '__omit__';
 
 export function RevisionPanel({ preview, onApply, onClose, error }: {
   preview: RevisionPreview;
@@ -14,43 +21,36 @@ export function RevisionPanel({ preview, onApply, onClose, error }: {
   const assigned = new Set(Object.values(choices).filter(Boolean));
   const added = preview.incoming.filter(item => !assigned.has(item.id));
   const valid = preview.previous.every(match => Object.hasOwn(choices, match.scene.id));
-  return <Dialog title={`Review ${preview.snapshot.label}`} onClose={onClose}>
-    <p className="production-muted">Confirm the source for each scene. An omission keeps its historical tags and shots. New scenes start without production links.</p>
-    <div className="production-revision-list">
+  return <Dialog title={`Review ${preview.snapshot.label}`} width={720} onClose={onClose}>
+    <Text color="secondary">Confirm the source for each scene. An omission keeps its historical tags and shots. New scenes start without production links.</Text>
+    <VStack gap={1}>
       {preview.previous.map(match => {
         const { scene, suggested } = match;
         const choice = choices[scene.id];
         const state = match.quality === 'review' ? 'Unmatched' : [
           match.moved && 'Moved', match.edited && 'Edited', match.quality === 'unique heading' && 'Heading match',
         ].filter(Boolean).join(' · ') || 'Unchanged';
-        return <div key={scene.id} className="production-revision-row">
-          <div><strong>{scene.number} · {scene.heading || 'Untitled scene'}</strong><small>{state}</small></div>
-          <select aria-label={`Incoming source for scene ${scene.number}`} value={choice === null ? '__omit__' : choice ?? ''} onChange={event => {
-            const value = event.target.value;
-            setChoices(current => {
-              if (value) return { ...current, [scene.id]: value === '__omit__' ? null : value };
+        return <Item key={scene.id} label={`${scene.number} · ${scene.heading || 'Untitled scene'}`} description={state}
+          endContent={<Choice label={`Incoming source for scene ${scene.number}`} isLabelHidden width={300} placeholder="Choose source"
+            value={choice === null ? OMIT : choice ?? ''} onChange={value => setChoices(current => {
+              if (value) return { ...current, [scene.id]: value === OMIT ? null : value };
               const next = { ...current };
               delete next[scene.id];
               return next;
-            });
-          }}>
-            <option value="">Choose source</option>
-            <option value="__omit__">Omitted from this revision</option>
-            {preview.incoming.map(target => <option key={target.id} value={target.id} disabled={assigned.has(target.id) && choice !== target.id}>
-              {target.number} · {target.heading || 'Untitled scene'}{suggested?.id === target.id ? ' (suggested)' : ''}
-            </option>)}
-          </select>
-        </div>;
+            })}
+            options={[{ value: OMIT, label: 'Omitted from this revision' }, ...preview.incoming.map(target => ({
+              value: target.id, label: `${target.number} · ${target.heading || 'Untitled scene'}${suggested?.id === target.id ? ' (suggested)' : ''}`,
+              isDisabled: assigned.has(target.id) && choice !== target.id
+            }))]} />} />;
       })}
-    </div>
-    {!!added.length && <div className="production-inset">
-      <h3>Added scenes</h3>
-      <ul>{added.map(target => <li key={target.id}>{target.number} · {target.heading || 'Untitled scene'}</li>)}</ul>
-    </div>}
-    {error && <p role="alert" className="production-form-error">{error}</p>}
-    <div className="production-actions production-right">
-      <button type="button" className="production-button" onClick={onClose}>Cancel</button>
-      <button type="button" className="production-button production-primary" disabled={!valid} onClick={() => onApply(choices)}>Apply reviewed revision</button>
-    </div>
+    </VStack>
+    {!!added.length && <Pane variant="muted" title="Added scenes">
+      <VStack gap={1}>{added.map(target => <Text key={target.id}>{target.number} · {target.heading || 'Untitled scene'}</Text>)}</VStack>
+    </Pane>}
+    <FormError>{error}</FormError>
+    <HStack gap={2} justify="end">
+      <Button label="Cancel" onClick={onClose} />
+      <Button variant="primary" label="Apply reviewed revision" isDisabled={!valid} onClick={() => onApply(choices)} />
+    </HStack>
   </Dialog>;
 }

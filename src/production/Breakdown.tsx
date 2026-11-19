@@ -1,8 +1,21 @@
+import { Button } from '@astryxdesign/core/Button';
+import { Card } from '@astryxdesign/core/Card';
+import { Grid } from '@astryxdesign/core/Grid';
+import { HStack } from '@astryxdesign/core/HStack';
+import { Item } from '@astryxdesign/core/Item';
+import { Link } from '@astryxdesign/core/Link';
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
+import { Text } from '@astryxdesign/core/Text';
+import { TextArea } from '@astryxdesign/core/TextArea';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { Token } from '@astryxdesign/core/Token';
+import { VStack } from '@astryxdesign/core/VStack';
 import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { newId } from '../model';
-import { Dialog, Empty, SourceButton, displayDate } from './components';
+import { Choice, Dialog, Empty, FormError, Glyph, Pane, PaneHeading, SourceButton, Split, displayDate } from './components';
+import { ScriptLines } from './ScriptExtract';
 import type { PaneProps } from './components';
 import { CATALOGUE_CATEGORIES, castNumbers, eighthsLabel, estimateEighths, orderedDays, scriptTargets, settingLabel } from './model';
 import type { BreakdownTag, CatalogueCategory, CatalogueItem, ProductionScene } from './model';
@@ -12,12 +25,15 @@ import { ScriptChangeBadge, ScriptChangeBanner, ScriptChangeDialog } from './Scr
 
 type Section = 'Scene tags' | 'Catalogue' | 'Cast & crew' | 'Locations';
 
-function field(form: FormData, key: string): string {
-  return String(form.get(key) ?? '').trim();
-}
+type TokenColor = 'default' | 'red' | 'orange' | 'yellow' | 'green' | 'teal' | 'cyan' | 'blue' | 'purple' | 'pink' | 'gray';
+/** Breakdown sheet colours, following the industry's category conventions where there is one (cast red, props purple). */
+const CATEGORY_COLOR: Record<CatalogueCategory, TokenColor> = {
+  Cast: 'red', Extras: 'green', Prop: 'purple', Wardrobe: 'orange', 'Hair and make-up': 'pink', 'Set dressing': 'yellow',
+  Equipment: 'gray', Vehicle: 'yellow', Stunts: 'orange', 'Special effects': 'teal', Animals: 'green', Sound: 'cyan', VFX: 'blue', Other: 'default'
+};
 
 export function CategoryChip({ category }: { category: CatalogueCategory | string }) {
-  return <span className={`production-category production-cat-${category.toLowerCase().replace(/[^a-z]+/g, '-')}`}>{category}</span>;
+  return <Token size="sm" label={category} color={CATEGORY_COLOR[category as CatalogueCategory] ?? 'default'} />;
 }
 
 function itemLabel(item: CatalogueItem | undefined, ids: Map<string, number>): string {
@@ -33,6 +49,8 @@ export function Breakdown(pane: PaneProps) {
   const [reviewing, setReviewing] = useState<BreakdownTag>();
   const [error, setError] = useState('');
   const [changeFocus, setChangeFocus] = useState<string>();
+  const [tagDraft, setTagDraft] = useState({ itemId: '', blockId: '', notes: '' });
+  const [itemDraft, setItemDraft] = useState<{ name: string; category: CatalogueCategory; personId: string; notes: string }>({ name: '', category: 'Prop', personId: '', notes: '' });
   const castIds = castNumbers(plan);
   const scene = plan.scenes.find(item => item.id === sceneId) ?? plan.scenes.find(item => item.status === 'active');
   const target = scriptTargets(project, snapshot.document).find(item => item.id === (scene?.source.sceneId ?? scene?.source.shotId));
@@ -46,138 +64,132 @@ export function Breakdown(pane: PaneProps) {
     return index < 0 ? [] : [`Day ${index + 1} · ${displayDate(days[index].date)}`];
   }) : [];
 
-  function attachTag(event: FormEvent<HTMLFormElement>, activeScene: ProductionScene, editing?: BreakdownTag) {
+  const startReview = (tag?: BreakdownTag) => { setReviewing(tag); setTagDraft({ itemId: '', blockId: tag?.source.blockId ?? '', notes: tag?.notes ?? '' }); };
+
+  function attachTag(event: FormEvent, activeScene: ProductionScene, editing?: BreakdownTag) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const blockId = field(form, 'block');
-    const itemId = editing?.itemId ?? field(form, 'item');
+    const { blockId } = tagDraft;
+    const itemId = editing?.itemId ?? (tagDraft.itemId || plan.catalogue[0]?.id);
     if (activeScene.status !== 'active' || !plan.catalogue.some(item => item.id === itemId)) return setError('Choose an active scene and a catalogue item.');
     if (blockId && !tagBlocks.some(block => block.id === blockId)) return setError('Choose a block from the current source scene.');
     const tag: BreakdownTag = {
-      id: editing?.id ?? newId(), sceneId: activeScene.id, itemId, notes: field(form, 'notes'),
+      id: editing?.id ?? newId(), sceneId: activeScene.id, itemId, notes: tagDraft.notes.trim(),
       source: blockId ? { ...activeScene.source, blockId } : activeScene.source, reviewed: true
     };
     if (update(current => ({
       ...current,
       tags: editing ? current.tags.map(item => item.id === tag.id ? tag : item) : [...current.tags, tag]
     }), editing ? 'Tag re-linked to the active revision.' : 'Tag added.')) {
-      event.currentTarget.reset();
+      setTagDraft({ itemId: tagDraft.itemId, blockId: '', notes: '' });
       setReviewing(undefined);
       setError('');
     }
   }
 
-  return <>
-    <div className="production-subnav-bar">
-      <div className="production-actions production-subnav" aria-label="Breakdown areas">
-        {(['Scene tags', 'Catalogue', 'Cast & crew', 'Locations'] as const).map(label => <button
-          type="button" className="production-button" key={label} aria-pressed={section === label}
-          onClick={() => { setSection(label); setError(''); }}
-        >{label}{label === 'Cast & crew' ? <span className="production-count">{plan.people.length}</span> : label === 'Locations' ? <span className="production-count">{plan.locations.length}</span> : null}</button>)}
-      </div>
-      {!readOnly && syncScript && <button type="button" className="production-button" onClick={syncScript}
-        title={plan.breakdownSyncedAt ? `Last built ${plan.breakdownSyncedAt.slice(0, 16).replace('T', ' ')}` : undefined}>
-        <RefreshCw size={16} aria-hidden="true" /> {plan.breakdownSyncedAt ? 'Sync from script' : 'Build breakdown from script'}</button>}
-    </div>
+  function addItem(event: FormEvent) {
+    event.preventDefault();
+    const name = itemDraft.name.trim();
+    const { category, personId } = itemDraft;
+    if (!name || !CATALOGUE_CATEGORIES.includes(category)) return setError('Enter a name and category.');
+    if (category === 'Cast' && !plan.people.some(person => person.id === personId && person.type === 'Cast')) {
+      return setError('Add a cast member under Cast & crew, then link that person here.');
+    }
+    const item = { id: newId(), name, category, personId: category === 'Cast' ? personId : undefined, notes: itemDraft.notes.trim(), source };
+    if (update(current => ({ ...current, catalogue: [...current.catalogue, item] }), 'Catalogue item added.')) {
+      setItemDraft({ name: '', category, personId: '', notes: '' }); setError('');
+    }
+  }
+
+  const blockOptions = [{ value: '', label: 'Whole scene' }, ...tagBlocks.map(block => ({ value: block.id, label: block.text.slice(0, 120) }))];
+  const sourceLine = <Choice label="Source line" value={tagDraft.blockId} onChange={blockId => setTagDraft({ ...tagDraft, blockId })} options={blockOptions} />;
+  const tagNotes = <TextInput label="Notes" value={tagDraft.notes} onChange={notes => setTagDraft({ ...tagDraft, notes })} />;
+
+  return <VStack gap={4}>
+    <HStack gap={3} justify="between" align="center" wrap="wrap">
+      <SegmentedControl label="Breakdown areas" value={section} onChange={value => { setSection(value as Section); setError(''); }}>
+        <SegmentedControlItem value="Scene tags" label="Scene tags" />
+        <SegmentedControlItem value="Catalogue" label="Catalogue" />
+        <SegmentedControlItem value="Cast & crew" label={`Cast & crew ${plan.people.length}`} />
+        <SegmentedControlItem value="Locations" label={`Locations ${plan.locations.length}`} />
+      </SegmentedControl>
+      {!readOnly && syncScript && <Button label={plan.breakdownSyncedAt ? 'Sync from script' : 'Build breakdown from script'} icon={<Glyph icon={RefreshCw} />} onClick={syncScript}
+        tooltip={plan.breakdownSyncedAt ? `Last built ${plan.breakdownSyncedAt.slice(0, 16).replace('T', ' ')}` : undefined} />}
+    </HStack>
     {section === 'Scene tags' && <>
       <ScriptChangeBanner changes={changes} release={snapshot.label} onOpen={() => setChangeFocus('')} />
       {changeFocus !== undefined && <ScriptChangeDialog plan={plan} changes={changes} focus={changeFocus || undefined} release={snapshot.label}
         onClose={() => setChangeFocus(undefined)} onReview={reviewScript} />}
       {!scene && <Empty>The released script has no scenes available for breakdown.</Empty>}
-      {scene && <div className="production-two-columns">
-        <div className="production-card">
-          <label className="production-field">Scene<select value={scene.id} onChange={event => { setSceneId(event.target.value); setError(''); }}>
-            {plan.scenes.map(item => <option key={item.id} value={item.id}>{item.number} · {item.heading || 'Untitled scene'}{item.status === 'omitted' ? ' (omitted)' : ''}</option>)}
-          </select></label>
-          <div className="production-section-heading"><h3>{scene.heading || 'Untitled scene'}</h3><SourceButton source={scene.source} onOpenSource={onOpenSource} /></div>
-          <p className="production-scene-meta">
-            {[settingLabel(scene.heading), target && `Est. ${eighthsLabel(estimateEighths(target.blocks))} pages`, placements.length ? placements.join(', ') : 'Not scheduled']
-              .filter(Boolean).join(' · ')}
-            {change && <ScriptChangeBadge change={change} onOpen={() => setChangeFocus(change.sceneId)} />}
-          </p>
-          <div className="production-passage" aria-label="Released script excerpt">
-            {target?.blocks.filter(block => block.kind !== 'note' && block.kind !== 'scene').map(block => <p key={block.id} className={`production-script-${block.kind}`}>{block.text}</p>)}
-            {scene.status === 'omitted' && <p>Omitted from the active release. Open Source to read the original snapshot.</p>}
-          </div>
-        </div>
-        <section className="production-card">
-          <div className="production-section-heading"><h3>Breakdown sheet</h3>
-            <span className="production-muted">{sceneTags.length} {sceneTags.length === 1 ? 'element' : 'elements'}</span></div>
-          {!sceneTags.length && <p className="production-muted">No tags on this scene.</p>}
-          {CATALOGUE_CATEGORIES.filter(category => sceneTags.some(tag => categoryOf(tag) === category)).map(category => <div className="production-breakdown-group" key={category}>
-            <h4><CategoryChip category={category} /></h4>
+      {scene && <Split main={<Pane>
+        <Choice label="Scene" value={scene.id} onChange={value => { setSceneId(value); setError(''); }}
+          options={plan.scenes.map(item => ({ value: item.id, label: `${item.number} · ${item.heading || 'Untitled scene'}${item.status === 'omitted' ? ' (omitted)' : ''}` }))} />
+        <PaneHeading title={scene.heading || 'Untitled scene'} actions={<SourceButton source={scene.source} onOpenSource={onOpenSource} />} />
+        <HStack gap={2} align="center" wrap="wrap">
+          <Text type="supporting" color="secondary">{[settingLabel(scene.heading), target && `Est. ${eighthsLabel(estimateEighths(target.blocks))} pages`, placements.length ? placements.join(', ') : 'Not scheduled']
+            .filter(Boolean).join(' · ')}</Text>
+          {change && <ScriptChangeBadge change={change} onOpen={() => setChangeFocus(change.sceneId)} />}
+        </HStack>
+        <Card variant="muted" padding={4} role="region" aria-label="Released script excerpt">
+          <VStack gap={2}>
+            <ScriptLines blocks={target?.blocks.filter(block => block.kind !== 'note' && block.kind !== 'scene') ?? []} />
+            {scene.status === 'omitted' && <Text>Omitted from the active release. Open Source to read the original snapshot.</Text>}
+          </VStack>
+        </Card>
+      </Pane>} side={<Pane title="Breakdown sheet" actions={<Text color="secondary">{sceneTags.length} {sceneTags.length === 1 ? 'element' : 'elements'}</Text>}>
+        {!sceneTags.length && <Text color="secondary">No tags on this scene.</Text>}
+        {CATALOGUE_CATEGORIES.filter(category => sceneTags.some(tag => categoryOf(tag) === category)).map(category => <VStack key={category} gap={1}>
+          <HStack><CategoryChip category={category} /></HStack>
           {sceneTags.filter(tag => categoryOf(tag) === category).map(tag => {
             const item = plan.catalogue.find(entry => entry.id === tag.itemId);
-            return <div className="production-list-row" key={tag.id}><div>
-              <strong>{itemLabel(item, castIds)}</strong>
-              {(tag.notes || tag.reviewed === false) && <small>{tag.notes}{tag.notes && tag.reviewed === false && ' · '}{tag.reviewed === false && 'Source review required'}</small>}
-            </div><div className="production-actions">
-              <SourceButton source={tag.source} onOpenSource={onOpenSource} />
-              {!readOnly && scene.status === 'active' && tag.reviewed === false && <button type="button" className="production-link" onClick={() => {
-                setError(''); setReviewing(tag);
-              }}>Re-link</button>}
-              {!readOnly && <button type="button" className="production-link" onClick={() => update(current => ({
-                ...current, tags: current.tags.filter(item => item.id !== tag.id)
-              }), 'Tag removed.')} aria-label={`Remove ${item?.name ?? 'breakdown'} tag`}>Remove</button>}
-            </div></div>;
+            return <Item key={tag.id} label={itemLabel(item, castIds)}
+              description={tag.notes || tag.reviewed === false ? `${tag.notes}${tag.notes && tag.reviewed === false ? ' · ' : ''}${tag.reviewed === false ? 'Source review required' : ''}` : undefined}
+              endContent={<HStack gap={3} align="center">
+                <SourceButton source={tag.source} onOpenSource={onOpenSource} />
+                {!readOnly && scene.status === 'active' && tag.reviewed === false && <Link onClick={() => { setError(''); startReview(tag); }}>Re-link</Link>}
+                {!readOnly && <Link label={`Remove ${item?.name ?? 'breakdown'} tag`} onClick={() => update(current => ({
+                  ...current, tags: current.tags.filter(entry => entry.id !== tag.id)
+                }), 'Tag removed.')}>Remove</Link>}
+              </HStack>} />;
           })}
-          </div>)}
-          {!readOnly && scene.status === 'active' && (plan.catalogue.length ? <form className="production-form" onSubmit={event => attachTag(event, scene)}>
-            <label>Catalogue item<select name="item" required>{plan.catalogue.map(item => <option key={item.id} value={item.id}>{itemLabel(item, castIds)} · {item.category}</option>)}</select></label>
-            <label>Source line<select name="block"><option value="">Whole scene</option>{tagBlocks.map(block => <option key={block.id} value={block.id}>{block.text.slice(0, 120)}</option>)}</select></label>
-            <label>Notes<input name="notes" /></label>
-            {error && <p className="production-form-error" role="alert">{error}</p>}
-            <div className="production-actions"><button type="submit" className="production-button production-primary">Add breakdown tag</button></div>
-          </form> : <p><button type="button" className="production-link" onClick={() => setSection('Catalogue')}>Add a catalogue item</button> to tag this scene.</p>)}
-        </section>
-        {reviewing && <Dialog title="Review breakdown tag" onClose={() => setReviewing(undefined)}>
-          <form className="production-form" onSubmit={event => attachTag(event, scene, reviewing)}>
-            <label>Source line<select name="block"><option value="">Whole scene</option>{tagBlocks.map(block => <option key={block.id} value={block.id}>{block.text.slice(0, 120)}</option>)}</select></label>
-            <label>Notes<input name="notes" defaultValue={reviewing.notes} /></label>
-            {error && <p className="production-form-error" role="alert">{error}</p>}
-            <div className="production-actions production-right"><button type="submit" className="production-button production-primary">Confirm source</button></div>
-          </form>
-        </Dialog>}
-      </div>}
+        </VStack>)}
+        {!readOnly && scene.status === 'active' && (plan.catalogue.length ? <VStack as="form" gap={3} onSubmit={event => attachTag(event, scene)}>
+          <Choice label="Catalogue item" value={tagDraft.itemId || plan.catalogue[0].id} onChange={itemId => setTagDraft({ ...tagDraft, itemId })}
+            options={plan.catalogue.map(item => ({ value: item.id, label: `${itemLabel(item, castIds)} · ${item.category}` }))} />
+          {sourceLine}
+          {tagNotes}
+          {!reviewing && <FormError>{error}</FormError>}
+          <HStack><Button type="submit" variant="primary" label="Add breakdown tag" /></HStack>
+        </VStack> : <Text><Link onClick={() => setSection('Catalogue')}>Add a catalogue item</Link> to tag this scene.</Text>)}
+      </Pane>} />}
+      {scene && reviewing && <Dialog title="Review breakdown tag" width={560} onClose={() => startReview(undefined)}>
+        <VStack as="form" gap={3} onSubmit={event => attachTag(event, scene, reviewing)}>
+          {sourceLine}
+          {tagNotes}
+          <FormError>{error}</FormError>
+          <HStack justify="end"><Button type="submit" variant="primary" label="Confirm source" /></HStack>
+        </VStack>
+      </Dialog>}
     </>}
-    {section === 'Catalogue' && <div className="production-two-columns">
-      <section className="production-card">
-        <h3>Catalogue</h3>
-        {!plan.catalogue.length && <p className="production-muted">Add an item to tag it in the released script.</p>}
-        {plan.catalogue.map(item => <div className="production-list-row" key={item.id}>
-          <div><strong>{itemLabel(item, castIds)}</strong><small><CategoryChip category={item.category} />{item.notes && ` ${item.notes}`}</small></div>
-          <SourceButton source={item.source} onOpenSource={onOpenSource} />
-        </div>)}
-      </section>
-      {!readOnly && <section className="production-card">
-        <h3>Add catalogue item</h3>
-        <form className="production-form" onSubmit={event => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          const name = field(form, 'name');
-          const category = field(form, 'category') as CatalogueCategory;
-          const personId = field(form, 'person');
-          if (!name || !CATALOGUE_CATEGORIES.includes(category)) return setError('Enter a name and category.');
-          if (category === 'Cast' && !plan.people.some(person => person.id === personId && person.type === 'Cast')) {
-            return setError('Add a cast member under Cast & crew, then link that person here.');
-          }
-          const item = { id: newId(), name, category, personId: category === 'Cast' ? personId : undefined, notes: field(form, 'notes'), source };
-          if (update(current => ({ ...current, catalogue: [...current.catalogue, item] }), 'Catalogue item added.')) {
-            event.currentTarget.reset(); setError('');
-          }
-        }}>
-          <label>Item name<input name="name" required /></label>
-          <div className="production-form-row">
-            <label>Category<select name="category">{CATALOGUE_CATEGORIES.map(category => <option key={category}>{category}</option>)}</select></label>
-            <label>Cast member<select name="person"><option value="">None</option>{plan.people.filter(person => person.type === 'Cast').map(person => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
-          </div>
-          <label>Notes<textarea name="notes" rows={2} /></label>
-          {error && <p className="production-form-error" role="alert">{error}</p>}
-          <div className="production-actions"><button type="submit" className="production-button production-primary">Add catalogue item</button></div>
-        </form>
-      </section>}
-    </div>}
+    {section === 'Catalogue' && <Split main={<Pane title="Catalogue">
+      {!plan.catalogue.length && <Text color="secondary">Add an item to tag it in the released script.</Text>}
+      <VStack gap={1}>{plan.catalogue.map(item => <Item key={item.id} label={itemLabel(item, castIds)}
+        description={<HStack gap={2} align="center"><CategoryChip category={item.category} />{item.notes && <Text type="supporting" color="secondary">{item.notes}</Text>}</HStack>}
+        endContent={<SourceButton source={item.source} onOpenSource={onOpenSource} />} />)}</VStack>
+    </Pane>} side={!readOnly && <Pane title="Add catalogue item">
+      <VStack as="form" gap={3} onSubmit={addItem}>
+        <TextInput label="Item name" value={itemDraft.name} onChange={name => setItemDraft({ ...itemDraft, name })} isRequired />
+        <Grid columns={{ minWidth: 160, repeat: 'fit' }} gap={3}>
+          <Choice label="Category" value={itemDraft.category} onChange={value => setItemDraft({ ...itemDraft, category: value as CatalogueCategory })}
+            options={CATALOGUE_CATEGORIES.map(category => ({ value: category, label: category }))} />
+          <Choice label="Cast member" value={itemDraft.personId} onChange={personId => setItemDraft({ ...itemDraft, personId })}
+            options={[{ value: '', label: 'None' }, ...plan.people.filter(person => person.type === 'Cast').map(person => ({ value: person.id, label: person.name }))]} />
+        </Grid>
+        <TextArea label="Notes" value={itemDraft.notes} onChange={notes => setItemDraft({ ...itemDraft, notes })} />
+        <FormError>{error}</FormError>
+        <HStack><Button type="submit" variant="primary" label="Add catalogue item" /></HStack>
+      </VStack>
+    </Pane>} />}
     {section === 'Cast & crew' && <People {...pane} />}
     {section === 'Locations' && <Locations {...pane} />}
-  </>;
+  </VStack>;
 }

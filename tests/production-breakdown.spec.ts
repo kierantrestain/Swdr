@@ -55,7 +55,7 @@ test('builds cast, locations and page counts from an imported film script, then 
   const summary = page.getByText(/65 scenes over \d+ pages · 7 speaking roles/);
   await expect(summary).toBeVisible();
 
-  await page.getByRole('button', { name: /^Cast & crew/ }).click();
+  await page.getByRole('radio', { name: /^Cast & crew/ }).click();
   const directory = page.getByRole('region', { name: 'Cast and crew directory' });
   const rows = directory.getByRole('table').first().getByRole('row');
   await expect(rows).toHaveCount(8);
@@ -82,7 +82,7 @@ test('builds cast, locations and page counts from an imported film script, then 
   await shot(page, '1-cast');
   await page.getByRole('button', { name: 'Dismiss breakdown summary', exact: true }).click();
 
-  await page.getByRole('button', { name: /^Locations/ }).click();
+  await page.getByRole('radio', { name: /^Locations/ }).click();
   const locations = page.getByRole('region', { name: 'Locations directory' });
   await expect(locations.getByRole('table').getByRole('row')).toHaveCount(10);
   await expect(locations.getByRole('button', { name: "Open Maya's Apartment - Kitchen", exact: true })).toBeVisible();
@@ -125,7 +125,7 @@ test('builds cast, locations and page counts from an imported film script, then 
     await expect(top.getByText(name, { exact: true })).toBeVisible();
   }
   await top.getByRole('button', { name: 'New cost line', exact: true }).click();
-  await page.getByLabel('Category').selectOption('Camera');
+  await choose(page, /^Category/, '2100 · Camera');
   await page.getByLabel('Item name').fill('Camera package');
   await page.getByLabel('Quantity').fill('2');
   await page.getByLabel('Rate (£)').fill('450');

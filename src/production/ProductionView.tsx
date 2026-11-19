@@ -31,7 +31,6 @@ import {
 import type { ProductionOutput, RevisionPreview } from './model';
 import { PageHeader } from '../shell/PageHeader';
 import './print.css';
-import './production.css'; // Removed once every pane is on Astryx.
 
 const PANES = ['Stripboard', 'Breakdown', 'Shots & storyboard', 'Sides', 'Call sheets', 'Reports'] as const;
 type Pane = (typeof PANES)[number];
