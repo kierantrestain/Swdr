@@ -6,6 +6,7 @@ import { newId } from '../model';
 import type { Asset, WorkspaceViewProps } from '../model';
 import { assetUsage, megabytes, sizeOf } from './media';
 import './media.css';
+import { PageHeader } from '../shell/PageHeader';
 
 const MAX_BYTES = 8 * 1_048_576;
 type Filter = 'all' | 'images' | 'documents' | 'unused';
@@ -54,12 +55,10 @@ export function MediaLibrary({ project, onProjectChange, onStatus, readOnly }: P
   }
 
   return <section className="media" aria-label="Files and media" id="main-content">
-    <header className="media-head">
-      <div><h1>Files &amp; media</h1>
-        <p>{project.assets.length} {project.assets.length === 1 ? 'file' : 'files'} · {megabytes(total)} stored in this browser{unused ? ` · ${unused} not used anywhere` : ''}</p></div>
-      {!readOnly && <button type="button" className="media-upload" onClick={() => input.current?.click()}><Upload size={16} aria-hidden="true" /> Add files</button>}
-      <input ref={input} type="file" multiple hidden onChange={event => { void add(event.target.files); event.target.value = ''; }} />
-    </header>
+    <PageHeader className="media-head" title="Files & media"
+      subtitle={`${project.assets.length} ${project.assets.length === 1 ? 'file' : 'files'} · ${megabytes(total)} stored in this browser${unused ? ` · ${unused} not used anywhere` : ''}`}
+      actions={!readOnly && <button type="button" className="primary media-upload" onClick={() => input.current?.click()}><Upload size={16} aria-hidden="true" /> Add files</button>} />
+    <input ref={input} type="file" multiple hidden onChange={event => { void add(event.target.files); event.target.value = ''; }} />
     <div className="media-tools">
       <div className="media-filter" role="group" aria-label="Show">
         {(['all', 'images', 'documents', 'unused'] as const).map(value => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>

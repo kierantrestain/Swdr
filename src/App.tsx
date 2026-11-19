@@ -35,10 +35,15 @@ import { projectNavigation } from './shell/navigation';
 import { documentForEpisode, encodeRoute, orderedEpisodes, parentRoute, parseRoute, scriptView } from './shell/routes';
 import type { Destination, Route } from './shell/routes';
 import './shell/shell.css';
+import './shell/system.css';
 
 const recentKey = 'swdr.recent.v1';
 const sidebarKey = 'swdr.sidebar.v1';
 const modeKey = 'swdr.appearance.v1';
+/** First visit follows the device's appearance; choosing light or dark in the top bar is remembered from then on. */
+function systemColorMode(): ColorMode {
+  try { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch { return 'light'; }
+}
 const deviceLabels = { loading: 'Opening local workspace', saving: 'Saving on this device…', saved: 'Saved on this device', error: 'Local save needs attention' };
 
 function readJson<T>(key: string, fallback: T): T {
@@ -65,7 +70,8 @@ export function App() {
   const [palette, setPalette] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const [sidebar, setSidebar] = useState(() => readJson(sidebarKey, { writing: true, other: false }));
-  const [mode, setMode] = useState<ColorMode>(() => readJson<ColorMode>(modeKey, 'light'));
+  const [mode, setModeState] = useState<ColorMode>(() => readJson<ColorMode>(modeKey, systemColorMode()));
+  const setMode = useCallback((next: ColorMode) => { setModeState(next); writeJson(modeKey, next); }, []);
   const active = projects.find(project => project.id === route.projectId && !project.archivedAt);
   const head = active?.documents.find(document => document.id === route.documentId) ?? (!route.documentId ? active?.documents[0] : undefined);
   const saved = route.revisionId && active?.snapshots.find(snapshot => snapshot.document.id === route.documentId && snapshot.document.revisionId === route.revisionId);
@@ -99,7 +105,6 @@ export function App() {
     return () => clearTimeout(timer);
   }, [message]);
 
-  useEffect(() => { writeJson(modeKey, mode); }, [mode]);
 
   const go = useCallback((next: Route, options: { replace?: boolean } = {}) => {
     setRoute(next);

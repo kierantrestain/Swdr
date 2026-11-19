@@ -18,6 +18,7 @@ import { PhonePreview, YouTubePreview } from './Preview';
 import { AiPartner } from '../ai/AiPartner';
 import type { Playback } from './Preview';
 import './creator.css';
+import { PageHeader } from '../shell/PageHeader';
 
 const STATUS_LABELS: Record<Status, string> = { idea: 'Idea', scripting: 'Scripting', filming: 'Filming', editing: 'Editing', scheduled: 'Scheduled', published: 'Published' };
 const SHORT_PLATFORMS = (Object.keys(PLATFORMS) as Platform[]).filter(key => PLATFORMS[key].form === 'short');
@@ -65,12 +66,9 @@ export function CreatorStudio({ project, onProjectChange, onStatus, readOnly }: 
 
   const shorts = module.pieces.filter(item => PLATFORMS[item.platform].form === 'short').length;
   return <section className="creator" aria-label="Creator studio" id="main-content">
-    <header className="creator-head">
-      <div>
-        <h1>Creator studio</h1>
-        <p>{module.pieces.length ? `${module.pieces.length - shorts} long-form · ${shorts} short-form · ${module.pieces.filter(item => item.status === 'published').length} published` : 'Plan, script, package and publish short-form and YouTube videos.'}</p>
-      </div>
-      <div className="creator-actions">
+    <PageHeader className="creator-head" title="Creator studio"
+      subtitle={module.pieces.length ? `${module.pieces.length - shorts} long-form · ${shorts} short-form · ${module.pieces.filter(item => item.status === 'published').length} published` : 'Plan, script, package and publish short-form and YouTube videos.'}
+      actions={<div className="creator-actions">
         <div className="creator-segmented" role="group" aria-label="View">
           <button type="button" aria-pressed={view === 'board'} onClick={() => setView('board')}><Kanban size={15} aria-hidden="true" /> Board</button>
           <button type="button" aria-pressed={view === 'calendar'} onClick={() => setView('calendar')}><CalendarDays size={15} aria-hidden="true" /> Calendar</button>
@@ -79,8 +77,7 @@ export function CreatorStudio({ project, onProjectChange, onStatus, readOnly }: 
           <Button label="New short" variant="secondary" icon={<Smartphone size={15} aria-hidden="true" />} onClick={() => create('shorts')} />
           <Button label="New YouTube video" variant="primary" icon={<MonitorPlay size={15} aria-hidden="true" />} onClick={() => create('youtube')} />
         </>}
-      </div>
-    </header>
+      </div>} />
     {!module.pieces.length ? <div className="creator-empty">
       <Clapperboard size={32} aria-hidden="true" />
       <h2>Plan your first video</h2>

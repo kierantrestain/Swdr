@@ -63,3 +63,12 @@
 /* Writing focus mode keeps the page mounted (so the caret and selection survive) and hides the chrome. */
 .app.is-focused .astryx-app-shell-header,
 .app.is-focused .astryx-app-shell-sidenav { display: none !important; }
+
+/* Narrow screens: the trail keeps its last two steps (Home and the sidebar cover the rest), and a step that still
+   does not fit ends in an ellipsis instead of running over its neighbour. */
+@media (max-width: 640px) {
+  .shell-crumbs li:not(:nth-last-child(-n+2)) { display: none; }
+  .shell-crumbs li { overflow: hidden; }
+  .shell-crumbs li > :is(a, button, span):last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shell-crumbs li:nth-last-child(2) > [aria-hidden='true']:first-child, .shell-crumbs li:only-child > [aria-hidden='true']:first-child { display: none; }
+}

@@ -1,4 +1,5 @@
 import './story.css';
+import { PageHeader } from '../shell/PageHeader';
 import { Download, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
@@ -292,14 +293,15 @@ export function SeriesView({ project, document, onProjectChange, onOpenSource, o
     onStatus('Visible story records exported.');
   }
 
+  const orderToggle = <div className="swdr-story-segmented" role="group" aria-label="Event order">
+    <button type="button" aria-pressed={order === 'reveal'} onClick={() => setOrder('reveal')}>Reveal order</button>
+    <button type="button" aria-pressed={order === 'story'} onClick={() => setOrder('story')}>Story time</button>
+  </div>;
+
   return <div className="swdr-page swdr-story-page" id="main-content">
-    <header className="page-heading swdr-story-heading">
-      <div>
-        <h1>{displayDossier ? person.name : 'Series Intelligence'}</h1>
-        <p>{displayDossier ? [person.role, 'Character dossier'].filter(Boolean).join(' · ') : `${canon ? 'Approved canon' : 'Working draft'} · ${project.title}`}</p>
-        {!canon && draftCount > 0 && <p className="swdr-story-draft-note"><span className="swdr-story-canon is-draft">Draft</span>{draftCount} record{draftCount === 1 ? '' : 's'} not yet approved as canon. Draft records carry a dashed outline.</p>}
-      </div>
-      <div className="actions swdr-story-filters">
+    <PageHeader className="swdr-story-heading" title={displayDossier ? person.name : 'Series Intelligence'}
+      subtitle={displayDossier ? [person.role, 'Character dossier'].filter(Boolean).join(' · ') : `${canon ? 'Approved canon' : 'Working draft'} · ${project.title}`}
+      actions={<div className="actions swdr-story-filters">
         <select aria-label="Season" value={season} onChange={event => { setSeason(Number(event.currentTarget.value)); setExact(''); setAsOf(''); }}>
           <option value={0}>All seasons</option>{[...new Set(episodes.map(item => item.season))].map(key => <option key={key} value={key}>Season {key}</option>)}
         </select>
@@ -308,8 +310,9 @@ export function SeriesView({ project, document, onProjectChange, onOpenSource, o
             <option key={item.id} value={item.id}>As of {episodeCode(item)}</option>)}
         </select>
         {displayDossier && <button onClick={() => { setDossier(false); setView('Relationship web'); }}>Relationship web</button>}
-      </div>
-    </header>
+      </div>}>
+      {!canon && draftCount > 0 && <p className="swdr-story-draft-note"><span className="swdr-story-canon is-draft">Draft</span>{draftCount} record{draftCount === 1 ? '' : 's'} not yet approved as canon. Draft records carry a dashed outline.</p>}
+    </PageHeader>
     <div className="swdr-story-navigation">
       {!displayDossier && <nav className="swdr-story-tabs" aria-label="Series workspaces">{panes.map(pane =>
         <button key={pane} className={view === pane ? 'selected' : 'quiet'} aria-pressed={view === pane} onClick={() => setView(pane)}>{pane}</button>)}</nav>}
@@ -347,8 +350,7 @@ export function SeriesView({ project, document, onProjectChange, onOpenSource, o
           points={data.points} select={selectPerson} dossier={openDossier} onOpen={onOpenSource} states={canonLookup} />
         <section className="swdr-story-major">
           <div className="swdr-story-card-head"><h2>Major events</h2>
-            <div className="actions"><button className={order === 'reveal' ? 'selected' : ''} onClick={() => setOrder('reveal')}>Reveal order</button>
-              <button className={order === 'story' ? 'selected' : ''} onClick={() => setOrder('story')}>Story time</button></div>
+            {orderToggle}
           </div>
           <div className="swdr-story-event-cards">{eventRows.slice(0, 8).map(point => <article className="swdr-story-card" key={point.id}>
             <SourceButton project={project} source={point.source} onOpen={onOpenSource} /><h3>{point.title}</h3>
@@ -357,10 +359,7 @@ export function SeriesView({ project, document, onProjectChange, onOpenSource, o
           {!eventRows.length && <p className="swdr-story-muted">No events in this view.</p>}
         </section>
       </>}
-      {view === 'Event ledger' && <Section title="Event ledger" actions={<div className="actions">
-        <button className={order === 'reveal' ? 'selected' : ''} onClick={() => setOrder('reveal')}>Reveal order</button>
-        <button className={order === 'story' ? 'selected' : ''} onClick={() => setOrder('story')}>Story time</button>
-      </div>}>
+      {view === 'Event ledger' && <Section title="Event ledger" actions={orderToggle}>
         <p className="swdr-story-muted">{order === 'reveal' ? 'Ordered by the episode and line where the audience learns each event.' : 'Ordered by when each event happens in the world of the story.'}
           {flashbackFlags.size > 0 && ` ${flashbackFlags.size} event${flashbackFlags.size === 1 ? ' is' : 's are'} revealed out of story order.`}</p>
         <Chronology project={project} events={eventRows} flags={flashbackFlags} />

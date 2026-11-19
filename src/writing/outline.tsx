@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, GripVertical, Plus, X } from 'lucide-react';
 import { newBlock, newDocument, newId, sceneList, sourceFor } from '../model';
 import type { Beat, DocumentModel, SourceRef, WorkspaceViewProps } from '../model';
+import { PageHeader } from '../shell/PageHeader';
 
 type Act = 1 | 2 | 3;
 type BoardBeat = Beat & { act?: Act; source?: SourceRef };
@@ -103,9 +104,9 @@ export function OutlineView({ project, document, onProjectChange, onStatus, onOp
   }
 
   return <section className="swdr-w-page swdr-outline" aria-label="Episode outline">
-    <header className="swdr-w-pagehead">
-      <div><h1>{episode ? 'Episode outline' : 'Outline'}</h1><p>{episode ? `Season ${episode.season} · Episode ${episode.number} · ${episode.title}` : selected?.title || project.title}</p></div>
-      <div className="swdr-w-tools">
+    <PageHeader className="swdr-w-pagehead" title={episode ? 'Episode outline' : 'Outline'}
+      subtitle={episode ? `Season ${episode.season} · Episode ${episode.number} · ${episode.title}` : selected?.title || project.title}
+      actions={<div className="swdr-w-tools">
         {!!seasons.length && <>
           <select className="swdr-w-button" aria-label="Season" value={episode?.season ?? ''} onChange={event => {
             const wanted = Number(event.target.value);
@@ -122,8 +123,7 @@ export function OutlineView({ project, document, onProjectChange, onStatus, onOp
         </div>
         {selected && <button type="button" className="swdr-w-button" onClick={() => openScript()}>Open script</button>}
         {toolbarEnd}
-      </div>
-    </header>
+      </div>} />
     {!selected && <div className="swdr-w-empty">
       <p>This episode is ready for a script.</p>
       {!readOnly && <button type="button" className="swdr-w-button" onClick={() => {

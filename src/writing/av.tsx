@@ -5,6 +5,7 @@ import { newId } from '../model';
 import type { Asset, AVRow, SourceRef, WorkspaceViewProps } from '../model';
 import { timedRows, timingLabel } from './av-timing';
 import { useScriptPrint } from './print';
+import { PageHeader } from '../shell/PageHeader';
 
 interface AVProps extends WorkspaceViewProps {
   target?: SourceRef;
@@ -91,14 +92,12 @@ export function AVView({ document, project, onStatus, onDocumentChange, onProjec
   }, [target, document.revisionId]);
 
   return <section ref={section} className="swdr-w-page swdr-av" aria-label="AV script editor">
-    <header className="swdr-w-pagehead">
-      <div><h1>AV script</h1><p>{document.title}{document.revisionLabel && ` · ${document.revisionLabel}`}</p></div>
-      <div className="swdr-w-tools">
+    <PageHeader className="swdr-w-pagehead" title="AV script" subtitle={`${document.title}${document.revisionLabel ? ` · ${document.revisionLabel}` : ''}`}
+      actions={<div className="swdr-w-tools">
         {saveLabel && <span className="swdr-av-save">{saveLabel}</span>}
         <button type="button" className={`swdr-w-button ${storyboard ? 'swdr-w-current' : ''}`} aria-pressed={storyboard} onClick={() => setStoryboard(value => !value)}><Image size={16} aria-hidden="true" /> Storyboard</button>
         {toolbarEnd || <button type="button" className="swdr-w-button" onClick={print.requestPrint}><Printer size={15} aria-hidden="true" /> Print</button>}
-      </div>
-    </header>
+      </div>} />
     <div className={`swdr-av-table ${storyboard ? 'swdr-av-with-images' : ''}`} role="table" aria-label="Timed cues">
       <div className="swdr-av-tablehead" role="row">
         <span role="columnheader">Timecode</span><span role="columnheader">Video</span><span role="columnheader">Audio</span>{storyboard && <span role="columnheader">Storyboard</span>}

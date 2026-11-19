@@ -20,6 +20,7 @@ import {
   scheduleCsv, scriptChanges, setProductionPlan, startProduction
 } from './model';
 import type { ProductionOutput, RevisionPreview } from './model';
+import { PageHeader } from '../shell/PageHeader';
 import './production.css';
 
 const PANES = ['Stripboard', 'Breakdown', 'Shots & storyboard', 'Sides', 'Call sheets', 'Reports'] as const;
@@ -165,21 +166,17 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
   } : undefined;
 
   return <div id="main-content" className="swdr-page production-workspace" aria-label="Production workspace">
-    <header className="production-hero">
-      <div>
-        <h1>{TITLES[pane]}</h1>
-        <div className="production-hero-subtitle">
-          <span>{episode ? `S${episode.season}E${String(episode.number).padStart(2, '0')} · ${episode.title}` : document.title}</span>
-          {snapshot && <><span aria-hidden="true"> · </span><SourceButton source={sourceFor(project, snapshot.document)} onOpenSource={onOpenSource}>{snapshot.label}</SourceButton></>}
-        </div>
-      </div>
-      {paneProps && pane === 'Stripboard' && <div className="production-actions">
+    <PageHeader className="production-hero" title={TITLES[pane]}
+      subtitle={<>
+        <span>{episode ? `S${episode.season}E${String(episode.number).padStart(2, '0')} · ${episode.title}` : document.title}</span>
+        {snapshot && <><span aria-hidden="true"> · </span><SourceButton source={sourceFor(project, snapshot.document)} onOpenSource={onOpenSource}>{snapshot.label}</SourceButton></>}
+      </>}
+      actions={paneProps && pane === 'Stripboard' && <>
         <button type="button" className="production-button" onClick={() => setPane('Reports')}>Day out of days</button>
         {!readOnly && <button type="button" className="production-button production-primary" disabled={!plan?.strips.length} onClick={() =>
           plan && issueOutput('schedule', 'swdr-schedule.csv', scheduleCsv(project, plan))
         }><Download size={16} /> Export schedule</button>}
-      </div>}
-    </header>
+      </>} />
     {!paneProps && <section className="production-card production-release">
       <div className="production-release-icon"><FileCheck2 size={25} aria-hidden="true" /></div>
       <h2>Release a script for production</h2>

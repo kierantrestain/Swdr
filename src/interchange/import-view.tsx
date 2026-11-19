@@ -11,6 +11,7 @@ import { acceptAvRevision, acceptRevision, reviewAvRevision, reviewRevision } fr
 import { elementLabel } from './screenplay';
 import { avFields, tableToAv } from './tabular';
 import type { AVField, AVTable } from './tabular';
+import { PageHeader } from '../shell/PageHeader';
 
 interface Props {
   project?: Project;
@@ -248,13 +249,9 @@ export function ImportView({ project, document, onImportDocument, onRestoreProje
   const importedCharacters = new Set(unresolved.map(line => line.blockId));
 
   return <div className="swdr-page interchange-page" id="main-content">
-    <div className="page-heading interchange-heading">
-      <div>
-        <h1>{result?.type === 'archive' ? 'Restore project archive' : draft ? 'Review script import' : 'Import script'}</h1>
-        <p>{file ? file.name + (files.length > 1 ? ' · ' + (index + 1) + ' of ' + files.length : '') : 'Add a draft, AV table or SWDR archive.'}</p>
-      </div>
-      {result && <ol className="import-steps" aria-label="Import steps"><li>Source selected</li><li aria-current="step">Review</li><li>{result.type === 'archive' ? 'Restore' : 'Save draft'}</li></ol>}
-    </div>
+    <PageHeader className="interchange-heading" title={result?.type === 'archive' ? 'Restore project archive' : draft ? 'Review script import' : 'Import script'}
+      subtitle={file ? file.name + (files.length > 1 ? ' · ' + (index + 1) + ' of ' + files.length : '') : 'Add a draft, AV table or SWDR archive.'}
+      actions={result && <ol className="import-steps" aria-label="Import steps"><li>Source selected</li><li aria-current="step">Review</li><li>{result.type === 'archive' ? 'Restore' : 'Save draft'}</li></ol>} />
 
     <input ref={chooser} className="interchange-file-input" type="file" multiple aria-label="Choose script files" onChange={event => {
       openBatch(Array.from(event.currentTarget.files ?? []));

@@ -1,4 +1,5 @@
 import './story.css';
+import { PageHeader } from '../shell/PageHeader';
 import { ArrowDown, ArrowUp, ClipboardCheck, Download, Expand, FileText, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { durationLabel } from '../model';
@@ -171,17 +172,16 @@ export function EditorialView({ project, document, onProjectChange, onOpenSource
   const canEdit = !readOnly;
   const isSegmentPane = focus || pane === 'Segments';
   return <div className={`swdr-page swdr-story-page swdr-editorial-page${focus ? ' swdr-editorial-focus' : ''}`} id="main-content">
-    <header className="page-heading swdr-story-heading">
-      <div><h1>{current.title}</h1><p>{[docLabel, episode && episodeCode(episode), runtime > 0 && `${minutes}-minute outline`].filter(Boolean).join(' · ')}</p></div>
-      <div className="actions swdr-story-filters">
+    <PageHeader className="swdr-story-heading" title={current.title}
+      subtitle={[docLabel, episode && episodeCode(episode), runtime > 0 && `${minutes}-minute outline`].filter(Boolean).join(' · ')}
+      actions={<div className="actions swdr-story-filters">
         {project.documents.length > 1 && !focus && <select aria-label="Editorial document" value={current.id} onChange={event => {
           setSelectedDocumentId(event.currentTarget.value); setSegmentId(''); setIssueId(''); close();
         }}>{project.documents.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select>}
         {!focus && <button className={research ? 'selected' : ''} aria-pressed={research} onClick={() => setResearch(value => !value)}>Research layout</button>}
         <button className={focus ? 'selected' : ''} aria-pressed={focus} onClick={() => setFocus(value => !value)}><Expand size={15} />{focus ? 'Exit focus' : 'Focus'}</button>
         {canEdit && !focus && <button className="primary" onClick={issue} disabled={!draft.segments.length && !draft.brief}>Issue outputs</button>}
-      </div>
-    </header>
+      </div>} />
     {!focus && <nav className="swdr-story-tabs" aria-label="Editorial workspaces">{panes.map(item =>
       <button key={item} className={pane === item ? 'selected' : 'quiet'} aria-pressed={pane === item} onClick={() => go(item)}>{item}</button>)}</nav>}
     {error && <p className="swdr-story-error" role="alert">{error}</p>}
