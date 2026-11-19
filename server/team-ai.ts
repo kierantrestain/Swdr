@@ -237,7 +237,8 @@ export async function streamAi(request: AiRequest, write: (text: string) => void
       return await streamCompatible(request, provider, candidate, write, signal);
     } catch (error) {
       lastError = error;
-      if (!(error instanceof TeamFault) || [401, 402, 429, 503].includes(error.status)) throw error;
+      // Quotas are per model (free tiers often exclude Pro models), so a quota refusal still tries the next one.
+      if (!(error instanceof TeamFault) || [401, 503].includes(error.status)) throw error;
     }
   }
   throw lastError;

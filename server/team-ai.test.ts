@@ -135,7 +135,12 @@ test('Gemini lists only writing models, best first; a failing model falls throug
   let text = '';
   await streamAi(readAiRequest({ mode: 'outline', model: 'custom:retired-model' }), chunk => { text += chunk; }, undefined, env);
   assert.equal(text, 'Plan ready.');
-  await assert.rejects(streamAi(readAiRequest({ mode: 'outline', model: 'custom:broke-model' }), () => undefined, undefined, env), /no credit or free quota left/);
+  // A model with no free quota (like Pro on a free key) falls through to one that has it.
+  text = '';
+  await streamAi(readAiRequest({ mode: 'outline', model: 'custom:broke-model' }), chunk => { text += chunk; }, undefined, env);
+  assert.equal(text, 'Plan ready.');
+  // When every model on the key is out of credit, the writer is told plainly what to do.
+  await assert.rejects(streamAi(readAiRequest({ mode: 'outline', model: 'custom:broke-model' }), () => undefined, undefined, { ...env, SWDR_AI_CUSTOM_MODELS: 'broke-model' }), /no credit or free quota left/);
 
   assert.deepEqual(parseBeats('I | The last boat | Nora misses the ferry and finds a ticket.\n- II | Lies | She covers for Elias.\nIII: Reckoning | The tide turns.\nBiggest question: who sold the ticket?'), [
     { act: 1, title: 'The last boat', notes: 'Nora misses the ferry and finds a ticket.' },
