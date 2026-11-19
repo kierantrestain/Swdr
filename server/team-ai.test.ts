@@ -148,3 +148,24 @@ test('Gemini lists only writing models, best first; a failing model falls throug
     { act: 3, title: 'Reckoning', notes: 'The tide turns.' }
   ]);
 });
+
+test('a model that thinks too long without writing is stopped and the next one answers; nothing hangs', async t => {
+  const server = createServer((request, response) => {
+    if (request.url === '/v1/models') { response.end(JSON.stringify({ data: [{ id: 'slow-thinker' }, { id: 'quick-model' }] })); return; }
+    let body = '';
+    request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      response.setHeader('Content-Type', 'text/event-stream');
+      if (JSON.parse(body).model === 'slow-thinker') { response.write(': thinking\n\n'); return; } // never writes a word
+      response.end(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Act one.' } }] })}\n\ndata: [DONE]\n\n`);
+    });
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise<void>(resolve => server.close(() => resolve())); });
+  const env = { SWDR_AI_CUSTOM_BASE_URL: `http://127.0.0.1:${(server.address() as { port: number }).port}/v1`, SWDR_AI_FIRST_TEXT_MS: '300' };
+  let text = '';
+  await streamAi(readAiRequest({ mode: 'outline', model: 'custom:slow-thinker' }), chunk => { text += chunk; }, undefined, env);
+  assert.equal(text, 'Act one.');
+  // With nowhere else to go, the writer gets a clear reason instead of an endless wait.
+  await assert.rejects(streamAi(readAiRequest({ mode: 'outline', model: 'custom:slow-thinker' }), () => undefined, undefined, { ...env, SWDR_AI_CUSTOM_MODELS: 'slow-thinker' }), /took too long to start answering/);
+});

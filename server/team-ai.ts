@@ -232,16 +232,22 @@ export async function streamAi(request: AiRequest, write: (text: string) => void
   const listed = (await aiModels(env, request.keys)).models.filter(item => item.id.startsWith(`${provider.id}:`)).map(item => item.id.slice(provider.id.length + 1));
   const candidates = [model, ...listed.filter(item => item !== model)].slice(0, 3);
   let lastError: unknown;
+  let wrote = false;
+  const tracked = (text: string) => { wrote = true; write(text); };
+  // The hosting platform stops a request after two minutes; stay inside that so the writer always gets a real reason.
+  const deadline = Date.now() + AI_BUDGET_MS;
   for (const candidate of candidates) {
+    const left = deadline - Date.now();
+    if (left < 5_000) break;
     try {
-      return await streamCompatible(request, provider, candidate, write, signal);
+      return await streamCompatible(request, provider, candidate, tracked, signal, Math.min(Number(env.SWDR_AI_FIRST_TEXT_MS) || FIRST_TEXT_MS, left));
     } catch (error) {
       lastError = error;
       // Quotas are per model (free tiers often exclude Pro models), so a quota refusal still tries the next one.
-      if (!(error instanceof TeamFault) || [401, 503].includes(error.status)) throw error;
+      if (wrote || signal?.aborted || !(error instanceof TeamFault) || [401, 503].includes(error.status)) throw error;
     }
   }
-  throw lastError;
+  throw lastError ?? new TeamFault(504, slowMessage(provider));
 }
 
 async function streamClaude(request: AiRequest, model: string, apiKey: string, write: (text: string) => void, signal?: AbortSignal): Promise<void> {
@@ -266,16 +272,43 @@ async function streamClaude(request: AiRequest, model: string, apiKey: string, w
 }
 
 /** Any OpenAI-compatible chat endpoint, read as server-sent events. */
-async function streamCompatible(request: AiRequest, provider: Provider, model: string, write: (text: string) => void, signal?: AbortSignal): Promise<void> {
+/** Total time the AI partner may spend on one request, under the platform's two-minute limit. */
+export const AI_BUDGET_MS = 100_000;
+/** How long a model may think before its first words arrive before SWDR moves on. */
+export const FIRST_TEXT_MS = 55_000;
+
+function slowMessage(provider: Provider): string {
+  return `${provider.label} took too long to start answering. Try again, or pick a faster model${provider.id.endsWith('gemini') ? ' such as Gemini Flash-Lite' : ''}.`;
+}
+
+async function streamCompatible(request: AiRequest, provider: Provider, model: string, write: (text: string) => void, signal: AbortSignal | undefined, firstTextMs = FIRST_TEXT_MS, lowEffort = provider.id.endsWith('gemini')): Promise<void> {
   const { system, messages } = aiMessages(request);
+  // Thinking models (Gemini 3 and later) can reason for minutes before writing. Drafting and planning need little of it.
+  const timer = new AbortController();
+  let slow = false;
+  const stop = () => timer.abort();
+  signal?.addEventListener('abort', stop, { once: true });
+  let clock: ReturnType<typeof setTimeout> | undefined = setTimeout(() => { slow = true; timer.abort(); }, firstTextMs);
+  const started = () => { if (clock) { clearTimeout(clock); clock = undefined; } };
+  try {
+    return await streamBody();
+  } catch (error) {
+    if (slow) throw new TeamFault(504, slowMessage(provider));
+    throw error;
+  } finally {
+    started();
+    signal?.removeEventListener('abort', stop);
+  }
+
+  async function streamBody(): Promise<void> {
   const response = await fetch(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(provider.key ? { Authorization: `Bearer ${provider.key}` } : {}), 'X-Title': 'SWDR' },
     body: JSON.stringify({
-      model, stream: true, max_tokens: 8192,
+      model, stream: true, max_tokens: 8192, ...(lowEffort ? { reasoning_effort: 'low' } : {}),
       messages: [{ role: 'system', content: system.map(block => block.text).join('\n\n') }, ...messages.map(item => ({ role: item.role, content: String(item.content) }))]
     }),
-    signal
+    signal: timer.signal
   });
   if (!response.ok || !response.body) {
     // Pass on the provider's own reason, trimmed; it never contains the key.
@@ -284,6 +317,11 @@ async function streamCompatible(request: AiRequest, provider: Provider, model: s
     }).catch(() => '');
     console.error('SWDR AI provider refused', provider.id, model, response.status);
     const reason = detail.replace(/\s+/g, ' ').trim().slice(0, 240);
+    // Some models do not take a thinking setting; ask the same model again without it.
+    if (lowEffort && response.status === 400 && /reason|thinking/i.test(reason)) {
+      started();
+      return streamCompatible(request, provider, model, write, signal, firstTextMs, false);
+    }
     // Billing and quota problems belong to the key's account, and every model on it will refuse the same way.
     if (/credit|billing|prepay|insufficient.?(funds|balance)|exceeded your current quota|payment/i.test(reason)) {
       throw new TeamFault(402, `${provider.label} refused because the key's account has no credit or free quota left. ${provider.id.endsWith('gemini')
@@ -310,9 +348,10 @@ async function streamCompatible(request: AiRequest, provider: Provider, model: s
       try {
         const chunk = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
         const text = chunk.choices?.[0]?.delta?.content;
-        if (text) write(text);
+        if (text) { started(); write(text); }
       } catch { /* keep-alive or partial line */ }
     }
+  }
   }
 }
 

@@ -74,6 +74,7 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
   const [output, setOutput] = useState('');
   const [history, setHistory] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
+  const [waited, setWaited] = useState(0);
   const [problem, setProblem] = useState<{ status: number; message: string }>();
   const [models, setModels] = useState<Model[]>();
   const [model, setModel] = useState(() => { try { return localStorage.getItem(MODEL_KEY) ?? ''; } catch { return ''; } });
@@ -100,6 +101,14 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
     return () => { live = false; abort.current?.abort(); };
   }, [keys]);
 
+  useEffect(() => {
+    if (!busy) return;
+    setWaited(0);
+    const started = Date.now();
+    const tick = setInterval(() => setWaited(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(tick);
+  }, [busy]);
+
   async function run(followUp?: string) {
     const ask = followUp ?? prompt;
     if (mode === 'ask' && !ask.trim()) return;
@@ -118,7 +127,9 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
       });
       if (!response.ok || !response.body || response.headers.get('content-type')?.includes('application/json')) {
         const body = await response.json().catch(() => ({})) as { error?: string };
-        setProblem({ status: response.status, message: body.error ?? 'The AI partner could not answer.' });
+        setProblem({ status: response.status, message: body.error ?? (response.status === 504 || response.status === 408
+          ? 'The model took too long to answer. Try again, or pick a faster model (Flash-Lite, or a free OpenRouter model).'
+          : 'The AI partner could not answer. Try again, or pick another model.') });
         return;
       }
       const reader = response.body.getReader();
@@ -194,7 +205,7 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
             {problem.status === 401 && <Button label="Sign in" size="sm" variant="secondary" icon={<LogIn size={14} aria-hidden="true" />} onClick={() => { window.location.hash = '#team'; }} />}
           </div>}
           {(output || busy) && <section className="ai-output" aria-label="AI partner response" aria-busy={busy}>
-            <pre className={spec.writes ? 'is-script' : undefined}>{output || 'Thinking…'}</pre>
+            <pre className={spec.writes ? 'is-script' : undefined}>{output || `Thinking…${waited >= 3 ? ` ${waited}s` : ''}${waited >= 20 ? ' — thinking models can take a while before they write' : ''}`}</pre>
             {!busy && output && <div className="ai-actions">
               <Button label="Copy" size="sm" variant="secondary" icon={<Copy size={14} aria-hidden="true" />} onClick={() => { void navigator.clipboard?.writeText(output); onStatus('Copied.'); }} />
               {spec.outline && onDocumentChange && document && parseBeats(output).length > 0 && <Button label={`Add ${parseBeats(output).length} beats to outline`} size="sm" variant="primary" icon={<TextCursorInput size={14} aria-hidden="true" />} onClick={addBeats} />}
