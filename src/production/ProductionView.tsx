@@ -198,8 +198,8 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
   return <VStack gap={5} id="main-content" className="swdr-page" aria-label="Production workspace">
     <PageHeader title={title}
       subtitle={<>
-        <span>{episode ? `S${episode.season}E${String(episode.number).padStart(2, '0')} · ${episode.title}` : document.title}</span>
-        {snapshot && <><span aria-hidden="true"> · </span><SourceButton source={sourceFor(project, snapshot.document)} onOpenSource={onOpenSource}>{snapshot.label}</SourceButton></>}
+        <Text type="inherit" color="inherit">{episode ? `S${episode.season}E${String(episode.number).padStart(2, '0')} · ${episode.title}` : document.title}</Text>
+        {snapshot && <><Text type="inherit" color="inherit" aria-hidden="true"> · </Text><SourceButton source={sourceFor(project, snapshot.document)} onOpenSource={onOpenSource}>{snapshot.label}</SourceButton></>}
       </>}
       actions={paneProps && pane === 'Stripboard' && <>
         <Button label="Day out of days" onClick={() => chooseReport('Day out of days')} />

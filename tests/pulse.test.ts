@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { newPiece, withCreator } from '../src/creator/model';
 import { newBlock } from '../src/model';
 import { pitchFacts, pitchOf } from '../src/PitchSheet';
-import { projectPulse } from '../src/pulse';
+import { dailyBrief, projectPulse, scoreStep, urgency } from '../src/pulse';
 import { assetUsage, sizeOf } from '../src/workspace/media';
 import { createProject } from '../src/workspace/project';
 
@@ -43,4 +43,29 @@ test('media usage lists where each file is referenced and sizes come from the da
   assert.deepEqual(usage.get('f0e1d2c3-0000-4000-8000-00000000a001'), ['Production']);
   assert.deepEqual(usage.get('f0e1d2c3-0000-4000-8000-00000000a002'), []);
   assert.equal(sizeOf(project.assets[0]), 6);
+});
+
+test('the daily brief ranks by impact and urgency, and favours quick wins', () => {
+  const now = new Date('2026-11-18T10:00:00Z');
+  assert.ok(scoreStep('blocker', 10, 1) > scoreStep('blocker', 10, 60), 'a blocker tomorrow outranks the same blocker in two months');
+  assert.ok(scoreStep('blocker', 30) > scoreStep('risk', 10), 'a blocker outranks a risk with no date');
+  assert.ok(scoreStep('risk', 10, 3) > scoreStep('risk', 10), 'a risk this week outranks an undated one');
+  assert.ok(scoreStep('upkeep', 1) > scoreStep('upkeep', 20), 'a one-minute chore beats a long one of equal weight');
+  assert.equal(urgency(undefined), 1);
+  assert.equal(urgency(0), 2);
+
+  const project = createProject('Brief', 'film');
+  const script = project.documents[0];
+  script.blocks = [newBlock('scene', 'LIGHTHOUSE'), newBlock('character', 'MARA'), newBlock('action', 'The lamp turns.')];
+  const { steps } = projectPulse(project, script, now);
+  const format = steps.find(item => item.id === 'format')!;
+  assert.equal(format.impact, 'risk', 'unreleased scripts carry formatting as a risk, not a blocker');
+  assert.ok(format.why.length > 20 && format.minutes > 0);
+  for (let index = 1; index < steps.length; index++) assert.ok(steps[index - 1].score >= steps[index].score, 'steps come in score order');
+
+  const brief = dailyBrief(steps);
+  assert.equal(brief.focus?.id, steps[0].id);
+  assert.equal(brief.then.length, steps.length - 1);
+  assert.match(brief.summary, /^\d+ things? needs? you · .*about \d+ minutes$/);
+  assert.equal(dailyBrief([]).summary, 'Nothing needs you today.');
 });

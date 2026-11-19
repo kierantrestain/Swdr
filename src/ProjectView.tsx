@@ -8,7 +8,7 @@ import { Selector } from '@astryxdesign/core/Selector';
 import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from '@astryxdesign/core/Table';
 import { Text } from '@astryxdesign/core/Text';
 import { TextInput } from '@astryxdesign/core/TextInput';
-import { Archive, ArrowRight, BookOpen, CircleAlert, Clapperboard, FileText, Images, Info, LayoutGrid, Mic, Plus, Presentation, Rows3, TriangleAlert, Upload, Video } from 'lucide-react';
+import { Archive, BookOpen, Clapperboard, FileText, Images, LayoutGrid, Mic, Plus, Presentation, Rows3, Upload, Video } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { DocumentKind, DocumentModel, Project } from './model';
@@ -19,6 +19,7 @@ import { getProductionPlan } from './production/model';
 import { sectionsFor } from './shell/routes';
 import { PitchSheet } from './PitchSheet';
 import { projectPulse } from './pulse';
+import { ProjectPulse } from './ProjectPulse';
 
 export type ProjectDestination = 'write' | 'outline' | 'av' | 'story' | 'editorial' | 'production' | 'creator' | 'media' | 'import';
 
@@ -123,21 +124,7 @@ export function ProjectView({ project, current, open, update, archive }: Props) 
     {form && <NewDocumentDialog project={project} form={form} close={() => setForm(undefined)} submit={submit} />}
     {pitch && <PitchSheet project={project} document={current} update={update} onClose={() => setPitch(false)} />}
 
-    <section className="pulse" aria-label="Project pulse">
-      <div className="pulse-tiles">{pulse.tiles.map(tile => <button key={tile.id} type="button" className={`pulse-tile${tile.tone ? ` is-${tile.tone}` : ''}`}
-        onClick={() => tile.target && open(tile.target === 'write' && current?.kind === 'av' ? 'av' : tile.target)}>
-        <small>{tile.label}</small><strong>{tile.value}</strong><span>{tile.detail}</span>
-        {tile.progress !== undefined && <i className="pulse-progress" aria-hidden="true"><b style={{ width: `${tile.progress}%` }} /></i>}
-      </button>)}</div>
-      {pulse.steps.length > 0 && <div className="pulse-steps">
-        <h2>Next up</h2>
-        <ul>{pulse.steps.map(step => <li key={step.id} className={`is-${step.tone}`}>
-          {step.tone === 'bad' ? <CircleAlert size={16} aria-hidden="true" /> : step.tone === 'warn' ? <TriangleAlert size={16} aria-hidden="true" /> : <Info size={16} aria-hidden="true" />}
-          <span>{step.text}</span>
-          <button type="button" onClick={() => open(step.target)}>{step.action} <ArrowRight size={14} aria-hidden="true" /></button>
-        </li>)}</ul>
-      </div>}
-    </section>
+    <ProjectPulse tiles={pulse.tiles} steps={pulse.steps} onOpen={target => open(target === 'write' && current?.kind === 'av' ? 'av' : target)} />
 
     {current && <section className="current-strip" aria-label="Current document">
       <div className="current-strip-title">
