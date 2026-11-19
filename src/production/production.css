@@ -334,6 +334,8 @@
   overflow-wrap: normal;
   vertical-align: top;
 }
+/* The reset makes icons block-level; keep the link arrow on the scene heading's line. */
+.production-strip-set .production-source svg { display: inline-block; margin-inline-start: 3px; vertical-align: -1px; }
 .production-strip-set small {
   display: block;
   overflow: hidden;
@@ -419,7 +421,8 @@
   border: 1px solid #00000024;
   border-radius: 4px;
   background: #ffffffcc;
-  color: var(--color-text-secondary);
+  /* The chip is paper-white in both appearances, so its number keeps a dark ink. */
+  color: var(--color-on-light, #3d4a52);
   font-size: .72rem;
   font-weight: 750;
   font-variant-numeric: tabular-nums;

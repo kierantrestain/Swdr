@@ -23,6 +23,19 @@ function ring(people: Character[], rx: number, ry: number, offset = -Math.PI / 2
 
 const pct = (value: number, total: number) => `${(value / total) * 100}%`;
 
+/**
+ * Focus layout: the selected character in the centre and their links on a wide ellipse, held inside the canvas so
+ * every card stays whole and each edge keeps a clear run between the centre card and its neighbour.
+ */
+function focusRing(people: Character[]): Placed[] {
+  const offset = people.length === 2 ? Math.PI : -Math.PI * .75;
+  return ring(people, 510, 270, offset).map(item => ({
+    ...item,
+    x: Math.min(WIDTH - 140, Math.max(140, item.x)),
+    y: Math.min(HEIGHT - 90, Math.max(90, item.y))
+  }));
+}
+
 export function RelationshipWeb({ project, person, characters, edges, points, interactions, select, dossier, onOpen, states }: {
   project: Project; person?: Character; characters: Character[]; edges: StoryPoint[]; points: StoryPoint[]; interactions: StoryPoint[];
   select: (id: string) => void; dossier: () => void; onOpen: WorkspaceViewProps['onOpenSource']; states: CanonLookup;
@@ -42,7 +55,7 @@ export function RelationshipWeb({ project, person, characters, edges, points, in
   const neighbours = person ? characters.filter(item => item.id !== person.id
     && shown.some(edge => edge.participants.includes(person.id) && edge.participants.includes(item.id))) : [];
   const placed: Placed[] = !person ? [] : mode === 'focus'
-    ? [{ person, x: WIDTH / 2, y: HEIGHT / 2 }, ...ring(neighbours, neighbours.length > 6 ? 400 : 360, 205, neighbours.length === 2 ? Math.PI : -Math.PI * .75)]
+    ? [{ person, x: WIDTH / 2, y: HEIGHT / 2 }, ...focusRing(neighbours)]
     : ring(characters, 400, 215);
   const at = new Map(placed.map(item => [item.person.id, item]));
   const visibleEdges = shown.filter(edge => edge.participants.every(id => at.has(id))

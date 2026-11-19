@@ -64,12 +64,12 @@
 .swdr-story-node span { font-size: 12px; color: var(--muted); font-weight: 500; }
 .swdr-story-node.is-centre { min-height: 74px; background: var(--color-accent-muted); border-color: color-mix(in srgb, var(--color-accent) 30%, transparent); }
 .swdr-story-node.is-centre strong { font: 400 22px/1 var(--display-font); }
-.swdr-story-edge-state, .swdr-story-tag { padding: 4px 7px; border-radius: 5px; line-height: 1.2; font-size: 12px; font-weight: 650; background: var(--color-accent-muted); color: #365662; }
+.swdr-story-edge-state, .swdr-story-tag { padding: 4px 7px; border-radius: 5px; line-height: 1.2; font-size: 12px; font-weight: 650; background: var(--color-accent-muted); color: var(--color-text-accent); }
 .swdr-story-edge-state { position: absolute; z-index: 1; transform: translate(-50%, -50%); }
-.state-conflict, .state-refuted { background: #f3e5df; color: #8b4634; }
-.state-alliance, .state-unresolved, .state-distance { background: #f1e9d8; color: #735922; }
-.state-pressure, .state-believes { background: #ecebdd; color: #626748; }
-.state-confirmed { background: var(--sage); color: #335b47; }
+.state-conflict, .state-refuted { background: var(--color-error-muted); color: var(--color-on-error-muted, var(--color-text-error)); }
+.state-alliance, .state-unresolved, .state-distance { background: var(--color-warning-muted); color: var(--color-on-warning-muted, var(--color-text-warning)); }
+.state-pressure, .state-believes { background: var(--color-background-muted); color: var(--color-text-secondary); }
+.state-confirmed { background: var(--color-success-muted); color: var(--color-on-success-muted, var(--color-text-success)); }
 .swdr-story-graph-list, .swdr-editorial-history { color: var(--muted); font-size: 13px; }
 .swdr-story-graph-list summary, .swdr-editorial-history summary { cursor: pointer; }
 .swdr-story-major { margin-top: 19px; }
@@ -188,10 +188,10 @@
   --map-4: #5c89a6;
   --thread-open: #b98a2e;
 }
-.state-trust { background: var(--color-accent-muted); color: #2f5a72; }
+.state-trust { background: var(--color-accent-muted); color: var(--color-text-accent); }
 .state-romance { background: #f3e4ec; color: #84405f; }
-.state-betrayal { background: #efdcdc; color: #742a2a; }
-.state-flag { background: #f6e8d8; color: #82502a; }
+.state-betrayal { background: var(--color-error-muted); color: var(--color-on-error-muted, var(--color-text-error)); }
+.state-flag { background: var(--color-warning-muted); color: var(--color-on-warning-muted, var(--color-text-warning)); }
 .swdr-story-row-tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .swdr-story-row-tags:empty { display: none; }
 .swdr-story-canon {
@@ -213,9 +213,10 @@
 .swdr-story-node:hover { border-color: #9fb6c4; }
 .swdr-story-node .swdr-story-canon { margin-top: 2px; }
 .swdr-story-graph.is-cast .swdr-story-node { width: min(19%, 156px); min-height: 52px; padding: 6px 9px; }
+.swdr-story-graph.is-focus .swdr-story-node { width: min(25%, 176px); }
 .swdr-story-graph.is-cast .swdr-story-node strong { font-size: 13px; }
 .swdr-story-node.is-selected { background: var(--color-accent-muted); border-color: #8fb2c7; box-shadow: 0 0 0 2px #bcd2de; }
-button.swdr-story-edge-state { min-height: 0; padding: 3px 7px; border: 1px solid rgba(24, 35, 42, .08); font-size: 11.5px; z-index: 3; white-space: nowrap; }
+button.swdr-story-edge-state { min-height: 0; padding: 3px 7px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); font-size: 11.5px; z-index: 3; white-space: nowrap; }
 button.swdr-story-edge-state:hover, button.swdr-story-edge-state.is-selected { border-color: currentColor; box-shadow: 0 1px 3px rgba(24, 35, 42, .15); }
 .swdr-story-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 .swdr-story-legend > span { display: inline-flex; align-items: center; gap: 6px; }
@@ -352,6 +353,7 @@ button.swdr-story-map-cell .swdr-story-map-open { position: absolute; top: 3px; 
   .swdr-story-graph .swdr-story-node { width: 31%; min-height: 44px; padding: 4px 6px; }
   .swdr-story-graph .swdr-story-node span { display: none; }
   button.swdr-story-edge-state { font-size: 10px; padding: 2px 4px; }
+  .swdr-story-graph.is-focus .swdr-story-node { width: 27%; }
   .swdr-story-graph.is-cast .swdr-story-node { width: 23%; padding: 4px 5px; min-height: 40px; }
   .swdr-story-graph.is-cast .swdr-story-node span { display: none; }
   .swdr-story-map-corner, .swdr-story-map tbody th { width: 120px; }
