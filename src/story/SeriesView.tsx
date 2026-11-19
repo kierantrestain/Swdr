@@ -1,3 +1,4 @@
+import './story.css';
 import { Download, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';

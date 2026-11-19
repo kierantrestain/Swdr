@@ -1,3 +1,4 @@
+import './story.css';
 import { ArrowDown, ArrowUp, ClipboardCheck, Download, Expand, FileText, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { durationLabel } from '../model';
