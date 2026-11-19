@@ -265,27 +265,27 @@ export const swdrTheme = {
         "lineHeight": "var(--text-heading-2-leading)"
       },
       "level:3": {
-        "fontFamily": "var(--font-family-heading)",
+        "fontFamily": "var(--font-family-body)",
         "fontSize": "var(--text-heading-3-size)",
-        "fontWeight": "var(--text-heading-3-weight)",
+        "fontWeight": "600",
         "lineHeight": "var(--text-heading-3-leading)"
       },
       "level:4": {
-        "fontFamily": "var(--font-family-heading)",
+        "fontFamily": "var(--font-family-body)",
         "fontSize": "var(--text-heading-4-size)",
-        "fontWeight": "var(--text-heading-4-weight)",
+        "fontWeight": "600",
         "lineHeight": "var(--text-heading-4-leading)"
       },
       "level:5": {
-        "fontFamily": "var(--font-family-heading)",
+        "fontFamily": "var(--font-family-body)",
         "fontSize": "var(--text-heading-5-size)",
-        "fontWeight": "var(--text-heading-5-weight)",
+        "fontWeight": "600",
         "lineHeight": "var(--text-heading-5-leading)"
       },
       "level:6": {
-        "fontFamily": "var(--font-family-heading)",
+        "fontFamily": "var(--font-family-body)",
         "fontSize": "var(--text-heading-6-size)",
-        "fontWeight": "var(--text-heading-6-weight)",
+        "fontWeight": "600",
         "lineHeight": "var(--text-heading-6-leading)"
       },
       "type:display-1": {

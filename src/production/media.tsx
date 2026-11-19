@@ -1,5 +1,6 @@
 import { Avatar } from '@astryxdesign/core/Avatar';
 import { FileInput } from '@astryxdesign/core/FileInput';
+import { HStack } from '@astryxdesign/core/HStack';
 import { useState } from 'react';
 import type { Asset, Project } from '../model';
 import type { Person } from './model';
@@ -13,7 +14,7 @@ export function PersonAvatar({ project, person, size = 'md', decorative }: {
   decorative?: boolean;
 }) {
   const avatar = <Avatar src={assetUrl(project, person.photoAssetId)} name={person.name} size={size} tooltip={false} />;
-  return decorative ? <span aria-hidden="true" className="production-avatar">{avatar}</span> : <span className="production-avatar">{avatar}</span>;
+  return <HStack as="span" align="center" aria-hidden={decorative || undefined}>{avatar}</HStack>;
 }
 
 /** Upload by file picker or drag and drop; files are resized to a 512px JPEG asset before saving. */

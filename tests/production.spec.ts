@@ -1,4 +1,4 @@
-import { expect, loadDemo, test } from './support/browser';
+import { choose, expect, loadDemo, test } from './support/browser';
 
 test('resolves a cast clash, verifies costs and issues an acknowledged and reissued call sheet', async ({ page, pageFaults }, testInfo) => {
   await loadDemo(page);
@@ -26,7 +26,7 @@ test('resolves a cast clash, verifies costs and issues an acknowledged and reiss
   await expect(page.getByText('£50.00', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Call sheets', exact: true }).click();
-  await page.getByRole('combobox', { name: /^Shoot day/ }).selectOption({ index: 1 });
+  await choose(page, /^Shoot day/, { index: 1 });
   await page.getByRole('button', { name: 'Preview call sheet', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Preview call sheet V1' })).toBeVisible();
   await page.getByRole('button', { name: 'Issue call sheet', exact: true }).click();

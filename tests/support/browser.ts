@@ -102,3 +102,16 @@ export async function caretIn(locator: import('@playwright/test').Locator) {
     return { start: offset(range.startContainer, range.startOffset), end: offset(range.endContainer, range.endOffset) };
   });
 }
+
+/**
+ * Picks an option from an Astryx Selector the way a person does: open the combobox by its label, then click the
+ * option by its visible name or position. (Astryx selectors are not native <select>s, so selectOption does not apply.)
+ */
+export async function choose(scope: Page | import('@playwright/test').Locator, label: string | RegExp, option: string | RegExp | { index: number }): Promise<void> {
+  const page = 'context' in scope ? scope as Page : (scope as import('@playwright/test').Locator).page();
+  await scope.getByRole('combobox', { name: label, exact: typeof label === 'string' }).click();
+  const options = page.getByRole('option');
+  await (typeof option === 'object' && 'index' in option
+    ? options.nth(option.index)
+    : page.getByRole('option', { name: option, exact: typeof option === 'string' })).click();
+}

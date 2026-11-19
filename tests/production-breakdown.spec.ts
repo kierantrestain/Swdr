@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, openHome, test } from './support/browser';
+import { choose, expect, openHome, test } from './support/browser';
 import { featureScript } from './support/feature-script';
 
 const SCREENSHOTS = process.env.SWDR_SCREENSHOT_DIR;
@@ -140,7 +140,7 @@ test('builds cast, locations and page counts from an imported film script, then 
   await shot(page, '2-budget');
 
   await sections.getByRole('link', { name: 'Sides', exact: true }).click();
-  await page.getByLabel('Select by shoot day').selectOption({ index: 1 });
+  await choose(page, 'Select by shoot day', { index: 0 });
   await expect(page.getByText('2 of 65 scenes', { exact: true })).toBeVisible();
   await shot(page, '4-sides');
   expect(pageFaults).toEqual([]);

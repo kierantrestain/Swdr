@@ -104,6 +104,62 @@
       "value": "#e1ecf1",
       "source": "token",
       "mode": "light"
+    },
+    {
+      "thing": "font-family",
+      "value": "var(--font-family-body)",
+      "source": "property",
+      "on": "heading",
+      "when": "level:3"
+    },
+    {
+      "thing": "font-weight",
+      "value": "600",
+      "source": "property",
+      "on": "heading",
+      "when": "level:3"
+    },
+    {
+      "thing": "font-family",
+      "value": "var(--font-family-body)",
+      "source": "property",
+      "on": "heading",
+      "when": "level:4"
+    },
+    {
+      "thing": "font-weight",
+      "value": "600",
+      "source": "property",
+      "on": "heading",
+      "when": "level:4"
+    },
+    {
+      "thing": "font-family",
+      "value": "var(--font-family-body)",
+      "source": "property",
+      "on": "heading",
+      "when": "level:5"
+    },
+    {
+      "thing": "font-weight",
+      "value": "600",
+      "source": "property",
+      "on": "heading",
+      "when": "level:5"
+    },
+    {
+      "thing": "font-family",
+      "value": "var(--font-family-body)",
+      "source": "property",
+      "on": "heading",
+      "when": "level:6"
+    },
+    {
+      "thing": "font-weight",
+      "value": "600",
+      "source": "property",
+      "on": "heading",
+      "when": "level:6"
     }
   ],
   "lifted": [],

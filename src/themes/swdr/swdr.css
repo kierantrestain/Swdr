@@ -344,30 +344,30 @@
   }
 
   .astryx-heading[data-level="3"] {
-    font-family: var(--font-family-heading);
+    font-family: var(--font-family-body);
     font-size: var(--text-heading-3-size);
-    font-weight: var(--text-heading-3-weight);
+    font-weight: 600;
     line-height: var(--text-heading-3-leading);
   }
 
   .astryx-heading[data-level="4"] {
-    font-family: var(--font-family-heading);
+    font-family: var(--font-family-body);
     font-size: var(--text-heading-4-size);
-    font-weight: var(--text-heading-4-weight);
+    font-weight: 600;
     line-height: var(--text-heading-4-leading);
   }
 
   .astryx-heading[data-level="5"] {
-    font-family: var(--font-family-heading);
+    font-family: var(--font-family-body);
     font-size: var(--text-heading-5-size);
-    font-weight: var(--text-heading-5-weight);
+    font-weight: 600;
     line-height: var(--text-heading-5-leading);
   }
 
   .astryx-heading[data-level="6"] {
-    font-family: var(--font-family-heading);
+    font-family: var(--font-family-body);
     font-size: var(--text-heading-6-size);
-    font-weight: var(--text-heading-6-weight);
+    font-weight: 600;
     line-height: var(--text-heading-6-leading);
   }
 

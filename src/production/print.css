@@ -1,0 +1,16 @@
+/*
+ * Print only. A media query cannot be expressed with component props or inline styles, so this is the one stylesheet
+ * production keeps: when a call sheet or sides preview is open, only its paper prints. Everything on screen is Astryx.
+ */
+@media print {
+  body:has(.production-print) * { visibility: hidden; }
+  body:has(.production-print) .production-print-document,
+  body:has(.production-print) .production-print-document * { visibility: visible; }
+  body:has(.production-print) .production-print-document {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    border: 0;
+    box-shadow: none;
+  }
+}

@@ -1,5 +1,13 @@
-import { Download, FileCheck2, GitCompareArrows, Sparkles } from 'lucide-react';
+import { Badge } from '@astryxdesign/core/Badge';
 import { Banner } from '@astryxdesign/core/Banner';
+import { Button } from '@astryxdesign/core/Button';
+import { Card } from '@astryxdesign/core/Card';
+import { HStack } from '@astryxdesign/core/HStack';
+import { Tab, TabList } from '@astryxdesign/core/TabList';
+import { Text } from '@astryxdesign/core/Text';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { VStack } from '@astryxdesign/core/VStack';
+import { Download, FileCheck2, GitCompareArrows, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { sourceFor } from '../model';
@@ -8,7 +16,7 @@ import { summaryMessage, syncBreakdown } from './autobreakdown';
 import type { BreakdownSummary } from './autobreakdown';
 import { Breakdown } from './Breakdown';
 import { CallSheets } from './CallSheets';
-import { Dialog, Empty, SourceButton, downloadText } from './components';
+import { Choice, Dialog, Empty, FormError, Glyph, Pane, SourceButton, downloadText } from './components';
 import type { PaneProps } from './components';
 import { Reports } from './Reports';
 import type { ReportSection } from './Reports';
@@ -22,7 +30,8 @@ import {
 } from './model';
 import type { ProductionOutput, RevisionPreview } from './model';
 import { PageHeader } from '../shell/PageHeader';
-import './production.css';
+import './print.css';
+import './production.css'; // Removed once every pane is on Astryx.
 
 const PANES = ['Stripboard', 'Breakdown', 'Shots & storyboard', 'Sides', 'Call sheets', 'Reports'] as const;
 type Pane = (typeof PANES)[number];
@@ -74,6 +83,7 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
   };
   const title = pane === 'Reports' && reportSection === 'Budget' ? 'Budget' : TITLES[pane];
   const [releasePanel, setReleasePanel] = useState(false);
+  const [releaseLabel, setReleaseLabel] = useState('');
   const [target, setTarget] = useState('');
   const [review, setReview] = useState<RevisionPreview>();
   const [error, setError] = useState('');
@@ -143,10 +153,11 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
     }), 'Export issued.')) downloadText(filename, content);
   }
 
-  function releaseDraft(event: FormEvent<HTMLFormElement>) {
+  function releaseDraft(event: FormEvent) {
     event.preventDefault();
     if (readOnly) return;
-    const label = String(new FormData(event.currentTarget).get('label') ?? '');
+    const label = releaseLabel.trim();
+    if (!label) { setError('Name this release, such as Shooting Draft 2.'); return; }
     let preview: RevisionPreview | undefined;
     let built: BreakdownSummary | undefined;
     if (changeProject(current => {
@@ -173,55 +184,50 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
 
   const needsBreakdown = Boolean(plan && snapshot && snapshot.document.kind !== 'av' && !plan.breakdownSyncedAt &&
     !plan.people.some(person => person.type === 'Cast') && !plan.locations.length && plan.scenes.length);
-  const openRevisions = () => { setReleasePanel(true); setTarget(''); setError(''); };
+  const openRelease = () => { setReleaseLabel(`Shooting Draft ${issued.length + 1}`); setReleasePanel(true); setError(''); };
+  const openRevisions = () => { setTarget(''); openRelease(); };
   const paneProps: PaneProps | undefined = plan && snapshot ? {
     project, plan, snapshot, source: sourceFor(project, snapshot.document), readOnly, update, updateProject, onOpenSource, onProjectChange, onStatus, issueOutput,
     syncScript: snapshot.document.kind === 'av' ? undefined : () => { syncScript(); },
     changes: scriptChanges(project, plan, document), reviewScript: readOnly ? undefined : openRevisions
   } : undefined;
 
-  return <div id="main-content" className="swdr-page production-workspace" aria-label="Production workspace">
-    <PageHeader className="production-hero" title={title}
+  const tabs = <TabList value={pane} onChange={value => { setPane(value as Pane); setError(''); }} hasDivider aria-label="Production tools">
+    {PANES.map(label => <Tab key={label} value={label} label={label} />)}
+  </TabList>;
+
+  return <VStack gap={5} id="main-content" className="swdr-page" aria-label="Production workspace">
+    <PageHeader title={title}
       subtitle={<>
         <span>{episode ? `S${episode.season}E${String(episode.number).padStart(2, '0')} · ${episode.title}` : document.title}</span>
         {snapshot && <><span aria-hidden="true"> · </span><SourceButton source={sourceFor(project, snapshot.document)} onOpenSource={onOpenSource}>{snapshot.label}</SourceButton></>}
       </>}
       actions={paneProps && pane === 'Stripboard' && <>
-        <button type="button" className="production-button" onClick={() => chooseReport('Day out of days')}>Day out of days</button>
-        {!readOnly && <button type="button" className="production-button production-primary" disabled={!plan?.strips.length} onClick={() =>
-          plan && issueOutput('schedule', 'swdr-schedule.csv', scheduleCsv(project, plan))
-        }><Download size={16} /> Export schedule</button>}
+        <Button label="Day out of days" onClick={() => chooseReport('Day out of days')} />
+        {!readOnly && <Button label="Export schedule" variant="primary" icon={<Glyph icon={Download} />} isDisabled={!plan?.strips.length}
+          onClick={() => plan && issueOutput('schedule', 'swdr-schedule.csv', scheduleCsv(project, plan))} />}
       </>} />
-    {!paneProps && <section className="production-card production-release">
-      <div className="production-release-icon"><FileCheck2 size={25} aria-hidden="true" /></div>
-      <h2>Release a script for production</h2>
-      <p>Breakdown, shots and schedules reference an issued snapshot of the script. Issuing reads every scene, speaking role and location from it, with page counts from the page layout.</p>
-      {!readOnly && <div className="production-actions">
-        <button type="button" className="production-button production-primary" onClick={() => { setReleasePanel(true); setError(''); }}>Issue writing draft</button>
-        {issued.length > 0 && <button type="button" className="production-button" onClick={() => syncScript(
+    {!paneProps && <Pane level={2} title="Release a script for production"
+      description="Breakdown, shots and schedules reference an issued snapshot of the script. Issuing reads every scene, speaking role and location from it, with page counts from the page layout.">
+      {!readOnly && <HStack gap={2} wrap="wrap">
+        <Button label="Issue writing draft" variant="primary" icon={<Glyph icon={FileCheck2} />} onClick={() => { openRelease(); }} />
+        {issued.length > 0 && <Button label={`Use ${issued[0].label}`} onClick={() => syncScript(
           current => startProduction(current, document.id, issued[0].id), 'Issued script linked to production.'
-        )}>Use {issued[0].label}</button>}
-      </div>}
+        )} />}
+      </HStack>}
       {plan && <Empty>The active production snapshot is missing. Restore its project archive to recover the source.</Empty>}
-    </section>}
+    </Pane>}
     {paneProps && <>
-      <div className="production-workspace-tabs">
-        <nav aria-label="Production tools" className="production-actions">
-          {PANES.map(label => <button key={label} type="button" className="production-tab" aria-current={pane === label ? 'page' : undefined} onClick={() => { setPane(label); setError(''); }}>
-            {label}
-          </button>)}
-        </nav>
-        {!readOnly && <button type="button" className="production-button production-compact" onClick={openRevisions}>
-          <GitCompareArrows size={16} /> Script revisions{paneProps.changes.length > 0 && <span className="production-count" aria-hidden="true">{paneProps.changes.length}</span>}
-        </button>}
-      </div>
-      {synced && <section className="production-synced" aria-label="Breakdown summary"><BreakdownBanner summary={synced} onDismiss={() => setSynced(undefined)} /></section>}
-      {!synced && !readOnly && needsBreakdown && <section className="production-callout" aria-label="Build breakdown from script">
-        <Sparkles size={20} aria-hidden="true" />
-        <div><strong>Build the breakdown from the script</strong>
-          <p>Read every speaking role, location and scene length from {snapshot?.label} so the stripboard, cast list and call sheets start filled in.</p></div>
-        <button type="button" className="production-button production-primary" onClick={() => paneProps.syncScript?.()}>Build breakdown from script</button>
-      </section>}
+      <HStack gap={3} justify="between" align="end" wrap="wrap">
+        {tabs}
+        {!readOnly && <Button label="Script revisions" icon={<Glyph icon={GitCompareArrows} />} onClick={openRevisions}
+          endContent={paneProps.changes.length > 0 ? <Badge variant="purple" label={String(paneProps.changes.length)} aria-hidden="true" /> : undefined} />}
+      </HStack>
+      {synced && <BreakdownBanner summary={synced} onDismiss={() => setSynced(undefined)} />}
+      {!synced && !readOnly && needsBreakdown && <Banner status="info" icon={<Glyph icon={Sparkles} />} title="Build the breakdown from the script"
+        aria-label="Build breakdown from script"
+        description={`Read every speaking role, location and scene length from ${snapshot?.label} so the stripboard, cast list and call sheets start filled in.`}
+        endContent={<Button label="Build breakdown from script" variant="primary" onClick={() => paneProps.syncScript?.()} />} />}
       {pane === 'Stripboard' && <Stripboard {...paneProps} />}
       {pane === 'Breakdown' && <Breakdown {...paneProps} />}
       {pane === 'Shots & storyboard' && <Shots {...paneProps} />}
@@ -229,31 +235,29 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
       {pane === 'Call sheets' && <CallSheets {...paneProps} />}
       {pane === 'Reports' && <Reports {...paneProps} section={reportSection} onSectionChange={chooseReport} />}
     </>}
-    {error && !releasePanel && !review && <p role="alert" className="production-form-error production-workspace-error">{error}</p>}
-    {releasePanel && <Dialog title={plan ? 'Production script revisions' : 'Issue writing draft'} onClose={() => { setReleasePanel(false); setError(''); }}>
-      {paneProps && otherReleases.length > 0 && <div className="production-inset">
-        <label className="production-field">Incoming released script<select value={target} onChange={event => setTarget(event.target.value)}>
-          <option value="">Choose a revision</option>
-          {otherReleases.map(item => <option key={item.id} value={item.id}>{item.label} · {item.createdAt.slice(0, 10)}</option>)}
-        </select></label>
-        <button type="button" className="production-button" disabled={!target} onClick={() => {
-          try {
-            setReview(previewRevision(project, paneProps.plan, target));
-            setReleasePanel(false);
-            setError('');
-          } catch (reason) {
-            setError(reason instanceof Error ? reason.message : 'The incoming revision could not be previewed.');
-          }
-        }}>Review incoming revision</button>
-      </div>}
-      <form className="production-form" onSubmit={releaseDraft}>
-        <p className="production-muted">{plan ? 'Issue the latest writing draft to review which links carry forward.' : 'The issued writing draft becomes a frozen source for this production plan.'}</p>
-        <label>Release label<input name="label" required defaultValue={`Shooting Draft ${issued.length + 1}`} autoFocus /></label>
-        {error && <p role="alert" className="production-form-error">{error}</p>}
-        <div className="production-actions production-right">
-          <button type="submit" className="production-button production-primary">{plan ? 'Issue and review' : 'Issue script'}</button>
-        </div>
-      </form>
+    {!releasePanel && !review && <FormError>{error}</FormError>}
+    {releasePanel && <Dialog title={plan ? 'Production script revisions' : 'Issue writing draft'} width={520} onClose={() => { setReleasePanel(false); setError(''); }}>
+      {paneProps && otherReleases.length > 0 && <Card variant="muted" padding={4}>
+        <VStack gap={3}>
+          <Choice label="Incoming released script" value={target} onChange={setTarget} placeholder="Choose a revision"
+            options={otherReleases.map(item => ({ value: item.id, label: `${item.label} · ${item.createdAt.slice(0, 10)}` }))} />
+          <HStack><Button label="Review incoming revision" isDisabled={!target} onClick={() => {
+            try {
+              setReview(previewRevision(project, paneProps.plan, target));
+              setReleasePanel(false);
+              setError('');
+            } catch (reason) {
+              setError(reason instanceof Error ? reason.message : 'The incoming revision could not be previewed.');
+            }
+          }} /></HStack>
+        </VStack>
+      </Card>}
+      <VStack as="form" gap={4} onSubmit={releaseDraft}>
+        <Text type="supporting" color="secondary">{plan ? 'Issue the latest writing draft to review which links carry forward.' : 'The issued writing draft becomes a frozen source for this production plan.'}</Text>
+        <TextInput label="Release label" value={releaseLabel} onChange={setReleaseLabel} isRequired />
+        <FormError>{error}</FormError>
+        <HStack justify="end"><Button type="submit" variant="primary" label={plan ? 'Issue and review' : 'Issue script'} /></HStack>
+      </VStack>
     </Dialog>}
     {review && <RevisionPanel
       key={review.snapshot.id} preview={review} error={error} onClose={() => { setReview(undefined); setError(''); }}
@@ -261,7 +265,7 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
         if (changeProject(current => applyRevision(current, document.id, review.snapshot.id, review.previousSnapshotId, choices), 'Production revision applied.')) setReview(undefined);
       }}
     />}
-  </div>;
+  </VStack>;
 }
 
 function BreakdownBanner({ summary, onDismiss }: { summary: BreakdownSummary; onDismiss: () => void }) {
