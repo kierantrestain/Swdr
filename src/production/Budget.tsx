@@ -50,16 +50,18 @@ function lineFormula(line: BudgetLine): string {
 }
 
 /** Numbers in the top sheet: tabular, end-aligned, red when an account is over. */
-const END = { textAlign: 'end' } as const;
+function End({ children }: { children: string }) {
+  return <Text as="p" display="block" type="inherit" color="inherit" justify="end">{children}</Text>;
+}
 const GROUP = { background: 'var(--color-background-muted)' } as const;
 function Num({ pence, strong, over, muted }: { pence?: number; strong?: boolean; over?: boolean; muted?: string }) {
-  return <Text hasTabularNumbers weight={strong ? 'semibold' : undefined} color={muted !== undefined ? 'secondary' : undefined}
+  return <Text as="p" display="block" justify="end" hasTabularNumbers weight={strong ? 'semibold' : undefined} color={muted !== undefined ? 'secondary' : undefined}
     style={over ? { color: 'var(--color-text-error)' } : undefined}>{muted ?? amountLabel(pence ?? 0)}</Text>;
 }
 
 /** How much of an account's plan has been spent, as a short bar and a percentage. */
 function Spend({ planned, actual }: { planned: number; actual: number }) {
-  if (!planned && !actual) return <Text color="secondary">—</Text>;
+  if (!planned && !actual) return <Text as="p" display="block" justify="end" color="secondary">—</Text>;
   const percent = planned > 0 ? Math.round(actual / planned * 100) : 100;
   return <Tooltip content={`${percent}% of planned spent`}>
     <HStack gap={2} align="center" justify="end">
@@ -115,65 +117,64 @@ export function Budget({ project, plan, source, update, readOnly, issueOutput }:
         description="Choose New cost line, or Add line beside any account. Each line is quantity × rate × units, and the totals here update as you go." />}
       <Table density="compact" dividers="rows">
         <TableHeader><TableRow isHeaderRow>
-          <TableHeaderCell>Acct</TableHeaderCell><TableHeaderCell>Account and cost lines</TableHeaderCell>
-          <TableHeaderCell style={END}>Planned (£)</TableHeaderCell><TableHeaderCell style={END}>Actual (£)</TableHeaderCell>
-          <TableHeaderCell style={END}>Remaining (£)</TableHeaderCell><TableHeaderCell style={END}>Spent</TableHeaderCell><TableHeaderCell style={END}>Share</TableHeaderCell>
+          <TableHeaderCell>Account and cost lines</TableHeaderCell>
+          <TableHeaderCell><End>Planned (£)</End></TableHeaderCell><TableHeaderCell><End>Actual (£)</End></TableHeaderCell>
+          <TableHeaderCell><End>Remaining (£)</End></TableHeaderCell><TableHeaderCell><End>Spent</End></TableHeaderCell><TableHeaderCell><End>Share</End></TableHeaderCell>
         </TableRow></TableHeader>
         {sheet.groups.map(group => {
           const closed = collapsed.includes(group.name);
           const rows = hideEmpty ? group.rows.filter(row => row.lines.length) : group.rows;
           return <TableBody key={group.name}>
-            <TableRow><TableCell colSpan={7} style={GROUP}>
+            <TableRow><TableCell colSpan={6} style={GROUP}>
               <Button variant="ghost" size="sm" label={group.name} aria-expanded={!closed} icon={<Glyph icon={closed ? ChevronRight : ChevronDown} />}
                 onClick={() => toggleGroup(group.name)}><Text type="label">{group.name}</Text></Button>
             </TableCell></TableRow>
             {!closed && rows.map(row => [
               <TableRow key={`${row.code}-${row.name}`}>
-                <TableCell><Text type="supporting" color="secondary" hasTabularNumbers>{row.code}</Text></TableCell>
                 <TableCell><HStack gap={2} align="center" wrap="wrap">
+                  <Text type="supporting" color="secondary" hasTabularNumbers>{row.code}</Text>
                   <Text weight="semibold" color={row.lines.length ? 'primary' : 'secondary'}>{row.name}</Text>
                   {!readOnly && <Button variant="ghost" size="sm" label={`Add cost line to ${row.name}`} icon={<Glyph icon={Plus} size="xsm" />}
                     onClick={() => setEditing({ category: row.name })}>Add line</Button>}
                 </HStack></TableCell>
-                <TableCell style={END}><Num pence={row.planned} /></TableCell>
-                <TableCell style={END}><Num pence={row.actual} /></TableCell>
-                <TableCell style={END}><Num pence={row.planned - row.actual} over={row.planned - row.actual < 0} /></TableCell>
-                <TableCell style={END}><Spend planned={row.planned} actual={row.actual} /></TableCell>
-                <TableCell style={END}><Num muted={share(row.planned, sheet.total.planned)} /></TableCell>
+                <TableCell><Num pence={row.planned} /></TableCell>
+                <TableCell><Num pence={row.actual} /></TableCell>
+                <TableCell><Num pence={row.planned - row.actual} over={row.planned - row.actual < 0} /></TableCell>
+                <TableCell><Spend planned={row.planned} actual={row.actual} /></TableCell>
+                <TableCell><Num muted={share(row.planned, sheet.total.planned)} /></TableCell>
               </TableRow>,
               ...row.lines.map(line => <TableRow key={line.id}>
-                <TableCell />
-                <TableCell><VStack gap={0} hAlign="start" paddingInlineStart={4}>
+                <TableCell><VStack gap={0} hAlign="start" paddingInlineStart={8}>
                   {readOnly ? <Text>{line.name}</Text> : <Link label={`Edit ${line.name}`} onClick={() => setEditing({ line, category: line.category })}>
                     {line.name} <Glyph icon={Pencil} size="xsm" /></Link>}
                   <Text type="supporting" color="secondary">{lineFormula(line)}</Text>
                 </VStack></TableCell>
-                <TableCell style={END}><Num pence={linePlanned(line)} /></TableCell>
-                <TableCell style={END}><Num pence={line.actualPence} /></TableCell>
-                <TableCell style={END}><Num pence={linePlanned(line) - line.actualPence} over={linePlanned(line) - line.actualPence < 0} /></TableCell>
-                <TableCell style={END}><Spend planned={linePlanned(line)} actual={line.actualPence} /></TableCell>
+                <TableCell><Num pence={linePlanned(line)} /></TableCell>
+                <TableCell><Num pence={line.actualPence} /></TableCell>
+                <TableCell><Num pence={linePlanned(line) - line.actualPence} over={linePlanned(line) - line.actualPence < 0} /></TableCell>
+                <TableCell><Spend planned={linePlanned(line)} actual={line.actualPence} /></TableCell>
                 <TableCell />
               </TableRow>)
             ])}
             <TableRow>
-              <TableCell /><TableCell><Text weight="semibold">Total {group.name.toLocaleLowerCase('en-GB')}</Text></TableCell>
-              <TableCell style={END}><Num strong pence={group.planned} /></TableCell>
-              <TableCell style={END}><Num strong pence={group.actual} /></TableCell>
-              <TableCell style={END}><Num strong pence={group.planned - group.actual} over={group.planned - group.actual < 0} /></TableCell>
-              <TableCell style={END}><Spend planned={group.planned} actual={group.actual} /></TableCell>
-              <TableCell style={END}><Num muted={share(group.planned, sheet.total.planned)} /></TableCell>
+              <TableCell><Text weight="semibold">Total {group.name.toLocaleLowerCase('en-GB')}</Text></TableCell>
+              <TableCell><Num strong pence={group.planned} /></TableCell>
+              <TableCell><Num strong pence={group.actual} /></TableCell>
+              <TableCell><Num strong pence={group.planned - group.actual} over={group.planned - group.actual < 0} /></TableCell>
+              <TableCell><Spend planned={group.planned} actual={group.actual} /></TableCell>
+              <TableCell><Num muted={share(group.planned, sheet.total.planned)} /></TableCell>
             </TableRow>
           </TableBody>;
         })}
         <TableFooter>
           <TableRow>
-            <TableCell /><TableCell>Subtotal</TableCell>
-            <TableCell style={END}><Num pence={sheet.subtotal.planned} /></TableCell>
-            <TableCell style={END}><Num pence={sheet.subtotal.actual} /></TableCell>
+            <TableCell>Subtotal</TableCell>
+            <TableCell><Num pence={sheet.subtotal.planned} /></TableCell>
+            <TableCell><Num pence={sheet.subtotal.actual} /></TableCell>
             <TableCell /><TableCell /><TableCell />
           </TableRow>
           <TableRow>
-            <TableCell /><TableCell><HStack gap={2} align="center">
+            <TableCell><HStack gap={2} align="center">
               <Text>Contingency</Text>
               {readOnly ? <Text>{sheet.contingencyPercent}%</Text> : <NumberInput key={sheet.contingencyPercent} label="Contingency percentage" isLabelHidden size="sm" width={96}
                 min={0} max={100} step={0.5} value={sheet.contingencyPercent} onChange={value => {
@@ -183,14 +184,14 @@ export function Budget({ project, plan, source, update, readOnly, issueOutput }:
                 }} />}
               {!readOnly && <Text color="secondary">%</Text>}
             </HStack></TableCell>
-            <TableCell style={END}><Num pence={sheet.contingency} /></TableCell>
+            <TableCell><Num pence={sheet.contingency} /></TableCell>
             <TableCell /><TableCell /><TableCell /><TableCell />
           </TableRow>
           <TableRow>
-            <TableCell /><TableCell><Text weight="bold">Grand total</Text></TableCell>
-            <TableCell style={END}><Num strong pence={sheet.total.planned} /></TableCell>
-            <TableCell style={END}><Num strong pence={sheet.total.actual} /></TableCell>
-            <TableCell style={END}><Num strong pence={sheet.total.remaining} over={over} /></TableCell>
+            <TableCell><Text weight="bold">Grand total</Text></TableCell>
+            <TableCell><Num strong pence={sheet.total.planned} /></TableCell>
+            <TableCell><Num strong pence={sheet.total.actual} /></TableCell>
+            <TableCell><Num strong pence={sheet.total.remaining} over={over} /></TableCell>
             <TableCell /><TableCell />
           </TableRow>
         </TableFooter>

@@ -34,13 +34,13 @@ export function Reports({ section: tab, onSectionChange: setTab, ...pane }: Pane
           <TableHeader><TableRow isHeaderRow>
             <TableHeaderCell>ID</TableHeaderCell><TableHeaderCell>Cast</TableHeaderCell>
             {dates.map(date => <TableHeaderCell key={date}>{displayDate(date)}</TableHeaderCell>)}
-            <TableHeaderCell style={{ textAlign: 'end' }}>Worked days</TableHeaderCell>
+            <TableHeaderCell><Text as="p" display="block" type="inherit" color="inherit" justify="end">Worked days</Text></TableHeaderCell>
           </TableRow></TableHeader>
           <TableBody>{rows.map(row => <TableRow key={row.person.id}>
             <TableCell><Badge label={String(castIds.get(row.person.id) ?? '—')} /></TableCell>
             <TableHeaderCell scope="row">{row.person.name}</TableHeaderCell>
             {row.codes.map((code, index) => <TableCell key={dates[index]}>{code === '—' ? <Text color="secondary">—</Text> : <Badge variant="info" label={code} />}</TableCell>)}
-            <TableCell style={{ textAlign: 'end' }}>{row.worked}</TableCell>
+            <TableCell><Text as="p" display="block" justify="end" hasTabularNumbers>{row.worked}</Text></TableCell>
           </TableRow>)}</TableBody>
         </Table>}
     </Pane>}
