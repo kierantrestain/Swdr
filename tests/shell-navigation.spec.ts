@@ -18,7 +18,7 @@ test('every page has a trail and a working Back, Home and project link', async (
   const pages: [string, RegExp | string][] = [
     ['Script', ''], ['Outline', 'Episode outline'], ['Series Intelligence', 'Series Intelligence'], ['Schedule', 'Shooting stripboard'],
     ['Breakdown', 'Script breakdown'], ['Shots & storyboard', 'Shots and storyboard'], ['Sides', 'Shooting sides'],
-    ['Call sheets', 'Call sheets'], ['Reports', 'Production reports'], ['Budget', 'Production reports'], ['Files & media', 'Files & media'], ['Import', 'Import script']
+    ['Call sheets', 'Call sheets'], ['Reports', 'Production reports'], ['Budget', 'Budget'], ['Files & media', 'Files & media'], ['Import', 'Import script']
   ];
   for (const [link, heading] of pages) {
     await sections(page).getByRole('link', { name: link, exact: true }).click();

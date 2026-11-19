@@ -80,7 +80,7 @@ export function Shots({ project, plan, source, update, readOnly, onOpenSource, o
 
   return <>
     <div className="production-toolbar">
-      <div className="production-actions">
+      <div className="production-actions production-subnav" role="group" aria-label="Shots view">
         {(['Shot list', 'Lookbook'] as const).map(label => <button type="button" className="production-button" aria-pressed={mode === label} key={label} onClick={() => {
           setMode(label); setError(''); setEditing(undefined);
         }}>{label}</button>)}

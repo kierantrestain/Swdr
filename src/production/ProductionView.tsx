@@ -11,6 +11,7 @@ import { CallSheets } from './CallSheets';
 import { Dialog, Empty, SourceButton, downloadText } from './components';
 import type { PaneProps } from './components';
 import { Reports } from './Reports';
+import type { ReportSection } from './Reports';
 import { RevisionPanel } from './RevisionPanel';
 import { Shots } from './Shots';
 import { Sides } from './Sides';
@@ -58,6 +59,20 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
     setLocalPane(next);
     onTabChange?.(SLUGS[next]);
   };
+  const [reportSection, setReportSection] = useState<ReportSection>(() => tab === 'budget' ? 'Budget' : 'Day out of days');
+  const [seenTab, setSeenTab] = useState(tab);
+  if (tab !== seenTab) {
+    // The sidebar and address can open the budget directly; leaving it returns to the first report.
+    setSeenTab(tab);
+    if (tab === 'budget') setReportSection('Budget');
+    else if (reportSection === 'Budget') setReportSection('Day out of days');
+  }
+  const chooseReport = (next: ReportSection) => {
+    setReportSection(next);
+    setLocalPane('Reports');
+    onTabChange?.(next === 'Budget' ? 'budget' : SLUGS.Reports);
+  };
+  const title = pane === 'Reports' && reportSection === 'Budget' ? 'Budget' : TITLES[pane];
   const [releasePanel, setReleasePanel] = useState(false);
   const [target, setTarget] = useState('');
   const [review, setReview] = useState<RevisionPreview>();
@@ -166,13 +181,13 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
   } : undefined;
 
   return <div id="main-content" className="swdr-page production-workspace" aria-label="Production workspace">
-    <PageHeader className="production-hero" title={TITLES[pane]}
+    <PageHeader className="production-hero" title={title}
       subtitle={<>
         <span>{episode ? `S${episode.season}E${String(episode.number).padStart(2, '0')} · ${episode.title}` : document.title}</span>
         {snapshot && <><span aria-hidden="true"> · </span><SourceButton source={sourceFor(project, snapshot.document)} onOpenSource={onOpenSource}>{snapshot.label}</SourceButton></>}
       </>}
       actions={paneProps && pane === 'Stripboard' && <>
-        <button type="button" className="production-button" onClick={() => setPane('Reports')}>Day out of days</button>
+        <button type="button" className="production-button" onClick={() => chooseReport('Day out of days')}>Day out of days</button>
         {!readOnly && <button type="button" className="production-button production-primary" disabled={!plan?.strips.length} onClick={() =>
           plan && issueOutput('schedule', 'swdr-schedule.csv', scheduleCsv(project, plan))
         }><Download size={16} /> Export schedule</button>}
@@ -212,7 +227,7 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
       {pane === 'Shots & storyboard' && <Shots {...paneProps} />}
       {pane === 'Sides' && <Sides {...paneProps} />}
       {pane === 'Call sheets' && <CallSheets {...paneProps} />}
-      {pane === 'Reports' && <Reports key={tab === 'budget' ? 'budget' : 'reports'} {...paneProps} startAt={tab === 'budget' ? 'Budget' : undefined} />}
+      {pane === 'Reports' && <Reports {...paneProps} section={reportSection} onSectionChange={chooseReport} />}
     </>}
     {error && !releasePanel && !review && <p role="alert" className="production-form-error production-workspace-error">{error}</p>}
     {releasePanel && <Dialog title={plan ? 'Production script revisions' : 'Issue writing draft'} onClose={() => { setReleasePanel(false); setError(''); }}>

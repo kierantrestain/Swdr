@@ -41,7 +41,8 @@
     border: 1px solid var(--color-border-emphasized);
     border-radius: var(--radius-element);
     background: var(--color-background-surface);
-    font-size: var(--font-size-sm);
+    /* Same text size as Astryx Button, so app buttons and Astryx buttons match in a shared toolbar. */
+    font-size: var(--font-size-base);
     font-weight: 600;
     line-height: 1.25;
     transition: background-color var(--duration-fast, 120ms) ease, border-color var(--duration-fast, 120ms) ease;

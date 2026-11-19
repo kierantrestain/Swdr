@@ -1,15 +1,17 @@
 import { Download } from 'lucide-react';
-import { useState } from 'react';
 import { Empty, SourceButton, displayDate, downloadText } from './components';
 import type { PaneProps } from './components';
 import { Budget } from './Budget';
 import { castNumbers, dayOutOfDays, doodCsv, productionManifest } from './model';
 
-export function Reports({ startAt = 'Day out of days', ...pane }: PaneProps & {
-  startAt?: 'Day out of days' | 'Budget' | 'Issued exports';
+export type ReportSection = 'Day out of days' | 'Budget' | 'Issued exports';
+
+/** The report on show is held by the production view, so its title, address and sidebar follow it. */
+export function Reports({ section: tab, onSectionChange: setTab, ...pane }: PaneProps & {
+  section: ReportSection;
+  onSectionChange: (section: ReportSection) => void;
 }) {
   const { project, plan, readOnly, onOpenSource, issueOutput } = pane;
-  const [tab, setTab] = useState(startAt);
   const { dates, rows } = dayOutOfDays(plan);
   const castIds = castNumbers(plan);
   return <>
