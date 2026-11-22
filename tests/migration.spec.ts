@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { arch, platform, release } from 'node:os';
+import { arch, cpus, loadavg, platform, release } from 'node:os';
 import type { Page } from '@playwright/test';
 import { createProject, issueDocument } from '../src/workspace/project';
 import { newId, sceneList, sourceFor } from '../src/model';
@@ -105,58 +105,88 @@ test('restores a project archive, opens its exact issued line and re-exports the
   expect(pageFaults).toEqual([]);
 });
 
-test('measures keyboard input to a completed-frame proxy on a 150–200 page draft', async ({ page, pageFaults }, testInfo) => {
-  const { document, pages } = makeLongScript();
-  expect(pages).toBeGreaterThanOrEqual(150);
-  expect(pages).toBeLessThanOrEqual(200);
-  const files = await openImport(page);
-  await files.setInputFiles({
-    name: 'The Long Feature.fountain', mimeType: 'text/plain', buffer: Buffer.from(exportFountain(document))
+// Machine load on a shared host can push a whole measuring window over the target; one retry samples a later window.
+// A real regression fails both attempts, and Playwright reports a pass on retry as flaky rather than as a clean pass.
+test.describe(() => {
+  test.describe.configure({ retries: 1 });
+
+  test('measures keyboard input to a completed-frame proxy on a 150–200 page draft', async ({ page, pageFaults }, testInfo) => {
+    const { document, pages } = makeLongScript();
+    expect(pages).toBeGreaterThanOrEqual(150);
+    expect(pages).toBeLessThanOrEqual(200);
+    const files = await openImport(page);
+    await files.setInputFiles({
+      name: 'The Long Feature.fountain', mimeType: 'text/plain', buffer: Buffer.from(exportFountain(document))
+    });
+    await page.getByRole('button', { name: 'Import draft', exact: true }).click();
+    const status = page.getByText(/^Page 1 of \d+$/);
+    await expect(status).toBeVisible();
+    const actualPages = Number((await status.textContent())?.split(' of ').at(-1));
+    expect(actualPages).toBeGreaterThanOrEqual(150);
+    expect(actualPages).toBeLessThanOrEqual(200);
+    // Sequential trusted keyboard events with two RAFs bound when the current input could be painted. The clock starts
+    // at the keydown's timestamp (when the key arrived), not the later input event, so time the editor spends in its
+    // own keydown handling is measured too.
+    await page.evaluate(() => {
+      window.swdrKeyFrameTimings = [];
+      let keyArrived: number | undefined;
+      globalThis.document.addEventListener('keydown', event => { if (event.isTrusted) keyArrived = event.timeStamp; }, { capture: true });
+      globalThis.document.addEventListener('input', event => {
+        if (!event.isTrusted || !(event.target instanceof HTMLElement) || !event.target.closest('.swdr-pm')) return;
+        const start = keyArrived ?? event.timeStamp;
+        keyArrived = undefined;
+        const timings = window.swdrKeyFrameTimings;
+        requestAnimationFrame(() => requestAnimationFrame(() => timings?.push(performance.now() - start)));
+      }, { capture: true });
+    });
+    // Types `count` characters at the end of a fresh action paragraph, one keystroke per painted frame, and returns the samples.
+    const typeInto = async (paragraph: number, count: number) => {
+      const action = element(page, 'action').nth(paragraph);
+      await action.click();
+      // End moves to the end of the visual line; place the caret at the end of the paragraph.
+      await action.evaluate(node => {
+        const range = node.ownerDocument.createRange();
+        range.selectNodeContents(node);
+        range.collapse(false);
+        getSelection()!.removeAllRanges();
+        getSelection()!.addRange(range);
+      });
+      await page.waitForTimeout(50);
+      await page.evaluate(() => { window.swdrKeyFrameTimings = []; });
+      for (let index = 0; index < count; index++) {
+        await page.keyboard.press('x');
+        await page.waitForFunction(n => (window.swdrKeyFrameTimings?.length ?? 0) >= n, index + 1);
+      }
+      expect(await action.textContent()).toMatch(new RegExp(`x{${count}}$`));
+      return page.evaluate(() => window.swdrKeyFrameTimings ?? []);
+    };
+    const percentile95 = (samples: number[]) => {
+      const sorted = samples.slice().sort((a, b) => a - b);
+      return sorted[Math.ceil(sorted.length * .95) - 1];
+    };
+    const round = (value: number) => Number(value.toFixed(2));
+
+    // A shared machine makes one 64-sample p95 noisy (identical builds ranged ~41–56 ms), so warm up the editor's
+    // JIT and layout paths first, then take three independent runs in their own paragraphs and judge the median p95.
+    // A real regression slows every run and moves the median; one run disturbed by machine load does not.
+    const warmup = await typeInto(0, 16);
+    const runs: number[][] = [];
+    for (let run = 1; run <= 3; run++) runs.push(await typeInto(run, 64));
+    const runP95s = runs.map(percentile95);
+    const medianP95 = runP95s.slice().sort((a, b) => a - b)[1];
+    const evidence = {
+      metric: 'Trusted keydown to the second animation frame callback after its input event',
+      method: 'Warm-up of 16 discarded keystrokes, then 3 runs × 64 sequential keystrokes; assert the median of the per-run p95s',
+      pages: actualPages, sampleCount: runs.flat().length, p95Ms: round(medianP95),
+      runP95Ms: runP95s.map(round), targetMs: 50,
+      browser: page.context().browser()?.version(), os: platform() + ' ' + release(), architecture: arch(),
+      hostLoadAverage: loadavg().map(round), cpus: cpus().length,
+      viewport: page.viewportSize(), scope: 'Foreground local writing',
+      samplesMs: { warmup: warmup.map(round), runs: runs.map(samples => samples.map(round)) }
+    };
+    await testInfo.attach('typing-performance', { body: JSON.stringify(evidence, null, 2), contentType: 'application/json' });
+    console.log(JSON.stringify({ ...evidence, samplesMs: undefined }));
+    expect(medianP95, `median of per-run p95s ${evidence.runP95Ms.join(', ')} ms; raw samples are in the typing-performance attachment`).toBeLessThan(50);
+    expect(pageFaults).toEqual([]);
   });
-  await page.getByRole('button', { name: 'Import draft', exact: true }).click();
-  const status = page.getByText(/^Page 1 of \d+$/);
-  await expect(status).toBeVisible();
-  const actualPages = Number((await status.textContent())?.split(' of ').at(-1));
-  expect(actualPages).toBeGreaterThanOrEqual(150);
-  expect(actualPages).toBeLessThanOrEqual(200);
-  const action = element(page, 'action').first();
-  await action.click();
-  // End moves to the end of the visual line; place the caret at the end of the paragraph.
-  await action.evaluate(node => {
-    const range = node.ownerDocument.createRange();
-    range.selectNodeContents(node);
-    range.collapse(false);
-    getSelection()!.removeAllRanges();
-    getSelection()!.addRange(range);
-  });
-  await page.waitForTimeout(50);
-  // Sequential trusted keyboard events with two RAFs bound when the current input could be painted.
-  await page.evaluate(() => {
-    const timings: number[] = [];
-    window.swdrKeyFrameTimings = timings;
-    globalThis.document.addEventListener('input', event => {
-      if (!event.isTrusted || !(event.target instanceof HTMLElement) || !event.target.closest('.swdr-pm')) return;
-      const start = event.timeStamp;
-      requestAnimationFrame(() => requestAnimationFrame(() => timings.push(performance.now() - start)));
-    }, { capture: true });
-  });
-  const iterations = 64;
-  for (let index = 0; index < iterations; index++) {
-    await page.keyboard.press('x');
-    await page.waitForFunction(n => (window.swdrKeyFrameTimings?.length ?? 0) >= n, index + 1);
-  }
-  expect(await action.textContent()).toMatch(/x{64}$/);
-  const durations = await page.evaluate(() => window.swdrKeyFrameTimings ?? []);
-  const sorted = durations.slice().sort((a, b) => a - b);
-  const p95 = sorted[Math.ceil(sorted.length * .95) - 1];
-  const evidence = {
-    metric: 'Trusted input event to the second animation frame callback',
-    pages: actualPages, sampleCount: sorted.length, p95Ms: Number(p95.toFixed(2)),
-    browser: page.context().browser()?.version(), os: platform() + ' ' + release(), architecture: arch(),
-    viewport: page.viewportSize(), scope: 'Foreground local writing', targetMs: 50
-  };
-  await testInfo.attach('typing-performance', { body: JSON.stringify(evidence, null, 2), contentType: 'application/json' });
-  console.log(JSON.stringify(evidence));
-  expect(p95).toBeLessThan(50);
-  expect(pageFaults).toEqual([]);
 });
