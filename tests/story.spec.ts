@@ -46,10 +46,10 @@ test('connects portraits, series timeline filters, script drawer, command palett
   await page.getByRole('button', { name: 'Open project The North Shore' }).click();
   await expect(page.getByRole('region', { name: 'Project pulse' })).toContainText('7 cast');
 
-  // Script editor Story bible drawer opens directly into a Character Dossier.
+  // Script editor Series Intelligence button opens sidebar directly into a Character Dossier.
   await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Script', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Manuscript editor' })).toBeVisible();
-  await page.getByRole('button', { name: 'Story bible', exact: true }).click();
+  await page.getByRole('button', { name: 'Series Intelligence', exact: true }).click();
   const drawer = page.getByRole('complementary', { name: 'Series Intelligence' });
   await expect(drawer).toBeVisible();
   await expect(drawer).toContainText('Spoiler-safe as of S1E04');
@@ -126,7 +126,7 @@ test('corrects a claim in a 75-minute outline and downloads four files from the 
   expect(pageFaults).toEqual([]);
 });
 
-test('Film Intelligence maps a multi-act feature via one-click script scan, act filters and cursor-aware Story bible drawer', async ({ page, pageFaults }) => {
+test('Film Intelligence maps a multi-act feature via scrollable Enter-to-import script scan, act filters and Film Intelligence sidebar across Script, Outline and Production', async ({ page, pageFaults }) => {
   await openHome(page);
   await page.evaluate(async () => {
     const blocks: Array<{ id: string; kind: string; text: string; sceneId?: string }> = [];
@@ -143,6 +143,9 @@ test('Film Intelligence maps a multi-act feature via one-click script scan, act 
         blocks.push({ id: `ch-vance-${i}`, kind: 'character', text: 'DIRECTOR VANCE' });
         blocks.push({ id: `dl-vance-${i}`, kind: 'dialogue', text: `Phase ${i} stays online.` });
       }
+      // Add minor 1-line speakers so the scan modal has 30+ speaking roles and exercises scrolling & core-cast selection.
+      blocks.push({ id: `ch-extra-${i}`, kind: 'character', text: `ANALYST ${i}` });
+      blocks.push({ id: `dl-extra-${i}`, kind: 'dialogue', text: `Telemetry ${i} ready.` });
     }
     const now = new Date().toISOString();
     const project = {
@@ -188,16 +191,32 @@ test('Film Intelligence maps a multi-act feature via one-click script scan, act 
 
   await page.reload();
   await page.getByRole('button', { name: 'Open project The Prediction Engine' }).click();
-  await expect(page.getByRole('button', { name: /^Film Intelligence/ })).toContainText('Scan 30 scenes to map 3 speaking roles');
+  await expect(page.getByRole('button', { name: /^Film Intelligence/ })).toContainText('Scan 30 scenes to map 33 speaking roles');
   await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Film Intelligence', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Film Intelligence', level: 1 })).toBeVisible();
-  await expect(page.getByText(/Found 3 speaking characters across 30 scenes/)).toBeVisible();
+  await expect(page.getByText(/Found 33 speaking characters across 30 scenes/)).toBeVisible();
 
   await page.getByRole('button', { name: 'Scan script & build draft', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Scan scripts for characters & appearances' });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Dr. Aris · Lead');
-  await dialog.getByRole('button', { name: /Import .* to draft/ }).click();
+
+  // Verify the scan modal body scrolls AND the pinned Import button stays visible in the viewport.
+  const scrollInfo = await dialog.evaluate(el => {
+    const content = el.querySelector('.astryx-layout-content') as HTMLElement | null;
+    if (!content) return { found: false, scrollable: false, moved: false };
+    const before = content.scrollTop;
+    content.scrollTop = 240;
+    return { found: true, scrollable: content.scrollHeight > content.clientHeight, moved: content.scrollTop > before };
+  });
+  expect(scrollInfo).toEqual({ found: true, scrollable: true, moved: true });
+  const importBtn = dialog.getByRole('button', { name: /Import .* to draft/ });
+  await expect(importBtn).toBeInViewport();
+
+  // Pressing Enter while focused inside the scan dialog immediately submits the import.
+  await dialog.getByRole('checkbox').first().focus();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toHaveCount(0);
 
   // Relationship web now holds imported characters and shared-scene links.
   await expect(page.getByRole('complementary', { name: 'Selected character' })).toContainText('Dr. Aris');
@@ -214,15 +233,27 @@ test('Film Intelligence maps a multi-act feature via one-click script scan, act 
   await expect(page.getByRole('button', { name: 'Open Dr. Aris dossier' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open Director Vance dossier' })).toHaveCount(0);
 
-  // Script editor Story bible drawer is scene-aware and spoiler-safe at Scene 1.
+  // Script editor exposes a labelled Film Intelligence button that opens the scene-aware sidebar.
   await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Script', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Manuscript editor' })).toBeVisible();
-  await page.getByRole('button', { name: 'Story bible', exact: true }).click();
+  await page.getByRole('button', { name: 'Film Intelligence', exact: true }).click();
   const drawer = page.getByRole('complementary', { name: 'Film Intelligence' });
   await expect(drawer).toBeVisible();
   await expect(drawer).toContainText('Spoiler-safe as of Act I · Sc 1');
   await expect(drawer).toContainText('Dr. Aris');
   await expect(drawer).not.toContainText('Director Vance');
+
+  // Outline also exposes a labelled Film Intelligence button & docked sidebar.
+  await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Outline', exact: true }).click();
+  await page.getByRole('button', { name: 'Film Intelligence', exact: true }).click();
+  await expect(page.getByRole('complementary', { name: 'Film Intelligence' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('complementary', { name: 'Film Intelligence' })).toHaveCount(0);
+
+  // Production also exposes a labelled Film Intelligence button & docked sidebar.
+  await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Breakdown', exact: true }).click();
+  await page.getByRole('button', { name: 'Film Intelligence', exact: true }).click();
+  await expect(page.getByRole('complementary', { name: 'Film Intelligence' })).toBeVisible();
   expect(pageFaults).toEqual([]);
 });
 

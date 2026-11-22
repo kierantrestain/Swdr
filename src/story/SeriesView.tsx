@@ -9,6 +9,7 @@ import { Grid } from '@astryxdesign/core/Grid';
 import { Heading } from '@astryxdesign/core/Heading';
 import { HStack } from '@astryxdesign/core/HStack';
 import { Item } from '@astryxdesign/core/Item';
+import { Kbd } from '@astryxdesign/core/Kbd';
 import { Link } from '@astryxdesign/core/Link';
 import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
@@ -103,8 +104,7 @@ function CharacterFormDialog({ project, document, character, save, onPhotoUpdate
     portraitUrl: character?.portraitUrl
   };
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
+  function saveCharacterForm() {
     if (!name.trim() || !source) {
       setError('Enter a name and choose an exact source line.');
       return;
@@ -132,6 +132,11 @@ function CharacterFormDialog({ project, document, character, save, onPhotoUpdate
     subtitle="Characters stay anchored to the exact script line where the audience first meets them."
     width={760}
     onClose={close}
+    onSubmit={saveCharacterForm}
+    footer={<HStack gap={2} justify="end">
+      <Button label="Cancel" onClick={close} />
+      <Button type="submit" variant="primary" label="Save character" isDisabled={!source || !name.trim()} />
+    </HStack>}
   >
     <HStack gap={5} align="start" wrap="wrap">
       <VStack as="aside" gap={3} width={200} hAlign="start">
@@ -156,7 +161,7 @@ function CharacterFormDialog({ project, document, character, save, onPhotoUpdate
         )}
       </VStack>
 
-      <VStack as="form" gap={3} onSubmit={submit} style={{ flex: '1 1 22rem', minWidth: 0 }}>
+      <VStack gap={3} style={{ flex: '1 1 22rem', minWidth: 0 }}>
         <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
           <TextInput label="Name" value={name} onChange={setName} isRequired />
           <TextInput label="Role" value={role} onChange={setRole} placeholder="Protagonist, Investigator, Mentor" />
@@ -192,10 +197,6 @@ function CharacterFormDialog({ project, document, character, save, onPhotoUpdate
           ))}
         </CheckboxList>}
         <FormError>{error}</FormError>
-        <HStack gap={2} justify="end">
-          <Button label="Cancel" onClick={close} />
-          <Button type="submit" variant="primary" label="Save character" isDisabled={!source || !name.trim()} />
-        </HStack>
       </VStack>
     </HStack>
   </StoryDialog>;
@@ -223,8 +224,7 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
   const events = data.points.filter(event => event.kind === 'event' && event.id !== point?.id);
   const minPeople = kind === 'event' ? 0 : kind === 'relationship' || kind === 'interaction' ? 2 : 1;
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
+  function savePointForm() {
     if (!source || !title.trim()) {
       setError('Enter a title and choose an exact source line.');
       return;
@@ -250,8 +250,13 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
     subtitle="The script line controls when the audience learns it; story order controls chronology."
     width={680}
     onClose={close}
+    onSubmit={savePointForm}
+    footer={<HStack gap={2} justify="end">
+      <Button label="Cancel" onClick={close} />
+      <Button type="submit" variant="primary" label="Save record" isDisabled={!source || !title.trim()} />
+    </HStack>}
   >
-    <VStack as="form" gap={3} onSubmit={submit}>
+    <VStack gap={3}>
       <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
         <Choice
           label="Record type"
@@ -301,10 +306,6 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
         options={[{ value: '', label: 'No recorded cause' }, ...events.map(event => ({ value: event.id, label: event.title }))]}
       />}
       <FormError>{error}</FormError>
-      <HStack gap={2} justify="end">
-        <Button label="Cancel" onClick={close} />
-        <Button type="submit" variant="primary" label="Save record" isDisabled={!source || !title.trim()} />
-      </HStack>
     </VStack>
   </StoryDialog>;
 }
@@ -317,14 +318,31 @@ function ScriptScanDialog({ project, structure, draft, onImport, close }: {
   close: () => void;
 }) {
   const scan = useMemo(() => scanProjectScripts(project, draft, structure.document?.id), [draft, project, structure.document?.id]);
-  const [chosenChars, setChosenChars] = useState<string[]>(() => scan.newCharacters.slice(0, 20).map(item => item.cueName));
+  const coreCastCues = useMemo(() => {
+    if (scan.newCharacters.length <= 16) return scan.newCharacters.map(item => item.cueName);
+    const recurring = scan.newCharacters.filter(item => item.speeches >= 2).slice(0, 18);
+    return (recurring.length ? recurring : scan.newCharacters.slice(0, 14)).map(item => item.cueName);
+  }, [scan.newCharacters]);
+  const [chosenChars, setChosenChars] = useState<string[]>(() => coreCastCues);
+  const [charFilter, setCharFilter] = useState('');
   const [chosenApps, setChosenApps] = useState<string[]>(() => scan.newAppearances.slice(0, 16).map((_, i) => String(i)));
   const [chosenLinks, setChosenLinks] = useState<string[]>(() =>
     draft.characters.length === 0 ? scan.suggestedLinks.slice(0, 8).map(item => item.key) : []
   );
   const [mapNewCharScenes, setMapNewCharScenes] = useState(true);
 
+  const visibleNewChars = useMemo(() => {
+    const needle = charFilter.trim().toLocaleLowerCase('en-GB');
+    if (!needle) return scan.newCharacters;
+    return scan.newCharacters.filter(item =>
+      item.name.toLocaleLowerCase('en-GB').includes(needle)
+      || item.suggestedBilling.toLocaleLowerCase('en-GB').includes(needle)
+      || item.firstEpisodeLabel.toLocaleLowerCase('en-GB').includes(needle)
+    );
+  }, [charFilter, scan.newCharacters]);
+
   function apply() {
+    if (chosenChars.length + chosenApps.length + chosenLinks.length === 0) return;
     const newCharacters: Character[] = scan.newCharacters
       .filter(item => chosenChars.includes(item.cueName))
       .map(item => ({
@@ -364,7 +382,7 @@ function ScriptScanDialog({ project, structure, draft, onImport, close }: {
     if (mapNewCharScenes && newCharacters.length > 0) {
       const followUp = scanProjectScripts(project, { ...draft, characters: [...draft.characters, ...newCharacters] }, structure.document?.id);
       const newIds = new Set(newCharacters.map(item => item.id));
-      for (const app of followUp.newAppearances.filter(item => newIds.has(item.characterId)).slice(0, 220)) {
+      for (const app of followUp.newAppearances.filter(item => newIds.has(item.characterId)).slice(0, 260)) {
         newPoints.push({
           id: newId(),
           kind: 'appearance',
@@ -406,6 +424,32 @@ function ScriptScanDialog({ project, structure, draft, onImport, close }: {
     subtitle={`Reads speaking cues across your ${structure.mode === 'episodic' ? 'episode scripts' : 'script scenes'} and anchors every imported record to its exact line in your working draft.`}
     width={720}
     onClose={close}
+    onSubmit={!isEmpty && totalSelected > 0 ? apply : undefined}
+    footer={isEmpty ? (
+      <HStack gap={2} justify="end">
+        <Button label="Close" onClick={close} />
+      </HStack>
+    ) : (
+      <HStack gap={3} justify="between" align="center" wrap="wrap" style={{ width: '100%' }}>
+        <HStack gap={1.5} align="center">
+          <Text type="supporting" color="secondary" size="xsm">Press</Text>
+          <Kbd keys="enter" />
+          <Text type="supporting" color="secondary" size="xsm">
+            to import ({chosenChars.length} cast{chosenLinks.length ? ` · ${chosenLinks.length} links` : ''})
+          </Text>
+        </HStack>
+        <HStack gap={2} align="center">
+          <Button label="Cancel" onClick={close} />
+          <Button
+            type="submit"
+            variant="primary"
+            icon={<Glyph icon={Sparkles} />}
+            label={`Import ${totalSelected} selection${totalSelected === 1 ? '' : 's'} to draft`}
+            isDisabled={totalSelected === 0}
+          />
+        </HStack>
+      </HStack>
+    )}
   >
     {isEmpty ? (
       <Empty
@@ -414,13 +458,38 @@ function ScriptScanDialog({ project, structure, draft, onImport, close }: {
       />
     ) : <VStack gap={4}>
       {scan.newCharacters.length > 0 && <VStack gap={2}>
+        <HStack gap={2} justify="between" align="center" wrap="wrap">
+          {scan.newCharacters.length > 8 ? (
+            <TextInput
+              label="Filter speaking characters"
+              isLabelHidden
+              size="sm"
+              type="search"
+              placeholder={`Filter ${scan.newCharacters.length} speaking characters…`}
+              value={charFilter}
+              onChange={setCharFilter}
+              width={260}
+            />
+          ) : (
+            <Text type="supporting" color="secondary" size="xsm">
+              {chosenChars.length} of {scan.newCharacters.length} selected
+            </Text>
+          )}
+          <HStack gap={1} align="center" wrap="wrap">
+            {scan.newCharacters.length > coreCastCues.length && (
+              <Button size="sm" variant="ghost" label={`Core cast (${coreCastCues.length})`} onClick={() => setChosenChars(coreCastCues)} />
+            )}
+            <Button size="sm" variant="ghost" label="Select all" onClick={() => setChosenChars(scan.newCharacters.map(item => item.cueName))} />
+            <Button size="sm" variant="ghost" label="Clear" onClick={() => setChosenChars([])} />
+          </HStack>
+        </HStack>
         <CheckboxList
           label={`Unrecorded speaking characters (${scan.newCharacters.length})`}
           density="compact"
           value={chosenChars}
           onChange={setChosenChars}
         >
-          {scan.newCharacters.slice(0, 24).map(item => (
+          {visibleNewChars.map(item => (
             <CheckboxListItem
               key={item.cueName}
               value={item.cueName}
@@ -429,6 +498,9 @@ function ScriptScanDialog({ project, structure, draft, onImport, close }: {
             />
           ))}
         </CheckboxList>
+        {visibleNewChars.length === 0 && (
+          <Text type="supporting" color="secondary" size="sm">No speaking characters match “{charFilter}”.</Text>
+        )}
         <CheckboxInput
           label="Also record scene appearances for imported characters"
           description="Populates the Story map, Scene matrix and character presence heatmaps automatically."
@@ -459,7 +531,7 @@ function ScriptScanDialog({ project, structure, draft, onImport, close }: {
         value={chosenApps}
         onChange={setChosenApps}
       >
-        {scan.newAppearances.slice(0, 20).map((item, idx) => (
+        {scan.newAppearances.slice(0, 30).map((item, idx) => (
           <CheckboxListItem
             key={`${item.characterId}-${idx}`}
             value={String(idx)}
@@ -468,17 +540,6 @@ function ScriptScanDialog({ project, structure, draft, onImport, close }: {
           />
         ))}
       </CheckboxList>}
-
-      <HStack gap={2} justify="end">
-        <Button label="Cancel" onClick={close} />
-        <Button
-          variant="primary"
-          icon={<Glyph icon={Sparkles} />}
-          label={`Import ${totalSelected} selection${totalSelected === 1 ? '' : 's'} to draft`}
-          isDisabled={totalSelected === 0}
-          onClick={apply}
-        />
-      </HStack>
     </VStack>}
   </StoryDialog>;
 }

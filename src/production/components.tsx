@@ -9,6 +9,7 @@ import { Heading } from '@astryxdesign/core/Heading';
 import { HStack } from '@astryxdesign/core/HStack';
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
+import { Layout, LayoutContent } from '@astryxdesign/core/Layout';
 import { Link } from '@astryxdesign/core/Link';
 import { useMediaQuery } from '@astryxdesign/core/hooks';
 import { Selector } from '@astryxdesign/core/Selector';
@@ -155,10 +156,12 @@ export function Dialog({ title, onClose, print, width = 720, children }: PropsWi
   print?: boolean;
   width?: number | string;
 }>) {
-  return <AstryxDialog isOpen onOpenChange={open => { if (!open) onClose(); }} width={width} maxHeight="90dvh" purpose="form"
+  return <AstryxDialog isOpen onOpenChange={open => { if (!open) onClose(); }} width={width} maxHeight="88dvh" purpose="form"
     className={print ? 'production-print' : undefined}>
-    <DialogHeader title={title} endContent={<IconButton variant="ghost" label="Close preview" icon={<Glyph icon={X} />} onClick={onClose} />} />
-    <VStack gap={4} padding={5}>{children}</VStack>
+    <Layout
+      header={<DialogHeader title={title} endContent={<IconButton variant="ghost" label="Close preview" icon={<Glyph icon={X} />} onClick={onClose} />} />}
+      content={<LayoutContent><VStack gap={4}>{children}</VStack></LayoutContent>}
+    />
   </AstryxDialog>;
 }
 

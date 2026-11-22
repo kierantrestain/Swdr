@@ -7,7 +7,7 @@ import { Tab, TabList } from '@astryxdesign/core/TabList';
 import { Text } from '@astryxdesign/core/Text';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { VStack } from '@astryxdesign/core/VStack';
-import { Download, FileCheck2, GitCompareArrows, Sparkles } from 'lucide-react';
+import { BookOpen, Download, FileCheck2, GitCompareArrows, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { sourceFor } from '../model';
@@ -30,6 +30,8 @@ import {
 } from './model';
 import type { ProductionOutput, RevisionPreview } from './model';
 import { PageHeader } from '../shell/PageHeader';
+import { isStoryProject, storyWorkspaceTitle } from '../story/story-profile';
+import { StoryDrawer } from '../writing/StoryDrawer';
 import './print.css';
 
 const PANES = ['Stripboard', 'Breakdown', 'Shots & storyboard', 'Sides', 'Call sheets', 'Reports'] as const;
@@ -47,6 +49,8 @@ interface ProductionProps extends WorkspaceViewProps {
   /** The pane named in the address (schedule, breakdown, shots, sides, call-sheets, reports or budget). */
   tab?: string;
   onTabChange?: (tab: string) => void;
+  /** Opens Film / Stage / Series / Story Intelligence (optionally directly to a character dossier). */
+  onOpenSeries?: (characterId?: string) => void;
 }
 
 function paneFor(tab?: string): Pane {
@@ -58,7 +62,7 @@ export function ProductionView(props: ProductionProps) {
   return <ProductionDocument key={props.document.id} {...props} />;
 }
 
-function ProductionDocument({ project, document, readOnly, onProjectChange, onOpenSource, onStatus, tab, onTabChange }: ProductionProps) {
+function ProductionDocument({ project, document, readOnly, onProjectChange, onOpenSource, onOpenSeries, onStatus, tab, onTabChange }: ProductionProps) {
   const plan = getProductionPlan(project, document.id);
   const snapshot = plan && releasedScript(project, document.id, plan.activeSnapshotId);
   const [localPane, setLocalPane] = useState<Pane>(() => paneFor(tab));
@@ -87,6 +91,7 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
   const [review, setReview] = useState<RevisionPreview>();
   const [error, setError] = useState('');
   const [synced, setSynced] = useState<BreakdownSummary>();
+  const [storyOpen, setStoryOpen] = useState(false);
   const issued = project.snapshots.filter(item => item.kind === 'issued' && item.document.id === document.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const otherReleases = issued.filter(item => item.id !== snapshot?.id);
   const episode = project.episodes.find(item => item.id === document.episodeId);
@@ -201,10 +206,20 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
         <Text type="inherit" color="inherit">{episode ? `S${episode.season}E${String(episode.number).padStart(2, '0')} · ${episode.title}` : document.title}</Text>
         {snapshot && <><Text type="inherit" color="inherit" aria-hidden="true"> · </Text><SourceButton source={sourceFor(project, snapshot.document)} onOpenSource={onOpenSource}>{snapshot.label}</SourceButton></>}
       </>}
-      actions={paneProps && pane === 'Stripboard' && <>
-        <Button label="Day out of days" onClick={() => chooseReport('Day out of days')} />
-        {!readOnly && <Button label="Export schedule" variant="primary" icon={<Glyph icon={Download} />} isDisabled={!plan?.strips.length}
-          onClick={() => plan && issueOutput('schedule', 'swdr-schedule.csv', scheduleCsv(project, plan))} />}
+      actions={<>
+        {isStoryProject(project) && (
+          <Button
+            label={storyWorkspaceTitle(project.kind)}
+            variant={storyOpen ? 'secondary' : 'ghost'}
+            icon={<Glyph icon={BookOpen} />}
+            onClick={() => setStoryOpen(open => !open)}
+          />
+        )}
+        {paneProps && pane === 'Stripboard' && <>
+          <Button label="Day out of days" onClick={() => chooseReport('Day out of days')} />
+          {!readOnly && <Button label="Export schedule" variant="primary" icon={<Glyph icon={Download} />} isDisabled={!plan?.strips.length}
+            onClick={() => plan && issueOutput('schedule', 'swdr-schedule.csv', scheduleCsv(project, plan))} />}
+        </>}
       </>} />
     {!paneProps && <Pane level={2} title="Release a script for production"
       description="Breakdown, shots and schedules reference an issued snapshot of the script. Issuing reads every scene, speaking role and location from it, with page counts from the page layout.">
@@ -264,6 +279,16 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
         if (changeProject(current => applyRevision(current, document.id, review.snapshot.id, review.previousSnapshotId, choices), 'Production revision applied.')) setReview(undefined);
       }}
     />}
+    {storyOpen && isStoryProject(project) && (
+      <StoryDrawer
+        project={project}
+        document={document}
+        docked
+        onOpenSource={onOpenSource}
+        onOpenSeries={onOpenSeries}
+        onClose={() => setStoryOpen(false)}
+      />
+    )}
   </VStack>;
 }
 

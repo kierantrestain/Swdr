@@ -72,3 +72,19 @@
   .shell-crumbs li > :is(a, button, span):last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .shell-crumbs li:nth-last-child(2) > [aria-hidden='true']:first-child, .shell-crumbs li:only-child > [aria-hidden='true']:first-child { display: none; }
 }
+
+/* Docked Story Intelligence companion sidebar used on Outline, Production and AV script workspaces. */
+.swdr-story-sidebar {
+  position: fixed;
+  top: 52px;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 92vw);
+  z-index: 30;
+  background: var(--color-background-surface);
+  border-left: 1px solid var(--color-border);
+  box-shadow: var(--shadow-high, -4px 0 24px rgba(21, 34, 43, .16));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+

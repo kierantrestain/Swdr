@@ -139,14 +139,22 @@
 .swdr-writing-focus .swdr-write-footer { background: var(--swdr-w-canvas); border-color: transparent; }
 .swdr-writing-focus .swdr-write-footer button { min-height: 27px; padding: 3px 7px; font-size: 12px; }
 
+.swdr-w-stage {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  overflow: hidden;
+}
+
 .swdr-w-drawer {
   position: absolute;
-  top: 52px;
-  bottom: 34px;
-  width: min(340px, 91vw);
+  top: 0;
+  bottom: 0;
+  width: min(350px, 91vw);
   z-index: 4;
   background: var(--swdr-w-chrome);
   border: 1px solid var(--swdr-w-line);
+  border-top: 0;
   box-shadow: 0 5px 20px rgba(21, 34, 43, .12);
   overflow: auto;
   overscroll-behavior: contain;
@@ -412,7 +420,6 @@
   .swdr-write-toolbar .swdr-w-quiet > span { display: none; }
   .swdr-write-save { font-size: 11px; margin-right: 2px; }
   .swdr-write-save svg { display: none; }
-  .swdr-w-drawer { top: 44px; }
   .swdr-manuscript-scroll { padding-inline: 4px; }
   .swdr-w-page { padding: 22px 13px 32px; }
   .swdr-beat-board { grid-template-columns: 1fr; }

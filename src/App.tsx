@@ -339,9 +339,14 @@ export function App() {
       onOpenSeries={isStoryProject(shared.project) ? (characterId?: string) => go({ view: 'story', projectId: shared.project.id, documentId: shared.document.id, character: characterId }) : undefined}
       toolbarEnd={<><AiPartner {...shared} mode="continue" /><ScriptTools {...shared} /><ExportActions {...shared} /></>} />
   </div>;
-  else if (route.view === 'outline' && shared) page = <OutlineView key={shared.project.id} {...shared} onSelectDocument={selectDocument} toolbarEnd={<AiPartner {...shared} mode="outline" />} />;
-  else if (route.view === 'av' && shared && hasRequestedRevision) page = <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} toolbarEnd={<><AiPartner {...shared} /><ExportActions {...shared} /></>} />;
-  else if (route.view === 'production' && shared) page = <ProductionView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} />;
+  else if (route.view === 'outline' && shared) page = <OutlineView key={shared.project.id} {...shared} onSelectDocument={selectDocument}
+    onOpenSeries={isStoryProject(shared.project) ? (characterId?: string) => go({ view: 'story', projectId: shared.project.id, documentId: shared.document.id, character: characterId }) : undefined}
+    toolbarEnd={<AiPartner {...shared} mode="outline" />} />;
+  else if (route.view === 'av' && shared && hasRequestedRevision) page = <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target}
+    onOpenSeries={isStoryProject(shared.project) ? (characterId?: string) => go({ view: 'story', projectId: shared.project.id, documentId: shared.document.id, character: characterId }) : undefined}
+    toolbarEnd={<><AiPartner {...shared} /><ExportActions {...shared} /></>} />;
+  else if (route.view === 'production' && shared) page = <ProductionView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab}
+    onOpenSeries={isStoryProject(shared.project) ? (characterId?: string) => go({ view: 'story', projectId: shared.project.id, documentId: shared.document.id, character: characterId }) : undefined} />;
   else if (route.view === 'story' && shared) page = <SeriesView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} characterId={route.character} onCharacterChange={setCharacter} />;
   else if (route.view === 'media' && shared) page = <MediaLibrary key={shared.project.id} {...shared} />;
   else if (route.view === 'creator' && shared) page = <CreatorStudio key={shared.project.id} {...shared} />;
@@ -404,13 +409,13 @@ function TeamDocument({ view }: { view: TeamRenderProps }) {
           view.onOpenSource(sourceFor(view.project, doc, { blockId: peer.blockId }));
         }} />
     </nav>
-    {currentMode === 'outline' ? <OutlineView key={view.document.id} {...props} />
+    {currentMode === 'outline' ? <OutlineView key={view.document.id} {...props} onOpenSeries={fullScope && isStoryProject(view.project) ? () => setMode('story') : undefined} />
       : currentMode === 'story' ? <SeriesView {...props} />
       : currentMode === 'editorial' ? <EditorialView key={view.document.id} {...props} />
-      : currentMode === 'production' ? <ProductionView key={view.document.id} {...props} />
+      : currentMode === 'production' ? <ProductionView key={view.document.id} {...props} onOpenSeries={fullScope && isStoryProject(view.project) ? () => setMode('story') : undefined} />
       : currentMode === 'creator' ? <CreatorStudio {...props} />
       : currentMode === 'media' ? <MediaLibrary {...props} />
-      : view.document.kind === 'av' ? <AVView key={view.document.id} {...props} target={view.selectedSource} toolbarEnd={exporter} />
+      : view.document.kind === 'av' ? <AVView key={view.document.id} {...props} target={view.selectedSource} toolbarEnd={exporter} onOpenSeries={fullScope && isStoryProject(view.project) ? () => setMode('story') : undefined} />
       : <div className="team-script-stage" id="main-content" ref={stage}><WritingView key={view.document.id} {...props}
         target={view.selectedSource} toolbarEnd={exporter} onOpenOutline={() => setMode('outline')}
         onOpenSeries={fullScope && isStoryProject(view.project) ? () => setMode('story') : undefined} />

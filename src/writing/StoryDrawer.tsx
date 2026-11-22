@@ -7,9 +7,11 @@ import { HStack } from '@astryxdesign/core/HStack';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { Link } from '@astryxdesign/core/Link';
 import { Text } from '@astryxdesign/core/Text';
+import { TextInput } from '@astryxdesign/core/TextInput';
 import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import { ArrowUpRight, BookOpen, HelpCircle, Sparkles, Users, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { DocumentModel, Project, SourceRef } from '../model';
 import { scriptDiscoveryPreview } from '../story/series-analysis';
 import { getStory, knowledgeStates, queryStory, relationshipStates, sortStory } from '../story/series-model';
@@ -19,18 +21,31 @@ import { Glyph } from '../story/StoryControls';
 import { CharacterAvatar, EpisodeChip, relationshipStyle } from '../story/StoryParts';
 
 /**
- * Spoiler-safe Story Intelligence companion drawer inside the script editor: keeps characters,
- * motivations, current relationships and open story questions right beside the manuscript pages
- * across Series, Film, Stage Play and Documentary projects.
+ * Spoiler-safe Story Intelligence companion sidebar across the script editor, outline,
+ * production and AV workspaces: keeps characters, motivations, current relationships and
+ * open story questions right beside the writer's pages.
  */
-export function StoryDrawer({ project, document, activeBlockId, onOpenSource, onOpenSeries, onClose }: {
+export function StoryDrawer({ project, document, activeBlockId, docked = false, onOpenSource, onOpenSeries, onClose }: {
   project: Project;
   document: DocumentModel;
   activeBlockId?: string;
+  /** When true, mounts as a fixed right-hand sidebar outside the manuscript editor (e.g. Outline or Production). */
+  docked?: boolean;
   onOpenSource: (source: SourceRef) => void;
   onOpenSeries?: (characterId?: string) => void;
   onClose: () => void;
 }) {
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (!docked) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [docked, onClose]);
+
   const store = getStory(project);
   const activeData = store.canon.at(-1)?.data ?? store.draft;
   const structure = storyStructure(project, document.id);
@@ -51,23 +66,33 @@ export function StoryDrawer({ project, document, activeBlockId, onOpenSource, on
   const currentPoints = sortStory(
     project,
     scoped.points.filter(point => structure.mode === 'episodic'
-      ? (!document.episodeId || point.source.episodeId === document.episodeId)
-      : (!activeSceneId || point.source.sceneId === activeSceneId)),
+      ? (Boolean(document.episodeId) && point.source.episodeId === document.episodeId)
+      : (Boolean(activeSceneId) && point.source.sceneId === activeSceneId)),
     'reveal'
   );
   const inCurrent = new Set(currentPoints.flatMap(point => point.participants));
   const sortedChars = [...scoped.characters].sort((a, b) => Number(inCurrent.has(b.id)) - Number(inCurrent.has(a.id)));
+  const needle = search.trim().toLocaleLowerCase('en-GB');
+  const visibleChars = needle
+    ? sortedChars.filter(person =>
+      [person.name, person.role, person.billing, person.motivation, ...person.aliases]
+        .some(value => value?.toLocaleLowerCase('en-GB').includes(needle))
+    )
+    : sortedChars;
 
   const workspaceTitle = structure.terms.workspaceTitle;
   const scopeLabel = structure.mode === 'episodic'
     ? (episode ? `Spoiler-safe as of ${episodeCode(episode)}` : 'Series bible')
     : activeSlot
       ? `Spoiler-safe as of ${activeSlot.actLabel} · Sc ${activeSlot.scene.number}`
-      : `${workspaceTitle} bible`;
+      : structure.terms.structureBadge;
   const currentBadgeLabel = structure.mode === 'episodic' ? 'In ep.' : 'In scene';
   const discovery = !activeData.characters.length ? scriptDiscoveryPreview(project, document.id) : undefined;
 
-  return <aside className="swdr-w-drawer swdr-w-context" aria-label={workspaceTitle}>
+  return <aside
+    className={docked ? 'swdr-story-sidebar' : 'swdr-w-drawer swdr-w-context'}
+    aria-label={workspaceTitle}
+  >
     <VStack gap={4} padding={4}>
       <HStack justify="between" align="center">
         <HStack gap={2} align="center">
@@ -102,9 +127,23 @@ export function StoryDrawer({ project, document, activeBlockId, onOpenSource, on
           </HStack>
           <Badge variant="neutral" label={String(sortedChars.length)} />
         </HStack>
-        {sortedChars.length > 0 ? <VStack gap={2}>
-          {sortedChars.slice(0, 6).map(person => {
+        {sortedChars.length > 4 && (
+          <TextInput
+            label="Filter characters"
+            isLabelHidden
+            size="sm"
+            type="search"
+            placeholder={`Filter ${sortedChars.length} characters…`}
+            value={search}
+            onChange={setSearch}
+          />
+        )}
+        {sortedChars.length > 0 ? (visibleChars.length > 0 ? <VStack gap={2}>
+          {visibleChars.map(person => {
             const ownRels = rels.filter(edge => edge.participants.includes(person.id));
+            const subtitle = [person.role, person.billing]
+              .filter((value, idx, list) => Boolean(value) && list.indexOf(value) === idx)
+              .join(' · ') || 'Character';
             return <Card key={person.id} variant="muted" padding={3}>
               <VStack gap={1.5} hAlign="start">
                 <HStack gap={2} align="center" justify="between" style={{ width: '100%' }}>
@@ -118,14 +157,14 @@ export function StoryDrawer({ project, document, activeBlockId, onOpenSource, on
                       ) : (
                         <Text weight="semibold" size="sm">{person.name}</Text>
                       )}
-                      <Text type="supporting" color="secondary" size="xsm" maxLines={1}>{person.role || 'Character'}</Text>
+                      <Text type="supporting" color="secondary" size="xsm" maxLines={1}>{subtitle}</Text>
                     </VStack>
                   </HStack>
                   {inCurrent.has(person.id) && <Token size="sm" color="blue" label={currentBadgeLabel} />}
                 </HStack>
                 {person.motivation && <Text type="supporting" color="secondary" size="xsm" maxLines={2}>{person.motivation}</Text>}
                 {ownRels.length > 0 && <HStack gap={1} wrap="wrap">
-                  {ownRels.slice(0, 2).map(edge => {
+                  {ownRels.slice(0, 3).map(edge => {
                     const otherId = edge.participants.find(id => id !== person.id);
                     const other = scoped.characters.find(item => item.id === otherId);
                     const state = edge.relationship ?? 'Trust';
@@ -140,7 +179,9 @@ export function StoryDrawer({ project, document, activeBlockId, onOpenSource, on
               </VStack>
             </Card>;
           })}
-        </VStack> : discovery && discovery.speakingRoles > 0 ? (
+        </VStack> : (
+          <Text type="supporting" color="secondary" size="xsm">No characters match “{search}”.</Text>
+        )) : discovery && discovery.speakingRoles > 0 ? (
           <Card variant="muted" padding={3}>
             <VStack gap={2} hAlign="start">
               <HStack gap={1.5} align="center">
@@ -176,7 +217,7 @@ export function StoryDrawer({ project, document, activeBlockId, onOpenSource, on
             <Badge variant="warning" label={String(openQuestions.length)} />
           </HStack>
           <VStack gap={1.5}>
-            {openQuestions.slice(0, 4).map(item => (
+            {openQuestions.map(item => (
               <Card key={item.id} variant="muted" padding={2}>
                 <VStack gap={1} hAlign="start">
                   <HStack gap={1.5} align="center" wrap="wrap">

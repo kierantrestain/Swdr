@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowDown, ArrowUp, GripVertical, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookOpen, GripVertical, Plus, X } from 'lucide-react';
 import { newBlock, newDocument, newId, sceneList, sourceFor } from '../model';
 import type { Beat, DocumentModel, SourceRef, WorkspaceViewProps } from '../model';
 import { PageHeader } from '../shell/PageHeader';
+import { isStoryProject, storyWorkspaceTitle } from '../story/story-profile';
+import { StoryDrawer } from './StoryDrawer';
 
 type Act = 1 | 2 | 3;
 type BoardBeat = Beat & { act?: Act; source?: SourceRef };
@@ -19,6 +21,8 @@ interface OutlineProps extends WorkspaceViewProps {
   saveLabel?: string;
   /** Called when the writer picks another episode here, so the app can open that episode's document. */
   onSelectDocument?: (documentId: string) => void;
+  /** Opens Story / Film / Stage / Series Intelligence (optionally straight into a character dossier). */
+  onOpenSeries?: (characterId?: string) => void;
 }
 
 function defaultAct(beat: BoardBeat, position: number, length: number): Act {
@@ -26,7 +30,7 @@ function defaultAct(beat: BoardBeat, position: number, length: number): Act {
   return position < Math.ceil(length / 3) ? 1 : position < Math.ceil(length * 2 / 3) ? 2 : 3;
 }
 
-export function OutlineView({ project, document, onProjectChange, onStatus, onOpenSource, readOnly, toolbarEnd, onSelectDocument }: OutlineProps) {
+export function OutlineView({ project, document, onProjectChange, onStatus, onOpenSource, readOnly, toolbarEnd, onSelectDocument, onOpenSeries }: OutlineProps) {
   const [episodeId, setEpisodeState] = useState(document.episodeId ?? '');
   const [shownDocument, setShownDocument] = useState(document.id);
   if (shownDocument !== document.id) {
@@ -42,6 +46,7 @@ export function OutlineView({ project, document, onProjectChange, onStatus, onOp
   const [view, setView] = useState<'board' | 'list' | 'scenes'>('board');
   const [expanded, setExpanded] = useState('');
   const [dragging, setDragging] = useState('');
+  const [storyOpen, setStoryOpen] = useState(false);
   const episode = project.episodes.find(item => item.id === episodeId);
   const seasons = useMemo(() => [...new Set(project.episodes.map(item => item.season))].sort((a, b) => a - b), [project.episodes]);
   const selected = episode ? project.documents.find(item => item.episodeId === episode.id && item.kind !== 'av') : document;
@@ -49,6 +54,7 @@ export function OutlineView({ project, document, onProjectChange, onStatus, onOp
   const beats = useMemo(() => (selected?.beats ?? []).map((beat: BoardBeat, index, all) => ({
     ...beat, act: defaultAct(beat, index, all.length)
   })), [selected?.beats]);
+  const storyTitle = storyWorkspaceTitle(project.kind);
 
   function edit(change: (working: DocumentModel) => DocumentModel) {
     if (readOnly || !selected) return;
@@ -121,6 +127,16 @@ export function OutlineView({ project, document, onProjectChange, onStatus, onOp
           {([['board', 'Beat board'], ['list', 'List'], ['scenes', 'Scenes']] as const).map(([key, label]) =>
             <button key={key} type="button" className={`swdr-w-button ${key === view ? 'swdr-w-current' : ''}`} aria-pressed={key === view} onClick={() => setView(key)}>{label}</button>)}
         </div>
+        {isStoryProject(project) && selected && (
+          <button
+            type="button"
+            className={`swdr-w-button ${storyOpen ? 'swdr-w-current' : ''}`}
+            aria-pressed={storyOpen}
+            onClick={() => setStoryOpen(open => !open)}
+          >
+            <BookOpen size={15} aria-hidden="true" /> {storyTitle}
+          </button>
+        )}
         {selected && <button type="button" className="swdr-w-button" onClick={() => openScript()}>Open script</button>}
         {toolbarEnd}
       </div>} />
@@ -192,5 +208,15 @@ export function OutlineView({ project, document, onProjectChange, onStatus, onOp
         {!readOnly && <button className="swdr-w-quiet swdr-beat-add" type="button" onClick={() => addBeat(act.id)}><Plus size={16} /> Add beat</button>}
       </section>)}
     </div>}
+    {storyOpen && isStoryProject(project) && selected && (
+      <StoryDrawer
+        project={project}
+        document={selected}
+        docked
+        onOpenSource={onOpenSource}
+        onOpenSeries={onOpenSeries}
+        onClose={() => setStoryOpen(false)}
+      />
+    )}
   </section>;
 }

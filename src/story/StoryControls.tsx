@@ -8,13 +8,14 @@ import { Heading } from '@astryxdesign/core/Heading';
 import { HStack } from '@astryxdesign/core/HStack';
 import { Icon } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
+import { Layout, LayoutContent, LayoutFooter } from '@astryxdesign/core/Layout';
 import { Link } from '@astryxdesign/core/Link';
 import { Selector } from '@astryxdesign/core/Selector';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
 import { useMediaQuery } from '@astryxdesign/core/hooks';
 import { ArrowUpRight, Link2, X } from 'lucide-react';
-import type { ComponentType, PropsWithChildren, ReactNode, SVGProps } from 'react';
+import type { ComponentType, KeyboardEvent, PropsWithChildren, ReactNode, SVGProps } from 'react';
 import { sceneList } from '../model';
 import type { DocumentModel, Project, SourceRef } from '../model';
 import { exactSource, sourceDocument, sourceLabel } from './source';
@@ -138,16 +139,44 @@ export function Empty({ title, description, action }: { title: string; descripti
   return <EmptyState title={title} description={description} actions={action} />;
 }
 
-/** Modal working surface for creating or editing story and editorial records. */
-export function StoryDialog({ title, subtitle, onClose, width = 640, children }: PropsWithChildren<{
+/** Modal working surface for creating or editing story and editorial records, with scrollable body, pinned footer, and Enter-to-submit. */
+export function StoryDialog({ title, subtitle, onClose, onSubmit, footer, width = 640, children }: PropsWithChildren<{
   title: string;
   subtitle?: string;
   onClose: () => void;
+  onSubmit?: () => void;
+  footer?: ReactNode;
   width?: number | string;
 }>) {
-  return <AstryxDialog isOpen onOpenChange={open => { if (!open) onClose(); }} width={width} maxHeight="90dvh" purpose="form">
-    <DialogHeader title={title} subtitle={subtitle} endContent={<IconButton variant="ghost" label="Close dialog" icon={<Glyph icon={X} />} onClick={onClose} />} />
-    <VStack gap={4} padding={5}>{children}</VStack>
+  function handleKeyDown(event: KeyboardEvent<HTMLFormElement>) {
+    if (!onSubmit || event.key !== 'Enter' || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey || event.nativeEvent.isComposing) return;
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    const tag = target.tagName;
+    if (tag === 'TEXTAREA' || tag === 'A' || tag === 'SELECT') return;
+    if (tag === 'BUTTON' && (target as HTMLButtonElement).type !== 'submit') return;
+    if (target.closest('[role="combobox"], [role="listbox"], [role="option"], [role="menu"]')) return;
+    event.preventDefault();
+    onSubmit();
+  }
+
+  const content = <Layout
+    defaultHasDividers
+    header={<DialogHeader title={title} subtitle={subtitle} hasDivider endContent={<IconButton variant="ghost" label="Close dialog" icon={<Glyph icon={X} />} onClick={onClose} />} />}
+    content={<LayoutContent><VStack gap={4} padding={1}>{children}</VStack></LayoutContent>}
+    footer={footer ? <LayoutFooter hasDivider>{footer}</LayoutFooter> : undefined}
+  />;
+
+  return <AstryxDialog isOpen onOpenChange={open => { if (!open) onClose(); }} width={width} maxHeight="88dvh" purpose="form">
+    {onSubmit ? (
+      <form
+        onSubmit={event => { event.preventDefault(); onSubmit(); }}
+        onKeyDown={handleKeyDown}
+        style={{ display: 'contents' }}
+      >
+        {content}
+      </form>
+    ) : content}
   </AstryxDialog>;
 }
 

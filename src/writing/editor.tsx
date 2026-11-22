@@ -646,8 +646,14 @@ export function WritingView(props: WritingProps) {
           onClick={() => { setFinder(previous => ({ ...previous, open: !previous.open })); requestAnimationFrame(() => globalThis.document.querySelector<HTMLInputElement>('#swdr-find-input')?.focus()); }} />
         <Button label="Scenes" variant={drawer === 'scenes' ? 'secondary' : 'ghost'} size="sm" icon={<List size={16} />} onClick={() => setDrawer(previous => previous === 'scenes' ? null : 'scenes')} />
         {isStoryProject(props.project) && (
-          <IconButton label="Story bible" tooltip={`${storyWorkspaceTitle(props.project.kind)} (characters & open questions)`} variant={drawer === 'story' ? 'secondary' : 'ghost'} size="sm" icon={<BookOpen size={16} />}
-            onClick={() => setDrawer(previous => previous === 'story' ? null : 'story')} />
+          <Button
+            label={storyWorkspaceTitle(props.project.kind)}
+            tooltip={`Open ${storyWorkspaceTitle(props.project.kind)} sidebar (characters, relationships & open questions)`}
+            variant={drawer === 'story' ? 'secondary' : 'ghost'}
+            size="sm"
+            icon={<BookOpen size={16} />}
+            onClick={() => setDrawer(previous => previous === 'story' ? null : 'story')}
+          />
         )}
         <IconButton label="Notes" tooltip="Draft notes, title page and revisions" variant={drawer === 'notes' ? 'secondary' : 'ghost'} size="sm" icon={<NotebookPen size={16} />} onClick={() => { setNotesSection(undefined); setDrawer(previous => previous === 'notes' ? null : 'notes'); }} />
         <span className="swdr-w-count-host">
@@ -675,72 +681,74 @@ export function WritingView(props: WritingProps) {
         <button type="button" className="swdr-w-quiet" aria-label="Close find" onClick={() => { setFinder(previous => ({ ...previous, open: false })); updateSearch(''); view.current?.focus(); }}><X size={15} aria-hidden="true" /></button>
       </div>}
 
-      <div ref={scroller} className={`swdr-manuscript-scroll ${compact ? 'swdr-compact' : ''}`} onScroll={onScroll} aria-label="Manuscript pages">
-        {titleSheet && <button type="button" className={`swdr-sheet swdr-title-sheet swdr-sheet-${document.paper}`} style={compact ? undefined : { zoom: zoom / 100 }}
-          aria-label="Title page. Edit title page details" onClick={() => { setNotesSection('title'); setDrawer('notes'); }}>
-          {titleSheet.lines.map((line, index) => <span key={index} className="swdr-title-line" style={{
-            left: `${line.x * PT}px`, top: `${(line.y - geometry.fontSize) * PT}px`, width: `${line.width * PT}px`, textAlign: line.align
-          }}>{line.text}</span>)}
-        </button>}
-        <div className={`swdr-sheet swdr-sheet-${document.paper}`} style={compact ? undefined : { zoom: zoom / 100 }}>
-          <div ref={mount} className="swdr-pm-mount" />
-        </div>
-        {popover && <ul className={`swdr-popover swdr-popover-${popover.mode}`} role="listbox" aria-label={popover.mode === 'elements' ? 'Element type' : 'Suggestions'}
-          style={{ left: popover.x, top: popover.y }} onMouseDown={event => event.preventDefault()}>
-          {popover.mode === 'elements' && <li className="swdr-popover-head" role="presentation">Element</li>}
-          {popover.items.map((item, index) => <li key={item.label} role="option" aria-selected={index === popover.index}
-            className={index === popover.index ? 'swdr-popover-on' : ''}
-            onMouseEnter={() => setPopover({ ...popover, index })}
-            onClick={() => view.current && accept(view.current, item)}>
-            <span>{item.label}</span>{item.hint && <kbd>{item.hint}</kbd>}
-          </li>)}
-          {popover.mode === 'suggest' && <li className="swdr-popover-foot" role="presentation">↵ or Tab to accept · Esc to dismiss</li>}
-        </ul>}
-      </div>
-
-      {!focused && drawer === 'scenes' && <aside className="swdr-w-drawer swdr-w-scenes" aria-label="Scenes">
-        <div className="swdr-w-drawer-head"><h2>Scenes <small>{scenes.length}</small></h2><button className="swdr-w-quiet" aria-label="Close scenes" onClick={() => setDrawer(null)}><X size={17} /></button></div>
-        {scenes.length ? <ol>{scenes.map(scene => <li key={scene.id}>
-          <button type="button" className={activeSceneOf(document.blocks, active.id) === scene.blockId ? 'swdr-scene-on' : ''} onClick={() => {
-            jump(scene.blockId);
-            setCaption(`Scene ${scene.number}`);
-            if (window.matchMedia('(max-width: 850px)').matches) setDrawer(null);
-          }}><small>{scene.number}</small><span>{scene.heading.toUpperCase() || 'Untitled scene'}</span></button>
-        </li>)}</ol> : <p>Add a scene heading to start the scene list.</p>}
-      </aside>}
-      {!focused && drawer === 'comments' && <aside className="swdr-w-drawer swdr-w-context swdr-w-comments" aria-label="Comments">
-        <div className="swdr-w-drawer-head"><h2>Comments <small>{openComments.length}</small></h2><button className="swdr-w-quiet" aria-label="Close comments" onClick={() => setDrawer(null)}><X size={17} /></button></div>
-        {!orderedComments.length && <p>Select words in the script and choose <strong>Add comment</strong> (<Kbd keys="mod+alt+m" />) to leave a note on that passage.</p>}
-        {orderedComments.length > openComments.length && <label className="swdr-w-check swdr-w-resolved-toggle"><input type="checkbox" checked={showResolved} onChange={event => setShowResolved(event.target.checked)} /> Show resolved ({orderedComments.length - openComments.length})</label>}
-        <ol className="swdr-comment-list">{orderedComments.filter(comment => showResolved || !comment.resolved).map(comment => <li key={comment.id}
-          className={`swdr-comment-card${comment.id === activeComment ? ' is-current' : ''}${comment.resolved ? ' is-resolved' : ''}`}>
-          <button type="button" className="swdr-comment-quote" onClick={() => showComment(comment)} aria-label={`Show passage: ${comment.quote}`}>
-            “{comment.quote.length > 120 ? comment.quote.slice(0, 117) + '…' : comment.quote}”
-            {comment.detached && <small> · passage deleted</small>}
-          </button>
-          <label className="swdr-sr" htmlFor={`comment-${comment.id}`}>Comment</label>
-          <textarea id={`comment-${comment.id}`} data-comment-editor={comment.id} rows={2} placeholder="Write a comment" value={comment.text} readOnly={readOnly}
-            onFocus={() => setActiveComment(comment.id)} onChange={event => updateComment(comment.id, { text: event.target.value })} />
-          <div className="swdr-comment-actions">
-            <small>{comment.author ?? 'You'} · {new Date(comment.createdAt).toLocaleDateString()}</small>
-            {!readOnly && <>
-              <Button label={comment.resolved ? 'Reopen' : 'Resolve'} variant="ghost" size="sm" onClick={() => updateComment(comment.id, { resolved: !comment.resolved })} />
-              <Button label="Delete" variant="ghost" size="sm" onClick={() => updateComment(comment.id, null)} />
-            </>}
+      <div className="swdr-w-stage">
+        <div ref={scroller} className={`swdr-manuscript-scroll ${compact ? 'swdr-compact' : ''}`} onScroll={onScroll} aria-label="Manuscript pages">
+          {titleSheet && <button type="button" className={`swdr-sheet swdr-title-sheet swdr-sheet-${document.paper}`} style={compact ? undefined : { zoom: zoom / 100 }}
+            aria-label="Title page. Edit title page details" onClick={() => { setNotesSection('title'); setDrawer('notes'); }}>
+            {titleSheet.lines.map((line, index) => <span key={index} className="swdr-title-line" style={{
+              left: `${line.x * PT}px`, top: `${(line.y - geometry.fontSize) * PT}px`, width: `${line.width * PT}px`, textAlign: line.align
+            }}>{line.text}</span>)}
+          </button>}
+          <div className={`swdr-sheet swdr-sheet-${document.paper}`} style={compact ? undefined : { zoom: zoom / 100 }}>
+            <div ref={mount} className="swdr-pm-mount" />
           </div>
-        </li>)}</ol>
-      </aside>}
-      {!focused && drawer === 'story' && isStoryProject(props.project) && (
-        <StoryDrawer
-          project={props.project}
-          document={document}
-          activeBlockId={active.id}
-          onOpenSource={props.onOpenSource}
-          onOpenSeries={props.onOpenSeries}
-          onClose={() => setDrawer(null)}
-        />
-      )}
-      {!focused && drawer === 'notes' && activeBlock && <WritingContext {...props} key={notesSection ?? 'notes'} section={notesSection} active={activeBlock} onClose={() => { setDrawer(null); setNotesSection(undefined); }} onDocumentChange={commit} onResetHistory={() => undefined} onPrint={print.requestPrint} />}
+          {popover && <ul className={`swdr-popover swdr-popover-${popover.mode}`} role="listbox" aria-label={popover.mode === 'elements' ? 'Element type' : 'Suggestions'}
+            style={{ left: popover.x, top: popover.y }} onMouseDown={event => event.preventDefault()}>
+            {popover.mode === 'elements' && <li className="swdr-popover-head" role="presentation">Element</li>}
+            {popover.items.map((item, index) => <li key={item.label} role="option" aria-selected={index === popover.index}
+              className={index === popover.index ? 'swdr-popover-on' : ''}
+              onMouseEnter={() => setPopover({ ...popover, index })}
+              onClick={() => view.current && accept(view.current, item)}>
+              <span>{item.label}</span>{item.hint && <kbd>{item.hint}</kbd>}
+            </li>)}
+            {popover.mode === 'suggest' && <li className="swdr-popover-foot" role="presentation">↵ or Tab to accept · Esc to dismiss</li>}
+          </ul>}
+        </div>
+
+        {!focused && drawer === 'scenes' && <aside className="swdr-w-drawer swdr-w-scenes" aria-label="Scenes">
+          <div className="swdr-w-drawer-head"><h2>Scenes <small>{scenes.length}</small></h2><button className="swdr-w-quiet" aria-label="Close scenes" onClick={() => setDrawer(null)}><X size={17} /></button></div>
+          {scenes.length ? <ol>{scenes.map(scene => <li key={scene.id}>
+            <button type="button" className={activeSceneOf(document.blocks, active.id) === scene.blockId ? 'swdr-scene-on' : ''} onClick={() => {
+              jump(scene.blockId);
+              setCaption(`Scene ${scene.number}`);
+              if (window.matchMedia('(max-width: 850px)').matches) setDrawer(null);
+            }}><small>{scene.number}</small><span>{scene.heading.toUpperCase() || 'Untitled scene'}</span></button>
+          </li>)}</ol> : <p>Add a scene heading to start the scene list.</p>}
+        </aside>}
+        {!focused && drawer === 'comments' && <aside className="swdr-w-drawer swdr-w-context swdr-w-comments" aria-label="Comments">
+          <div className="swdr-w-drawer-head"><h2>Comments <small>{openComments.length}</small></h2><button className="swdr-w-quiet" aria-label="Close comments" onClick={() => setDrawer(null)}><X size={17} /></button></div>
+          {!orderedComments.length && <p>Select words in the script and choose <strong>Add comment</strong> (<Kbd keys="mod+alt+m" />) to leave a note on that passage.</p>}
+          {orderedComments.length > openComments.length && <label className="swdr-w-check swdr-w-resolved-toggle"><input type="checkbox" checked={showResolved} onChange={event => setShowResolved(event.target.checked)} /> Show resolved ({orderedComments.length - openComments.length})</label>}
+          <ol className="swdr-comment-list">{orderedComments.filter(comment => showResolved || !comment.resolved).map(comment => <li key={comment.id}
+            className={`swdr-comment-card${comment.id === activeComment ? ' is-current' : ''}${comment.resolved ? ' is-resolved' : ''}`}>
+            <button type="button" className="swdr-comment-quote" onClick={() => showComment(comment)} aria-label={`Show passage: ${comment.quote}`}>
+              “{comment.quote.length > 120 ? comment.quote.slice(0, 117) + '…' : comment.quote}”
+              {comment.detached && <small> · passage deleted</small>}
+            </button>
+            <label className="swdr-sr" htmlFor={`comment-${comment.id}`}>Comment</label>
+            <textarea id={`comment-${comment.id}`} data-comment-editor={comment.id} rows={2} placeholder="Write a comment" value={comment.text} readOnly={readOnly}
+              onFocus={() => setActiveComment(comment.id)} onChange={event => updateComment(comment.id, { text: event.target.value })} />
+            <div className="swdr-comment-actions">
+              <small>{comment.author ?? 'You'} · {new Date(comment.createdAt).toLocaleDateString()}</small>
+              {!readOnly && <>
+                <Button label={comment.resolved ? 'Reopen' : 'Resolve'} variant="ghost" size="sm" onClick={() => updateComment(comment.id, { resolved: !comment.resolved })} />
+                <Button label="Delete" variant="ghost" size="sm" onClick={() => updateComment(comment.id, null)} />
+              </>}
+            </div>
+          </li>)}</ol>
+        </aside>}
+        {!focused && drawer === 'story' && isStoryProject(props.project) && (
+          <StoryDrawer
+            project={props.project}
+            document={document}
+            activeBlockId={active.id}
+            onOpenSource={props.onOpenSource}
+            onOpenSeries={props.onOpenSeries}
+            onClose={() => setDrawer(null)}
+          />
+        )}
+        {!focused && drawer === 'notes' && activeBlock && <WritingContext {...props} key={notesSection ?? 'notes'} section={notesSection} active={activeBlock} onClose={() => { setDrawer(null); setNotesSection(undefined); }} onDocumentChange={commit} onResetHistory={() => undefined} onPrint={print.requestPrint} />}
+      </div>
 
       <footer className="swdr-write-footer">
         <span className="swdr-w-page-control"><span>Page {Math.min(page, pageCount) || 1} of {pageCount || 1}</span><span aria-hidden="true">·</span><span className="swdr-w-words">{words.toLocaleString()} words</span><span aria-hidden="true">·</span><span className="swdr-w-element-name">{ELEMENTS[active.kind]?.label}</span></span>

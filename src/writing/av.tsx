@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, Clock3, Image, Plus, Printer, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookOpen, ChevronDown, Clock3, Image, Plus, Printer, Trash2 } from 'lucide-react';
 import { newId } from '../model';
 import type { Asset, AVRow, SourceRef, WorkspaceViewProps } from '../model';
 import { timedRows, timingLabel } from './av-timing';
 import { useScriptPrint } from './print';
 import { PageHeader } from '../shell/PageHeader';
+import { isStoryProject, storyWorkspaceTitle } from '../story/story-profile';
+import { StoryDrawer } from './StoryDrawer';
 
 interface AVProps extends WorkspaceViewProps {
   target?: SourceRef;
   toolbarEnd?: ReactNode;
   saveLabel?: string;
+  onOpenSeries?: (characterId?: string) => void;
 }
 
 const imageTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif']);
@@ -29,8 +32,9 @@ function readImage(file: File): Promise<string> {
   });
 }
 
-export function AVView({ document, project, onStatus, onDocumentChange, onProjectChange, readOnly, toolbarEnd, saveLabel, target }: AVProps) {
+export function AVView({ document, project, onStatus, onDocumentChange, onProjectChange, onOpenSource, onOpenSeries, readOnly, toolbarEnd, saveLabel, target }: AVProps) {
   const [storyboard, setStoryboard] = useState(false);
+  const [storyOpen, setStoryOpen] = useState(false);
   const [rowActions, setRowActions] = useState('');
   const timing = timedRows(document.avRows);
   const print = useScriptPrint(document);
@@ -95,6 +99,11 @@ export function AVView({ document, project, onStatus, onDocumentChange, onProjec
     <PageHeader className="swdr-w-pagehead" title="AV script" subtitle={`${document.title}${document.revisionLabel ? ` · ${document.revisionLabel}` : ''}`}
       actions={<div className="swdr-w-tools">
         {saveLabel && <span className="swdr-av-save">{saveLabel}</span>}
+        {isStoryProject(project) && (
+          <button type="button" className={`swdr-w-button ${storyOpen ? 'swdr-w-current' : ''}`} aria-pressed={storyOpen} onClick={() => setStoryOpen(value => !value)}>
+            <BookOpen size={15} aria-hidden="true" /> {storyWorkspaceTitle(project.kind)}
+          </button>
+        )}
         <button type="button" className={`swdr-w-button ${storyboard ? 'swdr-w-current' : ''}`} aria-pressed={storyboard} onClick={() => setStoryboard(value => !value)}><Image size={16} aria-hidden="true" /> Storyboard</button>
         {toolbarEnd || <button type="button" className="swdr-w-button" onClick={print.requestPrint}><Printer size={15} aria-hidden="true" /> Print</button>}
       </div>} />
@@ -164,5 +173,15 @@ export function AVView({ document, project, onStatus, onDocumentChange, onProjec
       <strong><Clock3 size={16} aria-hidden="true" /> Runtime {timingLabel(timing.durationSeconds)}</strong>
     </footer>
     {print.output}
+    {storyOpen && isStoryProject(project) && (
+      <StoryDrawer
+        project={project}
+        document={document}
+        docked
+        onOpenSource={onOpenSource}
+        onOpenSeries={onOpenSeries}
+        onClose={() => setStoryOpen(false)}
+      />
+    )}
   </section>;
 }
