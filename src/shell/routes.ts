@@ -27,7 +27,10 @@ export function parseRoute(location: Pick<Location, 'hash' | 'pathname'> = windo
   const [path, query = ''] = location.hash.slice(1).split('?');
   if (path.startsWith('review=')) return { view: 'review', reviewKey: path.slice('review='.length) };
   if (path === 'team' || (!path && location.pathname === '/team')) return { view: 'team' };
-  if (path === 'import') return { view: 'import' };
+  if (path === 'import') {
+    const params = new URLSearchParams(query);
+    return { view: 'import', tab: params.get('tab') ?? undefined };
+  }
   const [prefix, projectId, view, documentId] = path.split('/');
   if (prefix !== 'p' || !projectId || !projectViews.has(view as Destination)) return { view: 'home' };
   const params = new URLSearchParams(query);
@@ -40,7 +43,12 @@ export function parseRoute(location: Pick<Location, 'hash' | 'pathname'> = windo
 
 export function encodeRoute(route: Route): string {
   if (route.view === 'review') return `#review=${route.reviewKey ?? ''}`;
-  if (!route.projectId) return route.view === 'home' ? '#home' : `#${route.view}`;
+  if (!route.projectId) {
+    if (route.view === 'home') return '#home';
+    const params = new URLSearchParams();
+    if (route.tab) params.set('tab', route.tab);
+    return `#${route.view}${params.size ? `?${params}` : ''}`;
+  }
   const params = new URLSearchParams();
   if (route.revisionId) params.set('rev', route.revisionId);
   if (route.sceneId) params.set('scene', route.sceneId);

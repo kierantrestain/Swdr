@@ -1,16 +1,19 @@
 import { Button } from '@astryxdesign/core/Button';
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
 import { EmptyState } from '@astryxdesign/core/EmptyState';
 import { Heading } from '@astryxdesign/core/Heading';
+import { HStack } from '@astryxdesign/core/HStack';
 import { Kbd } from '@astryxdesign/core/Kbd';
 import { Layout, LayoutContent, LayoutFooter } from '@astryxdesign/core/Layout';
+import { NumberInput } from '@astryxdesign/core/NumberInput';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { Selector } from '@astryxdesign/core/Selector';
 import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from '@astryxdesign/core/Table';
 import { Text } from '@astryxdesign/core/Text';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { TextInput } from '@astryxdesign/core/TextInput';
-import { ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Clapperboard, FileText, FolderOpen, Mic, Plus, Search, ShieldCheck, Sparkles, Theater, Tv, Video } from 'lucide-react';
+import { ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Clapperboard, FileText, FolderOpen, Layers, Mic, Plus, Search, ShieldCheck, Sparkles, Theater, Tv, Video } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { PROJECT_KINDS } from './model';
@@ -19,6 +22,7 @@ import { episodeLabel } from './demo';
 import { Welcome, welcomeSeen } from './Welcome';
 import { PlansDialog, PRO_PRICE } from './workspace/plans';
 import { accountApi } from './workspace/account-api';
+import type { SeriesScaffoldOptions } from './workspace/project';
 import type { TeamAccount } from './workspace/team-contract';
 
 /** The plans dialog with the visitor's account when they are signed in. */
@@ -52,8 +56,9 @@ interface HomeProps {
   recent?: { project: Project; document: DocumentModel };
   open: (project: Project) => void;
   resume: (project: Project, document: DocumentModel) => void;
-  create: (title: string, kind: ProjectKind, synopsis: string) => void;
+  create: (title: string, kind: ProjectKind, synopsis: string, seriesPlan?: SeriesScaffoldOptions) => void;
   importScript: () => void;
+  uploadSeries?: () => void;
   loadDemo: () => void;
   restoreArchived: (id: string) => void;
   openTeam: () => void;
@@ -65,7 +70,8 @@ function projectDetail(project: Project): string {
     const seasons = new Set(project.episodes.map(episode => episode.season)).size;
     return `${seasons} season${seasons === 1 ? '' : 's'} · ${project.episodes.length} episode${project.episodes.length === 1 ? '' : 's'}`;
   }
-  return `${project.documents.length} document${project.documents.length === 1 ? '' : 's'}`;
+  const folderCount = project.folders?.length ?? 0;
+  return `${project.documents.length} document${project.documents.length === 1 ? '' : 's'}${folderCount ? ` · ${folderCount} folder${folderCount === 1 ? '' : 's'}` : ''}`;
 }
 
 function formatEdited(date: string): string {
@@ -95,21 +101,55 @@ function NewProjectDialog({ initialKind, onClose, create }: { initialKind: Proje
   const [title, setTitle] = useState('');
   const [kind, setKind] = useState<ProjectKind>(initialKind);
   const [synopsis, setSynopsis] = useState('');
+  const [seasons, setSeasons] = useState(1);
+  const [episodesPerSeason, setEpisodesPerSeason] = useState(1);
+  const [folderPerSeason, setFolderPerSeason] = useState(false);
+  const episodicKind = kind === 'series' || kind === 'documentary';
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!title.trim()) return;
-    create(title.trim(), kind, synopsis.trim());
+    create(
+      title.trim(),
+      kind,
+      synopsis.trim(),
+      episodicKind ? { seasons, episodesPerSeason, folderPerSeason } : undefined
+    );
     onClose();
   }
-  return <Dialog isOpen onOpenChange={open => { if (!open) onClose(); }} width={480} purpose="form">
+  return <Dialog isOpen onOpenChange={open => { if (!open) onClose(); }} width={500} maxHeight="88dvh" purpose="form">
     <form onSubmit={submit} className="home-dialog-form">
       <Layout
-        header={<DialogHeader title="New project" subtitle="Choose a format. You can add episodes and documents later." onOpenChange={open => { if (!open) onClose(); }} />}
+        header={<DialogHeader title="New project" subtitle="Choose a format. You can add seasons, episodes and folders at any time." onOpenChange={open => { if (!open) onClose(); }} />}
         content={<LayoutContent>
           <div className="shell-form-stack">
             <TextInput label="Title" value={title} onChange={setTitle} placeholder="Project title" isRequired />
             <Selector label="Format" value={kind} onChange={value => setKind(value as ProjectKind)}
               options={PROJECT_KINDS.map(item => ({ value: item, label: PROJECT_LABELS[item], description: TEMPLATES[item] }))} />
+            {episodicKind && <>
+              <HStack gap={3} wrap="wrap">
+                <NumberInput label="Seasons" value={seasons} min={1} max={10} onChange={value => setSeasons(Math.max(1, Number(value) || 1))} />
+                <NumberInput label="Episodes per season" value={episodesPerSeason} min={1} max={24} onChange={value => setEpisodesPerSeason(Math.max(1, Number(value) || 1))} />
+              </HStack>
+              <HStack gap={1} align="center" wrap="wrap">
+                <Text type="supporting" color="secondary" size="xsm">Quick season size:</Text>
+                {[1, 6, 8, 10, 12].map(preset => (
+                  <Button
+                    key={preset}
+                    size="sm"
+                    variant={episodesPerSeason === preset ? 'secondary' : 'ghost'}
+                    label={preset === 1 ? '1 ep' : `${preset} eps`}
+                    onClick={() => setEpisodesPerSeason(preset)}
+                  />
+                ))}
+              </HStack>
+              <CheckboxInput
+                label="Create a folder for each season"
+                description={`Keeps ${seasons > 1 ? `Season 1–${seasons}` : 'Season 1'} scripts grouped cleanly in your project binder.`}
+                value={folderPerSeason}
+                onChange={setFolderPerSeason}
+              />
+            </>}
             <TextArea label="Synopsis" value={synopsis} onChange={setSynopsis} isOptional />
           </div>
         </LayoutContent>}
@@ -124,7 +164,7 @@ function NewProjectDialog({ initialKind, onClose, create }: { initialKind: Proje
   </Dialog>;
 }
 
-export function Home({ projects, recent, open, resume, create, importScript, loadDemo, restoreArchived, openTeam, openPalette }: HomeProps) {
+export function Home({ projects, recent, open, resume, create, importScript, uploadSeries, loadDemo, restoreArchived, openTeam, openPalette }: HomeProps) {
   const [tab, setTab] = useState<LibraryTab>('recent');
   const [query, setQuery] = useState('');
   const [newKind, setNewKind] = useState<ProjectKind>();
@@ -146,6 +186,7 @@ export function Home({ projects, recent, open, resume, create, importScript, loa
       </div>
       <div className="page-actions">
         <Button label="Import script" icon={<ArrowDownToLine size={16} aria-hidden="true" />} onClick={importScript} />
+        {uploadSeries && <Button label="Upload series" icon={<Layers size={16} aria-hidden="true" />} onClick={uploadSeries} />}
         <Button label="New project" variant="primary" icon={<Plus size={16} aria-hidden="true" />} onClick={() => setNewKind('film')} />
       </div>
     </header>

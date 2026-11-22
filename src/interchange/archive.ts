@@ -150,7 +150,19 @@ export function importArchive(data: Uint8Array): Project {
     string(episode.title, 'episode title');
     string(episode.synopsis, 'episode synopsis');
   });
-  uniqueIds(list(project.documents, 5000), document => validateDocument(document, episodes, assets));
+  const folders = project.folders !== undefined
+    ? uniqueIds(list(project.folders, 500), folder => {
+      string(folder.name, 'folder name');
+      if (typeof folder.order !== 'number' || !Number.isFinite(folder.order)) throw new Error('The archive contains an invalid folder order.');
+    })
+    : undefined;
+  uniqueIds(list(project.documents, 5000), document => {
+    validateDocument(document, episodes, assets);
+    if (document.folderId !== undefined) {
+      const fid = opaqueId(document.folderId);
+      if (folders && !folders.has(fid)) throw new Error('A document links to a missing folder.');
+    }
+  });
   uniqueIds(list(project.snapshots, 5000), snapshot => {
     acceptKind(snapshot.kind, ['draft', 'issued', 'stash'], 'snapshot type');
     string(snapshot.createdAt, 'snapshot date');

@@ -1,18 +1,48 @@
 import { newDocument, newId } from '../model';
-import type { DocumentModel, Project, ProjectKind, Snapshot, SourceRef } from '../model';
+import type { DocumentModel, Episode, Project, ProjectKind, ScriptFolder, Snapshot, SourceRef } from '../model';
 
-export function createProject(title: string, kind: ProjectKind, synopsis = ''): Project {
+export interface SeriesScaffoldOptions {
+  seasons?: number;
+  episodesPerSeason?: number;
+  folderPerSeason?: boolean;
+}
+
+export function createProject(title: string, kind: ProjectKind, synopsis = '', seriesPlan?: SeriesScaffoldOptions): Project {
   const now = new Date().toISOString();
   const cleanTitle = title.trim() || 'Untitled project';
-  const episode = kind === 'series' ? { id: newId(), season: 1, number: 1, title: 'Episode 1', synopsis: '' } : undefined;
-  const document = newDocument(
-    episode?.title ?? cleanTitle,
-    kind === 'commercial' || kind === 'creator' ? 'av' : kind === 'stage' ? 'stageplay' : 'screenplay',
-    episode?.id
-  );
+  const docKind = kind === 'commercial' || kind === 'creator' ? 'av' : kind === 'stage' ? 'stageplay' : 'screenplay';
+
+  if (kind === 'series' || (kind === 'documentary' && seriesPlan && ((seriesPlan.seasons ?? 1) > 1 || (seriesPlan.episodesPerSeason ?? 1) > 1))) {
+    const seasonCount = Math.max(1, Math.min(20, Math.round(seriesPlan?.seasons ?? 1)));
+    const epCount = Math.max(1, Math.min(30, Math.round(seriesPlan?.episodesPerSeason ?? 1)));
+    const episodes: Episode[] = [];
+    const documents: DocumentModel[] = [];
+    const folders: ScriptFolder[] = [];
+
+    for (let s = 1; s <= seasonCount; s += 1) {
+      let folderId: string | undefined;
+      if (seriesPlan?.folderPerSeason) {
+        const folder: ScriptFolder = { id: newId(), name: `Season ${s}`, order: s - 1 };
+        folders.push(folder);
+        folderId = folder.id;
+      }
+      for (let e = 1; e <= epCount; e += 1) {
+        const epTitle = `Episode ${e}`;
+        const episode: Episode = { id: newId(), season: s, number: e, title: epTitle, synopsis: '' };
+        episodes.push(episode);
+        documents.push({ ...newDocument(epTitle, docKind, episode.id), ...(folderId ? { folderId } : {}) });
+      }
+    }
+    return {
+      id: newId(), title: cleanTitle, kind, synopsis, createdAt: now, updatedAt: now,
+      episodes, ...(folders.length ? { folders } : {}), documents, snapshots: [], assets: [], modules: {}
+    };
+  }
+
+  const document = newDocument(cleanTitle, docKind);
   return {
     id: newId(), title: cleanTitle, kind, synopsis, createdAt: now, updatedAt: now,
-    episodes: episode ? [episode] : [], documents: [document], snapshots: [], assets: [], modules: {}
+    episodes: [], documents: [document], snapshots: [], assets: [], modules: {}
   };
 }
 

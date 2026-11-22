@@ -69,9 +69,16 @@ export interface ScriptComment {
   detached?: boolean;
 }
 
+export interface ScriptFolder {
+  id: string;
+  name: string;
+  order: number;
+}
+
 export interface DocumentModel {
   id: string;
   episodeId?: string;
+  folderId?: string;
   title: string;
   kind: DocumentKind;
   paper: Paper;
@@ -129,6 +136,7 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   episodes: Episode[];
+  folders?: ScriptFolder[];
   documents: DocumentModel[];
   snapshots: Snapshot[];
   assets: Asset[];

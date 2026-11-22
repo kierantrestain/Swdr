@@ -9,12 +9,15 @@ import { createDemoProjects } from './demo';
 import type { Asset, DocumentModel, Project, ProjectKind, SourceRef, WorkspaceViewProps } from './model';
 import { sourceFor } from './model';
 import { createProject, resolveSource, snapshotDocument, useWorkspace } from './workspace';
+import type { SeriesScaffoldOptions } from './workspace/project';
+import { applyBatchImport, assignDocumentEpisode, createFolder, moveDocumentToFolder, orderedFolders } from './workspace/organize';
 import { AVView, OutlineView, WritingView } from './writing';
 import type { TeamRenderProps } from './workspace/team-ui';
 import { PresenceBar, RemoteCursors, usePresence } from './workspace/presence';
 import { ScriptTools } from './ScriptTools';
 import { AiPartner } from './ai/AiPartner';
 import { ExportActions } from './interchange';
+import type { SeriesBatchPayload, SingleImportOptions } from './interchange/import-view';
 
 // Pages people open less often load on demand, so the first screen arrives quickly. The service worker
 // still precaches every chunk, so they open offline too.
@@ -149,9 +152,10 @@ export function App() {
     openProject(project, document.kind === 'av' ? 'av' : project.kind === 'documentary' && document.episodeId ? 'editorial' : 'write', document);
   }
 
-  function create(title: string, kind: ProjectKind, synopsis: string) {
-    const project = saveProject(createProject(title, kind, synopsis));
-    openProject(project, kind === 'creator' ? 'creator' : kind === 'commercial' ? 'av' : kind === 'documentary' ? 'editorial' : 'write');
+  function create(title: string, kind: ProjectKind, synopsis: string, seriesPlan?: SeriesScaffoldOptions) {
+    const project = saveProject(createProject(title, kind, synopsis, seriesPlan));
+    const multiEpisode = project.documents.length > 1;
+    openProject(project, multiEpisode ? 'project' : kind === 'creator' ? 'creator' : kind === 'commercial' ? 'av' : kind === 'documentary' ? 'editorial' : 'write');
   }
 
   const openSource = useCallback((source: SourceRef) => {
@@ -233,17 +237,39 @@ export function App() {
     }
   }, !focus);
 
-  function commitIntake(imported: DocumentModel, file: Asset, previous?: DocumentModel, related: Asset[] = [], batch?: { remaining: number }) {
+  function commitIntake(imported: DocumentModel, file: Asset, previous?: DocumentModel, related: Asset[] = [], batch?: SingleImportOptions) {
     const track = (project: Project, replace: boolean): Project => {
       const priorSources = Array.isArray(project.modules.imports) ? project.modules.imports : [];
       const assets = new Map(project.assets.map(asset => [asset.id, asset]));
       for (const asset of [file, ...related]) assets.set(asset.id, asset);
       const previousRevision = previous?.revisionId;
-      return { ...project, assets: [...assets.values()],
+      let nextProject: Project = { ...project, assets: [...assets.values()],
         documents: replace ? project.documents.map(item => item.id === imported.id ? imported : item) : [...project.documents, imported],
         modules: { ...project.modules, imports: [...priorSources, { documentId: imported.id, revisionId: imported.revisionId,
           assetId: file.id, previousRevision, receivedAt: new Date().toISOString() }] }
       };
+      if (!replace && batch) {
+        let folderId = batch.folderId;
+        if (batch.newFolderName?.trim()) {
+          const trimmed = batch.newFolderName.trim();
+          const existing = orderedFolders(nextProject).find(item => item.name.toLocaleLowerCase('en-GB') === trimmed.toLocaleLowerCase('en-GB'));
+          if (existing) folderId = existing.id;
+          else {
+            const created = createFolder(nextProject, trimmed);
+            nextProject = created.project;
+            folderId = created.folder.id;
+          }
+        }
+        if (folderId) nextProject = moveDocumentToFolder(nextProject, imported.id, folderId);
+        if (batch.episode) {
+          nextProject = assignDocumentEpisode(nextProject, imported.id, {
+            season: batch.episode.season,
+            number: batch.episode.number,
+            title: imported.title
+          });
+        }
+      }
+      return nextProject;
     };
     let updated: Project | undefined;
     if (active) {
@@ -261,7 +287,35 @@ export function App() {
       updated = saveProject(track({ ...base, documents: [] }, false));
     }
     if (!updated) throw new Error('The destination project is unavailable.');
-    if (!batch?.remaining) resume(updated, imported);
+    const savedDoc = updated.documents.find(item => item.id === imported.id) ?? imported;
+    if (!batch?.remaining) resume(updated, savedDoc);
+  }
+
+  function commitBatchIntake(payload: SeriesBatchPayload) {
+    let updated: Project | undefined;
+    let firstDoc: DocumentModel | undefined;
+    const options = {
+      folderId: payload.folderId,
+      newFolderName: payload.newFolderName,
+      folderPerSeason: payload.folderPerSeason
+    };
+    if (payload.destination === 'existing' && payload.targetProjectId) {
+      updated = updateProject(payload.targetProjectId, current => {
+        const applied = applyBatchImport(current, payload.entries, options);
+        firstDoc = applied.documents[0];
+        return applied.project;
+      });
+    } else {
+      const base = createProject(payload.projectTitle, payload.projectKind);
+      const applied = applyBatchImport(base, payload.entries, { ...options, replaceEmptyPlaceholder: true });
+      firstDoc = applied.documents[0];
+      updated = saveProject(applied.project);
+    }
+    if (!updated) throw new Error('The destination project is unavailable.');
+    const episodeCount = payload.entries.filter(item => item.asEpisode).length;
+    const unit = episodeCount === payload.entries.length ? 'episode' : 'script';
+    setMessage(`Imported ${payload.entries.length} ${unit}${payload.entries.length === 1 ? '' : 's'} into ${updated.title}.`);
+    openProject(updated, 'project', firstDoc);
   }
 
   function restoreArchive(project: Project, batch?: { remaining: number }) {
@@ -308,6 +362,7 @@ export function App() {
   const actions = useMemo<CommandAction[]>(() => [
     { id: 'action-home', label: 'All projects', auxiliaryData: { group: 'Actions', keys: 'g h', run: () => go({ view: 'home' }) } },
     { id: 'action-import', label: 'Import a script or project archive', auxiliaryData: { group: 'Actions', run: () => go(active ? { view: 'import', projectId: active.id, documentId: head?.id } : { view: 'import' }) } },
+    { id: 'action-upload-series', label: 'Upload a series or batch of scripts', auxiliaryData: { group: 'Actions', run: () => go(active ? { view: 'import', projectId: active.id, documentId: head?.id, tab: 'series' } : { view: 'import', tab: 'series' }) } },
     { id: 'action-shortcuts', label: 'Keyboard shortcuts', auxiliaryData: { group: 'Actions', keys: '?', run: () => setShortcuts(true) } },
     { id: 'action-sidebar', label: collapsed ? 'Show the project sidebar' : 'Hide the project sidebar', auxiliaryData: { group: 'Actions', keys: 'mod+\\', run: () => setCollapsed(!collapsed) } },
     { id: 'action-appearance', label: mode === 'dark' ? 'Use light appearance' : 'Use dark appearance', auxiliaryData: { group: 'Actions', run: () => setMode(mode === 'dark' ? 'light' : 'dark') } },
@@ -324,14 +379,20 @@ export function App() {
       : <p><LoaderCircle size={15} className="spinner" /> Opening local workspace</p>}</div>
   </div>;
   else if (route.view === 'home') page = <Home projects={projects} recent={recentProject && recentDocument ? { project: recentProject, document: recentDocument } : undefined}
-    open={openProject} resume={resume} create={create} importScript={() => go({ view: 'import' })} loadDemo={loadDemo}
+    open={openProject} resume={resume} create={create} importScript={() => go({ view: 'import' })}
+    uploadSeries={() => go({ view: 'import', tab: 'series' })} loadDemo={loadDemo}
     restoreArchived={id => { updateProject(id, project => ({ ...project, archivedAt: undefined })); setMessage('Project restored.'); }}
     openTeam={() => go({ view: 'team' })} openPalette={() => setPalette(true)} />;
   else if (route.view === 'project' && active) page = <ProjectView key={active.id} project={active} current={head}
-    open={(view, doc) => openProject(active, view, doc ?? head)}
+    open={(view, doc, tab) => {
+      const opening = doc ?? head ?? active.documents[0];
+      remember(active, view, opening);
+      go({ projectId: active.id, documentId: opening?.id, view, tab });
+    }}
     update={update => { updateProject(active.id, update); }}
     archive={() => { updateProject(active.id, project => ({ ...project, archivedAt: new Date().toISOString() })); go({ view: 'home' }); setMessage('Project moved to the archive.'); }} />;
-  else if (route.view === 'import') page = <ImportView project={active} document={head} onImportDocument={commitIntake} onRestoreProject={restoreArchive}
+  else if (route.view === 'import') page = <ImportView project={active} projects={projects.filter(item => !item.archivedAt)} document={head}
+    initialTab={route.tab} onImportDocument={commitIntake} onImportBatch={commitBatchIntake} onRestoreProject={restoreArchive}
     onStatus={setMessage} onCancel={() => active ? openProject(active, 'project', head) : goHome()} />;
   else if (route.view === 'write' && shared && hasRequestedRevision) page = <div className="script-stage" id="main-content">
     <WritingView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} onFocusChange={setFocus}
