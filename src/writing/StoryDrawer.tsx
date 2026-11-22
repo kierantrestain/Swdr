@@ -11,10 +11,10 @@ import { TextInput } from '@astryxdesign/core/TextInput';
 import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import { ArrowUpRight, BookOpen, HelpCircle, Sparkles, Users, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DocumentModel, Project, SourceRef } from '../model';
-import { scriptDiscoveryPreview } from '../story/series-analysis';
-import { getStory, knowledgeStates, queryStory, relationshipStates, sortStory } from '../story/series-model';
+import { characterConnections, scriptDiscoveryPreview } from '../story/series-analysis';
+import { getStory, knowledgeStates, queryStory, sortStory } from '../story/series-model';
 import { episodeCode, exactSource, orderedEpisodes } from '../story/source';
 import { storyStructure } from '../story/story-profile';
 import { Glyph } from '../story/StoryControls';
@@ -22,8 +22,8 @@ import { CharacterAvatar, EpisodeChip, relationshipStyle } from '../story/StoryP
 
 /**
  * Spoiler-safe Story Intelligence companion sidebar across the script editor, outline,
- * production and AV workspaces: keeps characters, motivations, current relationships and
- * open story questions right beside the writer's pages.
+ * production and AV workspaces: keeps characters, motivations, everyone they interact with,
+ * relationship types and open story questions right beside the writer's pages.
  */
 export function StoryDrawer({ project, document, activeBlockId, docked = false, onOpenSource, onOpenSeries, onClose }: {
   project: Project;
@@ -36,6 +36,7 @@ export function StoryDrawer({ project, document, activeBlockId, docked = false, 
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
+  const [expandedChars, setExpandedChars] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!docked) return;
@@ -46,32 +47,56 @@ export function StoryDrawer({ project, document, activeBlockId, docked = false, 
     return () => window.removeEventListener('keydown', onKey);
   }, [docked, onClose]);
 
-  const store = getStory(project);
+  const store = useMemo(() => getStory(project), [project]);
   const activeData = store.canon.at(-1)?.data ?? store.draft;
-  const structure = storyStructure(project, document.id);
-  const episode = structure.mode === 'episodic'
-    ? orderedEpisodes(project).find(item => item.id === document.episodeId)
-    : undefined;
-  const activeSceneId = structure.mode === 'script' && activeBlockId
-    ? exactSource(project, document, activeBlockId).sceneId
-    : undefined;
-  const activeSlot = activeSceneId
-    ? structure.scenes.find(slot => slot.scene.id === activeSceneId)
-    : undefined;
-  const asOfId = structure.mode === 'episodic' ? document.episodeId : activeSlot?.scene.id;
-  const scoped = queryStory(project, activeData, { asOfId, documentId: document.id });
-  const rels = relationshipStates(project, scoped.points);
-  const openQuestions = knowledgeStates(project, scoped.points).filter(item => item.knowledge === 'Unresolved' || item.knowledge === 'Believes');
-
-  const currentPoints = sortStory(
-    project,
-    scoped.points.filter(point => structure.mode === 'episodic'
-      ? (Boolean(document.episodeId) && point.source.episodeId === document.episodeId)
-      : (Boolean(activeSceneId) && point.source.sceneId === activeSceneId)),
-    'reveal'
+  const structure = useMemo(() => storyStructure(project, document.id), [project, document.id]);
+  const episode = useMemo(
+    () => structure.mode === 'episodic'
+      ? orderedEpisodes(project).find(item => item.id === document.episodeId)
+      : undefined,
+    [project, structure.mode, document.episodeId]
   );
-  const inCurrent = new Set(currentPoints.flatMap(point => point.participants));
-  const sortedChars = [...scoped.characters].sort((a, b) => Number(inCurrent.has(b.id)) - Number(inCurrent.has(a.id)));
+  const activeSceneId = useMemo(
+    () => structure.mode === 'script' && activeBlockId
+      ? exactSource(project, document, activeBlockId).sceneId
+      : undefined,
+    [project, document, structure.mode, activeBlockId]
+  );
+  const activeSlot = useMemo(
+    () => activeSceneId ? structure.scenes.find(slot => slot.scene.id === activeSceneId) : undefined,
+    [structure.scenes, activeSceneId]
+  );
+  const asOfId = structure.mode === 'episodic' ? document.episodeId : activeSlot?.scene.id;
+
+  const scoped = useMemo(
+    () => queryStory(project, activeData, { asOfId, documentId: document.id }),
+    [project, activeData, asOfId, document.id]
+  );
+  const openQuestions = useMemo(
+    () => knowledgeStates(project, scoped.points).filter(item => item.knowledge === 'Unresolved' || item.knowledge === 'Believes'),
+    [project, scoped.points]
+  );
+
+  const inCurrent = useMemo(() => {
+    const currentPoints = sortStory(
+      project,
+      scoped.points.filter(point => structure.mode === 'episodic'
+        ? (Boolean(document.episodeId) && point.source.episodeId === document.episodeId)
+        : (Boolean(activeSceneId) && point.source.sceneId === activeSceneId)),
+      'reveal'
+    );
+    return new Set(currentPoints.flatMap(point => point.participants));
+  }, [project, scoped.points, structure.mode, document.episodeId, activeSceneId]);
+
+  const sortedChars = useMemo(
+    () => [...scoped.characters].sort((a, b) => Number(inCurrent.has(b.id)) - Number(inCurrent.has(a.id))),
+    [scoped.characters, inCurrent]
+  );
+
+  const connectionsByChar = useMemo(() => new Map(
+    sortedChars.map(person => [person.id, characterConnections(project, scoped, person.id, document.id)] as const)
+  ), [project, scoped, sortedChars, document.id]);
+
   const needle = search.trim().toLocaleLowerCase('en-GB');
   const visibleChars = needle
     ? sortedChars.filter(person =>
@@ -87,7 +112,12 @@ export function StoryDrawer({ project, document, activeBlockId, docked = false, 
       ? `Spoiler-safe as of ${activeSlot.actLabel} · Sc ${activeSlot.scene.number}`
       : structure.terms.structureBadge;
   const currentBadgeLabel = structure.mode === 'episodic' ? 'In ep.' : 'In scene';
-  const discovery = !activeData.characters.length ? scriptDiscoveryPreview(project, document.id) : undefined;
+  const discovery = useMemo(
+    () => !activeData.characters.length ? scriptDiscoveryPreview(project, document.id) : undefined,
+    [activeData.characters.length, project, document.id]
+  );
+
+  const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? name;
 
   return <aside
     className={docked ? 'swdr-story-sidebar' : 'swdr-w-drawer swdr-w-context'}
@@ -140,7 +170,9 @@ export function StoryDrawer({ project, document, activeBlockId, docked = false, 
         )}
         {sortedChars.length > 0 ? (visibleChars.length > 0 ? <VStack gap={2}>
           {visibleChars.map(person => {
-            const ownRels = rels.filter(edge => edge.participants.includes(person.id));
+            const conns = connectionsByChar.get(person.id) ?? [];
+            const isExpanded = Boolean(expandedChars[person.id]);
+            const shownConns = isExpanded ? conns : conns.slice(0, 4);
             const subtitle = [person.role, person.billing]
               .filter((value, idx, list) => Boolean(value) && list.indexOf(value) === idx)
               .join(' · ') || 'Character';
@@ -163,19 +195,45 @@ export function StoryDrawer({ project, document, activeBlockId, docked = false, 
                   {inCurrent.has(person.id) && <Token size="sm" color="blue" label={currentBadgeLabel} />}
                 </HStack>
                 {person.motivation && <Text type="supporting" color="secondary" size="xsm" maxLines={2}>{person.motivation}</Text>}
-                {ownRels.length > 0 && <HStack gap={1} wrap="wrap">
-                  {ownRels.slice(0, 3).map(edge => {
-                    const otherId = edge.participants.find(id => id !== person.id);
-                    const other = scoped.characters.find(item => item.id === otherId);
-                    const state = edge.relationship ?? 'Trust';
-                    return <Token
-                      key={edge.id}
-                      size="sm"
-                      color={relationshipStyle[state].tokenColor}
-                      label={`${state}${other ? ` · ${other.name.split(' ')[0]}` : ''}`}
-                    />;
-                  })}
-                </HStack>}
+                {shownConns.length > 0 && <VStack gap={1} hAlign="start" style={{ width: '100%' }}>
+                  <HStack gap={1} wrap="wrap">
+                    {shownConns.map(conn => {
+                      const otherShort = firstName(conn.other.name);
+                      if (conn.asymmetric) {
+                        const outLabel = conn.outgoing?.relationship ? `→ ${conn.outgoing.relationship}` : '';
+                        const inLabel = conn.incoming?.relationship ? `← ${conn.incoming.relationship}` : '';
+                        const state = conn.outgoing?.relationship ?? conn.incoming?.relationship ?? 'Trust';
+                        return <Token
+                          key={conn.pairKey}
+                          size="sm"
+                          color={relationshipStyle[state].tokenColor}
+                          label={`${otherShort}${conn.bond ? ` (${conn.bond})` : ''} ${[outLabel, inLabel].filter(Boolean).join(' / ')}`}
+                        />;
+                      }
+                      if (conn.mutual?.relationship) {
+                        return <Token
+                          key={conn.pairKey}
+                          size="sm"
+                          color={relationshipStyle[conn.mutual.relationship].tokenColor}
+                          label={`↔ ${conn.mutual.relationship}${conn.bond ? ` · ${conn.bond}` : ''} · ${otherShort}`}
+                        />;
+                      }
+                      return <Token
+                        key={conn.pairKey}
+                        size="sm"
+                        color="gray"
+                        label={`${otherShort} · ${conn.interactions.length ? `${conn.interactions.length} int.` : `${conn.sharedScenes} sc.`}`}
+                      />;
+                    })}
+                  </HStack>
+                  {conns.length > 4 && (
+                    <Link onClick={() => setExpandedChars(prev => ({ ...prev, [person.id]: !prev[person.id] }))}>
+                      <Text type="supporting" color="accent" size="xsm">
+                        {isExpanded ? 'Show fewer connections' : `Show all ${conns.length} connections`}
+                      </Text>
+                    </Link>
+                  )}
+                </VStack>}
               </VStack>
             </Card>;
           })}

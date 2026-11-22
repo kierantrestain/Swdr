@@ -5,7 +5,7 @@ import { Heading } from '@astryxdesign/core/Heading';
 import { HStack } from '@astryxdesign/core/HStack';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Project, WorkspaceViewProps } from '../model';
 import { sortStory } from './series-model';
 import type { StoryPoint, StoryState } from './series-model';
@@ -42,7 +42,7 @@ export function ArcTimeline({ project, structure, data, units, onOpen, onEdit, o
   states: CanonLookup;
 }) {
   const [selected, setSelected] = useState<{ title: string; records: StoryPoint[] }>();
-  const columnByUnitId = new Map(units.map((unit, index) => [unit.id, index]));
+  const columnByUnitId = useMemo(() => new Map(units.map((unit, index) => [unit.id, index])), [units]);
   const columnOf = (point: StoryPoint) => {
     const unit = structure.unitOfSource(point.source);
     return unit ? columnByUnitId.get(unit.id) : undefined;
@@ -50,7 +50,7 @@ export function ArcTimeline({ project, structure, data, units, onOpen, onEdit, o
   const groupShortOf = (num: number) => structure.groups.find(g => g.number === num)?.shortLabel ?? `${structure.terms.groupLabel[0]}${num}`;
   const count = units.length;
 
-  const rows = data.characters.map(person => {
+  const rows = useMemo(() => data.characters.map(person => {
     const own = sortStory(project, data.points.filter(point => point.participants.includes(person.id)), 'reveal');
     const milestones = own.filter(point => point.kind === 'arc' && columnOf(point) !== undefined);
     const facts = new Map<string, StoryPoint[]>();
@@ -81,7 +81,7 @@ export function ArcTimeline({ project, structure, data, units, onOpen, onEdit, o
       threads,
       present: new Set(own.map(columnOf).filter((value): value is number => value !== undefined))
     };
-  });
+  }), [project, data.characters, data.points, structure, columnByUnitId, count]);
 
   const lanes = rows.filter(row => row.milestones.length || row.threads.length);
   const quiet = rows.filter(row => !row.milestones.length && !row.threads.length);

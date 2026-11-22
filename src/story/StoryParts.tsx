@@ -140,10 +140,24 @@ export function CanonBadge({ id, states }: { id: string; states: CanonLookup }) 
   />;
 }
 
-/** Semantic tag for a story point's knowledge state, relationship state, or record kind. */
+export interface PointPrefill {
+  kind: StoryKind;
+  participants?: string[];
+  direction?: import('./series-model').RelationshipDirection;
+  bond?: string;
+  relationship?: RelationshipState;
+  source?: import('../model').SourceRef;
+  title?: string;
+}
+
+/** Semantic tag for a story point's knowledge state, relationship state (with optional bond/direction), or record kind. */
 export function stateTag(point: StoryPoint, showKind = false) {
   if (point.knowledge) return <Token size="sm" color={knowledgeTokenColor[point.knowledge]} label={point.knowledge} />;
-  if (point.relationship) return <Token size="sm" color={relationshipStyle[point.relationship].tokenColor} label={point.relationship} />;
+  if (point.relationship) {
+    const dirSymbol = point.direction === 'directed' ? '→ ' : '↔ ';
+    const label = point.bond ? `${dirSymbol}${point.relationship} · ${point.bond}` : `${dirSymbol}${point.relationship}`;
+    return <Token size="sm" color={relationshipStyle[point.relationship].tokenColor} label={label} />;
+  }
   if (showKind) return <Token size="sm" color={kindTokenColor[point.kind]} label={typeLabels[point.kind]} />;
   return null;
 }

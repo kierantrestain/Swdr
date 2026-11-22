@@ -349,3 +349,54 @@ test('Stage Intelligence honours explicit Act breaks, flags quick-change turnaro
   expect(pageFaults).toEqual([]);
 });
 
+test('shows everyone a character interacts with, supports asymmetric both-ways relationships, and deletes draft records cleanly', async ({ page, pageFaults }, testInfo) => {
+  await loadDemo(page);
+  await page.getByRole('button', { name: 'Open project The North Shore' }).click();
+  await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Series Intelligence', exact: true }).click();
+
+  // Switch to Full series so all 6 of Nora's connections are visible
+  await choose(page, 'Season', 'All seasons');
+
+  const inspector = page.getByRole('complementary', { name: 'Selected character' });
+  await expect(inspector).toContainText('Everyone Nora interacts with');
+  await expect(inspector).toContainText('Elias Crowe');
+  await expect(inspector).toContainText('Partner');
+  await expect(inspector).toContainText('Mara Quinn');
+  await expect(inspector).toContainText('Rival');
+  await expect(inspector).toContainText('Leah Hart');
+  await expect(inspector).toContainText('Colleague');
+  await page.screenshot({ path: testInfo.outputPath('relationship-web-connections.png'), animations: 'disabled' });
+
+  // Switch to Working draft, open Nora & Elias pair inspector directly from the Connections list
+  await choose(page, 'Canon or draft', 'Working draft');
+  await inspector.getByRole('button', { name: 'Elias Crowe', exact: true }).click();
+
+  const pairPanel = page.getByRole('complementary', { name: 'Relationship history' });
+  await expect(pairPanel).toContainText('Both sides of this relationship');
+  await expect(pairPanel).toContainText('Mutual');
+  await page.screenshot({ path: testInfo.outputPath('relationship-pair-inspector.png'), animations: 'disabled' });
+
+  // Record an asymmetric directed turn (One-way ->)
+  await pairPanel.getByRole('button', { name: 'Add relationship turn', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('radio', { name: /One-way/ }).click();
+  await dialog.getByRole('button', { name: 'Swap', exact: true }).click();
+  await dialog.getByRole('combobox', { name: 'Relationship state' }).click();
+  await page.getByRole('option', { name: 'Betrayal', exact: true }).click();
+  await dialog.getByLabel('Title').fill('Elias secretly hides the second page');
+  await dialog.getByRole('button', { name: 'Save record', exact: true }).click();
+
+  await expect(pairPanel).toContainText('Elias secretly hides the second page');
+  await expect(pairPanel).toContainText('Elias → Nora');
+
+  // Edit and delete that draft record cleanly
+  const newTurnRow = pairPanel.locator('li', { hasText: 'Elias secretly hides the second page' });
+  await newTurnRow.getByRole('button', { name: 'Edit', exact: true }).click();
+  const editDialog = page.getByRole('dialog');
+  await editDialog.getByRole('button', { name: 'Delete record', exact: true }).click();
+  await editDialog.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+  await expect(pairPanel).not.toContainText('Elias secretly hides the second page');
+  expect(pageFaults).toEqual([]);
+});
+
+

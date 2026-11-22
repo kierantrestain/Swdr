@@ -82,6 +82,7 @@ export function WritingView(props: WritingProps) {
   const dismissed = useRef('');
   const pageStarts = useRef<number[]>([0]);
   const measureFrame = useRef(0);
+  const measureTimer = useRef<number | undefined>(undefined);
 
   const [active, setActive] = useState<{ id: string; kind: BlockKind }>({ id: document.blocks[0]?.id ?? '', kind: document.blocks[0]?.kind ?? 'scene' });
   const [drawer, setDrawer] = useState<'scenes' | 'notes' | 'comments' | 'story' | null>(null);
@@ -123,14 +124,19 @@ export function WritingView(props: WritingProps) {
   const geometry = geometryFor(document.paper);
 
   // ------------------------------------------------------------ measurement
-  const measure = useCallback(() => {
+  const measure = useCallback((immediate = true) => {
+    window.clearTimeout(measureTimer.current);
     cancelAnimationFrame(measureFrame.current);
-    measureFrame.current = requestAnimationFrame(() => {
-      const editor = view.current;
-      if (!editor || compactRef.current) return;
-      const contentHeight = (geometry.height - geometry.top - geometry.bottom) * PT;
-      pageStarts.current = measurePages(editor, contentHeight, geometry.top * PT, zoomRef.current / 100);
-    });
+    const run = () => {
+      measureFrame.current = requestAnimationFrame(() => {
+        const editor = view.current;
+        if (!editor || compactRef.current) return;
+        const contentHeight = (geometry.height - geometry.top - geometry.bottom) * PT;
+        pageStarts.current = measurePages(editor, contentHeight, geometry.top * PT, zoomRef.current / 100);
+      });
+    };
+    if (immediate) run();
+    else measureTimer.current = window.setTimeout(run, 260);
   }, [geometry.bottom, geometry.height, geometry.top]);
 
   // ------------------------------------------------------------ ui sync from editor state
@@ -272,6 +278,21 @@ export function WritingView(props: WritingProps) {
   useEffect(() => {
     if (!mount.current) return;
     const state = EditorState.create({ doc: blocksToDoc(latest.current.document.blocks), plugins });
+    let emitTimer: number | undefined;
+    let dirty = false;
+    const flushEmit = (ed: EditorView) => {
+      if (!dirty) return;
+      window.clearTimeout(emitTimer);
+      emitTimer = undefined;
+      dirty = false;
+      const { document: current, onDocumentChange: emit } = latest.current;
+      const blocks = docToBlocks(ed.state.doc, emitted.current, current.revisionLabel);
+      emitted.current = blocks;
+      const comments = reanchor(current.comments, commentAnchors(ed.state));
+      emittedComments.current = comments;
+      emit(working => comments === working.comments ? { ...working, blocks } : { ...working, blocks, comments });
+    };
+
     const editor: EditorView = new EditorView(mount.current, {
       state,
       editable: () => !latest.current.readOnly,
@@ -284,18 +305,24 @@ export function WritingView(props: WritingProps) {
       dispatchTransaction(tr) {
         // Paste, cut and drop are always their own undo step.
         if (['paste', 'cut', 'drop'].includes(tr.getMeta('uiEvent'))) closeHistory(tr);
+        const prevChildCount = editor.state.doc.childCount;
         const next = editor.state.apply(tr);
         editor.updateState(next);
         if (tr.docChanged && !tr.getMeta('swdr-external')) {
-          const { document: current, onDocumentChange: emit } = latest.current;
-          const blocks = docToBlocks(next.doc, emitted.current, current.revisionLabel);
-          emitted.current = blocks;
-          const comments = reanchor(current.comments, commentAnchors(next));
-          emittedComments.current = comments;
-          emit(working => comments === working.comments ? { ...working, blocks } : { ...working, blocks, comments });
+          dirty = true;
+          const structural = next.doc.childCount !== prevChildCount
+            || Boolean(tr.getMeta('uiEvent'))
+            || Boolean(tr.getMeta('history$'));
+          if (structural) {
+            flushEmit(editor);
+          } else {
+            window.clearTimeout(emitTimer);
+            emitTimer = window.setTimeout(() => flushEmit(editor), 260);
+          }
         }
         refreshUi(next, editor);
-        if (tr.docChanged || tr.getMeta(pagesKey)) measure();
+        if (tr.getMeta(pagesKey)) measure(true);
+        else if (tr.docChanged) measure(false);
       },
       handleDOMEvents: {
         // Clicking blank paper (a page gap or the empty foot of the last page) puts the
@@ -319,13 +346,23 @@ export function WritingView(props: WritingProps) {
           return false;
         },
         focus: () => { refreshUi(editor.state, editor); return false; },
-        blur: () => { window.setTimeout(() => { if (!editor.hasFocus() && popoverRef.current?.mode === 'suggest') setPopover(null); }, 120); return false; }
+        blur: () => {
+          flushEmit(editor);
+          window.setTimeout(() => { if (!editor.hasFocus() && popoverRef.current?.mode === 'suggest') setPopover(null); }, 120);
+          return false;
+        }
       }
     });
+    const onPageHide = () => flushEmit(editor);
+    window.addEventListener('pagehide', onPageHide);
     view.current = editor;
     emitted.current = latest.current.document.blocks;
     refreshUi(editor.state, editor);
     return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      flushEmit(editor);
+      window.clearTimeout(measureTimer.current);
+      cancelAnimationFrame(measureFrame.current);
       editor.destroy();
       view.current = null;
     };

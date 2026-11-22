@@ -23,11 +23,20 @@ export function currentElement($pos: ResolvedPos): { node: PMNode; pos: number }
 }
 
 function previousElementKind(state: EditorState, pos: number): BlockKind | undefined {
-  let kind: BlockKind | undefined;
-  state.doc.nodesBetween(0, pos, (node, at) => {
-    if (node.type === schema.nodes.element && at < pos) kind = node.attrs.kind;
-  });
-  return kind;
+  if (pos <= 0) return undefined;
+  const $pos = state.doc.resolve(pos);
+  // Check immediately preceding sibling inside current parent (e.g. top-level doc or dual column)
+  for (let depth = $pos.depth; depth >= 0; depth -= 1) {
+    const idx = $pos.index(depth);
+    if (idx > 0) {
+      let prev: PMNode | null = $pos.node(depth).child(idx - 1);
+      while (prev && prev.type !== schema.nodes.element && prev.childCount > 0) {
+        prev = prev.lastChild;
+      }
+      if (prev?.type === schema.nodes.element) return prev.attrs.kind as BlockKind;
+    }
+  }
+  return undefined;
 }
 
 function attrsFor(kind: BlockKind): Record<string, unknown> {
@@ -134,21 +143,29 @@ export function tabCommand(back: boolean): Command {
 
 /** Keeps every element's id unique (copies get fresh ids) and applies live auto-format. */
 export const integrityPlugin = new Plugin({
-  appendTransaction(transactions, _old, state) {
+  appendTransaction(transactions, oldState, state) {
     if (!transactions.some(tr => tr.docChanged)) return null;
     const tr = state.tr;
-    const seen = new Set<string>();
-    state.doc.descendants((node, pos) => {
-      if (node.type !== schema.nodes.element) return;
-      let { id, sceneId } = node.attrs;
-      if (!id || seen.has(id)) id = newId();
-      if (node.attrs.kind === 'scene' && !sceneId) sceneId = newId();
-      seen.add(id);
-      if (id !== node.attrs.id || sceneId !== node.attrs.sceneId) tr.setNodeMarkup(pos, undefined, { ...node.attrs, id, sceneId });
-      return false;
-    });
     const typed = transactions.some(item => item.docChanged && !item.getMeta('history$') && !item.getMeta('swdr-external'));
     const found = typed && state.selection.empty ? currentElement(state.selection.$from) : null;
+    const structureUnchanged = oldState.doc.childCount === state.doc.childCount
+      && found !== null
+      && Boolean(found.node.attrs.id)
+      && (found.node.attrs.kind !== 'scene' || Boolean(found.node.attrs.sceneId))
+      && transactions.every(item => !item.getMeta('uiEvent') && !item.getMeta('history$') && !item.getMeta('swdr-external'));
+
+    if (!structureUnchanged) {
+      const seen = new Set<string>();
+      state.doc.descendants((node, pos) => {
+        if (node.type !== schema.nodes.element) return;
+        let { id, sceneId } = node.attrs;
+        if (!id || seen.has(id)) id = newId();
+        if (node.attrs.kind === 'scene' && !sceneId) sceneId = newId();
+        seen.add(id);
+        if (id !== node.attrs.id || sceneId !== node.attrs.sceneId) tr.setNodeMarkup(pos, undefined, { ...node.attrs, id, sceneId });
+        return false;
+      });
+    }
     if (found) {
       const detected = detectWhileTyping(found.node.attrs.kind, found.node.textContent, previousElementKind(state, found.pos));
       if (detected) {
@@ -284,17 +301,26 @@ export function presentationPlugin(options: PresentationOptions): Plugin {
     key: presentationKey,
     state: {
       init: (_config, state) => buildPresentation(state.doc, options.sceneNumbers()),
-      apply(tr, value, _old, state) {
+      apply(tr, value, oldState, state) {
         if (tr.getMeta(presentationKey) || tr.getMeta('swdr-external')) return buildPresentation(state.doc, options.sceneNumbers());
         if (!tr.docChanged) return value;
-        // A changed scene count renumbers scenes: rebuild. Otherwise refresh only touched elements.
-        const scenes = countScenes(state.doc);
-        if (scenes !== value.scenes) return buildPresentation(state.doc, options.sceneNumbers());
         const ranges: [number, number][] = [];
         tr.mapping.maps.forEach((map, index) => map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
           const rest = tr.mapping.slice(index + 1);
           ranges.push([rest.map(newStart, -1), rest.map(newEnd, 1)]);
         }));
+        let mayChangeScenes = oldState.doc.childCount !== state.doc.childCount;
+        if (!mayChangeScenes) {
+          for (const [from, to] of ranges) {
+            state.doc.nodesBetween(Math.max(0, from - 1), Math.min(state.doc.content.size, to + 1), node => {
+              if (node.type === schema.nodes.element && node.attrs.kind === 'scene') mayChangeScenes = true;
+              return !mayChangeScenes && node.type !== schema.nodes.element;
+            });
+            if (mayChangeScenes) break;
+          }
+        }
+        const scenes = mayChangeScenes ? countScenes(state.doc) : value.scenes;
+        if (scenes !== value.scenes) return buildPresentation(state.doc, options.sceneNumbers());
         let set = value.set.map(tr.mapping, tr.doc);
         const numbering = options.sceneNumbers();
         for (const [from, to] of ranges) {

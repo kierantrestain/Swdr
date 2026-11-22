@@ -55,16 +55,305 @@ export interface RelationshipTurn {
   previous?: RelationshipState;
 }
 
-/** The full history of each pair, in reveal order, with the state each record replaced. */
+/** The full history of each pair, in reveal order, with the state each record replaced (per channel). */
 export function relationshipHistory(project: Project, points: StoryPoint[]): Map<string, RelationshipTurn[]> {
   const history = new Map<string, RelationshipTurn[]>();
+  const lastByChannel = new Map<string, RelationshipState | undefined>();
   for (const point of sortStory(project, points.filter(item => item.kind === 'relationship'), 'reveal')) {
     const key = pairKey(point.participants);
+    const channel = point.direction === 'directed' && point.participants.length === 2
+      ? `${point.participants[0]}>${point.participants[1]}`
+      : key;
     const turns = history.get(key) ?? [];
-    turns.push({ point, previous: turns.at(-1)?.point.relationship });
+    const previous = lastByChannel.get(channel) ?? (point.direction === 'directed' ? lastByChannel.get(key) : undefined);
+    turns.push({ point, previous });
+    lastByChannel.set(channel, point.relationship);
     history.set(key, turns);
   }
   return history;
+}
+
+export interface CoPresenceInfo {
+  pairKey: string;
+  sharedScenes: number;
+  firstSharedSource: SourceRef;
+  firstSharedLabel: string;
+  firstSharedHeading: string;
+}
+
+export interface PairConnection {
+  pairKey: string;
+  other: Character;
+  /** Latest mutual (A ↔ B) relationship record, if any. */
+  mutual?: StoryPoint;
+  /** Latest directed (person → other) relationship record, if any. */
+  outgoing?: StoryPoint;
+  /** Latest directed (other → person) relationship record, if any. */
+  incoming?: StoryPoint;
+  /** All relationship turns between these two characters (mutual + both directions) in reveal order. */
+  relationshipTurns: RelationshipTurn[];
+  /** Most recent bond / relationship type label (e.g. "Partner", "Family", "Rival"). */
+  bond?: string;
+  /** Primary display state for badges/edges relative to `personId`. */
+  primaryState?: RelationshipState;
+  /** Recorded `interaction` story points between them in reveal order. */
+  interactions: StoryPoint[];
+  /** Live count of script scenes where both characters speak. */
+  sharedScenes: number;
+  /** Exact source ref of their first shared scene in the script (useful for 1-click relationship creation). */
+  firstSharedSource?: SourceRef;
+  firstSharedLabel?: string;
+  /** True when the pair has any directed (asymmetric) relationship records. */
+  asymmetric: boolean;
+}
+
+const coPresenceCache = new WeakMap<Project, Map<string, Map<string, CoPresenceInfo>>>();
+
+/**
+ * Scans the project's scripts for every scene where two known characters both speak.
+ * Cached per immutable Project reference so repeated reads across views are O(1).
+ */
+export function scriptCoPresence(
+  project: Project,
+  characters: Character[],
+  documentId?: string
+): Map<string, CoPresenceInfo> {
+  if (characters.length < 2) return new Map();
+  const cacheKey = `${documentId ?? ''}|${characters.map(c => `${c.id}:${c.name}:${c.aliases.join(',')}`).join(';')}`;
+  let byKey = coPresenceCache.get(project);
+  const cached = byKey?.get(cacheKey);
+  if (cached) return cached;
+
+  const structure = storyStructure(project, documentId);
+  const episodes = orderedEpisodes(project);
+  const episodeById = new Map(episodes.map(item => [item.id, item]));
+  const positionById = episodePositions(project);
+  const docs = structure.mode === 'episodic'
+    ? [...project.documents]
+      .filter(doc => doc.kind !== 'av')
+      .sort((a, b) => (positionById.get(a.episodeId ?? '') ?? 999) - (positionById.get(b.episodeId ?? '') ?? 999))
+    : [primaryStoryDocument(project, documentId)].filter((item): item is NonNullable<typeof item> => Boolean(item && item.kind !== 'av'));
+
+  const knownLookup = new Map<string, Character>();
+  for (const person of characters) {
+    for (const key of normalizedNames(person)) knownLookup.set(key, person);
+  }
+
+  const map = new Map<string, CoPresenceInfo>();
+  for (const doc of docs) {
+    const scenes = sceneList(doc);
+    if (!scenes.length) continue;
+    const episode = doc.episodeId ? episodeById.get(doc.episodeId) : undefined;
+    const docLabel = episode ? episodeCode(episode) : doc.title;
+
+    for (let s = 0; s < scenes.length; s += 1) {
+      const scene = scenes[s];
+      const nextIndex = scenes[s + 1]?.index ?? doc.blocks.length;
+      const inScene = new Map<string, { char: Character; ref: SourceRef }>();
+
+      for (let b = scene.index; b < nextIndex; b += 1) {
+        const block = doc.blocks[b];
+        if (block.kind !== 'character') continue;
+        const cue = characterName(block.text);
+        if (!cue || cue.length < 2) continue;
+        const matched = knownLookup.get(cue.toLocaleLowerCase('en-GB'));
+        if (matched && !inScene.has(matched.id)) {
+          inScene.set(matched.id, { char: matched, ref: exactSource(project, doc, block.id) });
+        }
+      }
+
+      const present = [...inScene.values()];
+      if (present.length < 2) continue;
+      for (let i = 0; i < present.length; i += 1) {
+        for (let j = i + 1; j < present.length; j += 1) {
+          const a = present[i];
+          const b = present[j];
+          const key = pairKey([a.char.id, b.char.id]);
+          const existing = map.get(key);
+          if (existing) {
+            existing.sharedScenes += 1;
+          } else {
+            const anchorRef = revealTime(project, a.ref) >= revealTime(project, b.ref) ? a.ref : b.ref;
+            map.set(key, {
+              pairKey: key,
+              sharedScenes: 1,
+              firstSharedSource: anchorRef,
+              firstSharedLabel: structure.mode === 'episodic' ? docLabel : structure.unitCodeOfSource(anchorRef),
+              firstSharedHeading: scene.heading || `Scene ${scene.number}`
+            });
+          }
+        }
+      }
+    }
+  }
+
+  if (!byKey) {
+    byKey = new Map();
+    coPresenceCache.set(project, byKey);
+  }
+  byKey.set(cacheKey, map);
+  return map;
+}
+
+/**
+ * Returns EVERYONE `personId` connects with across formal relationships (both mutual and directed
+ * A→B / B→A), recorded interactions, and live shared-scene co-presence in the scripts.
+ */
+export function characterConnections(
+  project: Project,
+  data: StoryState,
+  personId: string,
+  documentId?: string
+): PairConnection[] {
+  const charById = new Map(data.characters.map(c => [c.id, c]));
+  if (!charById.has(personId)) return [];
+
+  const history = relationshipHistory(project, data.points);
+  const coPresence = scriptCoPresence(project, data.characters, documentId);
+  const interactionsByPair = new Map<string, StoryPoint[]>();
+  for (const point of sortStory(project, data.points.filter(p => p.kind === 'interaction' && p.participants.includes(personId)), 'reveal')) {
+    const key = pairKey(point.participants);
+    const list = interactionsByPair.get(key) ?? [];
+    list.push(point);
+    interactionsByPair.set(key, list);
+  }
+
+  const pairKeys = new Set<string>();
+  for (const key of history.keys()) {
+    if (key.split('/').includes(personId)) pairKeys.add(key);
+  }
+  for (const key of interactionsByPair.keys()) pairKeys.add(key);
+  for (const key of coPresence.keys()) {
+    if (key.split('/').includes(personId)) pairKeys.add(key);
+  }
+
+  const connections: PairConnection[] = [];
+  for (const key of pairKeys) {
+    const otherId = key.split('/').find(id => id !== personId);
+    const other = otherId ? charById.get(otherId) : undefined;
+    if (!other) continue;
+
+    const turns = history.get(key) ?? [];
+    let mutual: StoryPoint | undefined;
+    let outgoing: StoryPoint | undefined;
+    let incoming: StoryPoint | undefined;
+    let bond: string | undefined;
+
+    for (const { point } of turns) {
+      if (point.bond?.trim()) bond = point.bond.trim();
+      if (point.direction === 'directed' && point.participants.length === 2) {
+        if (point.participants[0] === personId) outgoing = point;
+        else if (point.participants[0] === other.id) incoming = point;
+      } else {
+        mutual = point;
+      }
+    }
+
+    const interactions = interactionsByPair.get(key) ?? [];
+    const co = coPresence.get(key);
+    const asymmetric = Boolean(outgoing || incoming);
+    const primaryState = outgoing?.relationship ?? mutual?.relationship ?? incoming?.relationship;
+
+    connections.push({
+      pairKey: key,
+      other,
+      mutual,
+      outgoing,
+      incoming,
+      relationshipTurns: turns,
+      bond,
+      primaryState,
+      interactions,
+      sharedScenes: co?.sharedScenes ?? 0,
+      firstSharedSource: co?.firstSharedSource ?? interactions[0]?.source ?? turns[0]?.point.source,
+      firstSharedLabel: co?.firstSharedLabel,
+      asymmetric
+    });
+  }
+
+  return connections.sort((a, b) =>
+    (Number(Boolean(b.primaryState)) - Number(Boolean(a.primaryState)))
+    || ((b.relationshipTurns.length + b.interactions.length) - (a.relationshipTurns.length + a.interactions.length))
+    || (b.sharedScenes - a.sharedScenes)
+    || a.other.name.localeCompare(b.other.name)
+  );
+}
+
+export interface CastPairSummary {
+  pairKey: string;
+  a: Character;
+  b: Character;
+  mutual?: StoryPoint;
+  aToB?: StoryPoint;
+  bToA?: StoryPoint;
+  bond?: string;
+  relationshipTurns: RelationshipTurn[];
+  interactions: StoryPoint[];
+  sharedScenes: number;
+  firstSharedSource?: SourceRef;
+  asymmetric: boolean;
+}
+
+/** All active pairs across the whole cast (formal relationships + interaction/shared-scene pairs). */
+export function allPairConnections(
+  project: Project,
+  data: StoryState,
+  documentId?: string
+): CastPairSummary[] {
+  const charById = new Map(data.characters.map(c => [c.id, c]));
+  const history = relationshipHistory(project, data.points);
+  const coPresence = scriptCoPresence(project, data.characters, documentId);
+  const interactionsByPair = new Map<string, StoryPoint[]>();
+  for (const point of sortStory(project, data.points.filter(p => p.kind === 'interaction' && p.participants.length === 2), 'reveal')) {
+    const key = pairKey(point.participants);
+    const list = interactionsByPair.get(key) ?? [];
+    list.push(point);
+    interactionsByPair.set(key, list);
+  }
+
+  const keys = new Set<string>([...history.keys(), ...interactionsByPair.keys(), ...coPresence.keys()]);
+  const list: CastPairSummary[] = [];
+  for (const key of keys) {
+    const [idA, idB] = key.split('/');
+    const a = idA ? charById.get(idA) : undefined;
+    const b = idB ? charById.get(idB) : undefined;
+    if (!a || !b) continue;
+    const turns = history.get(key) ?? [];
+    let mutual: StoryPoint | undefined;
+    let aToB: StoryPoint | undefined;
+    let bToA: StoryPoint | undefined;
+    let bond: string | undefined;
+    for (const { point } of turns) {
+      if (point.bond?.trim()) bond = point.bond.trim();
+      if (point.direction === 'directed' && point.participants.length === 2) {
+        if (point.participants[0] === a.id) aToB = point;
+        else if (point.participants[0] === b.id) bToA = point;
+      } else {
+        mutual = point;
+      }
+    }
+    const interactions = interactionsByPair.get(key) ?? [];
+    const co = coPresence.get(key);
+    list.push({
+      pairKey: key,
+      a,
+      b,
+      mutual,
+      aToB,
+      bToA,
+      bond,
+      relationshipTurns: turns,
+      interactions,
+      sharedScenes: co?.sharedScenes ?? 0,
+      firstSharedSource: co?.firstSharedSource ?? interactions[0]?.source ?? turns[0]?.point.source,
+      asymmetric: Boolean(aToB || bToA)
+    });
+  }
+  return list.sort((x, y) =>
+    (Number(Boolean(y.mutual || y.aToB || y.bToA)) - Number(Boolean(x.mutual || x.aToB || x.bToA)))
+    || ((y.relationshipTurns.length + y.interactions.length) - (x.relationshipTurns.length + x.interactions.length))
+    || (y.sharedScenes - x.sharedScenes)
+  );
 }
 
 /** Events revealed after another event that happens later in story time. */
@@ -762,7 +1051,7 @@ export function scanProjectScripts(project: Project, existing: StoryState, docum
   const suggestedLinks: DiscoveredLink[] = [...coPresence.entries()]
     .filter(([, entry]) => entry.sharedScenes >= minShared)
     .sort((x, y) => y[1].sharedScenes - x[1].sharedScenes)
-    .slice(0, 12)
+    .slice(0, 40)
     .map(([key, entry]) => ({
       key,
       aKey: entry.aKey,

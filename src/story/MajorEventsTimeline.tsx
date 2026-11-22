@@ -14,7 +14,7 @@ import { useState } from 'react';
 import type { Project, WorkspaceViewProps } from '../model';
 import type { Character, StoryPoint } from './series-model';
 import type { StoryStructure } from './story-profile';
-import { Glyph, Pane, SourceButton } from './StoryControls';
+import { Glyph, Choice, Pane, SourceButton } from './StoryControls';
 import { CanonBadge, CharacterAvatar } from './StoryParts';
 import type { CanonLookup } from './StoryParts';
 
@@ -39,6 +39,7 @@ export function MajorEventsTimeline({
   flashbackFlags,
   states,
   onOpen,
+  onEdit,
   onOpenLedger
 }: {
   project: Project;
@@ -50,6 +51,7 @@ export function MajorEventsTimeline({
   flashbackFlags: Map<string, string>;
   states: CanonLookup;
   onOpen: WorkspaceViewProps['onOpenSource'];
+  onEdit?: (point: StoryPoint) => void;
   onOpenLedger: () => void;
 }) {
   const [filterPersonId, setFilterPersonId] = useState('');
@@ -77,7 +79,7 @@ export function MajorEventsTimeline({
           >
             All events
           </ToggleButton>
-          {characters.slice(0, 5).map(person => (
+          {characters.slice(0, 6).map(person => (
             <ToggleButton
               key={person.id}
               size="sm"
@@ -89,6 +91,17 @@ export function MajorEventsTimeline({
             </ToggleButton>
           ))}
         </HStack>
+        {characters.length > 6 && (
+          <Choice
+            label="More characters"
+            isLabelHidden
+            size="sm"
+            width={156}
+            value={characters.slice(6).some(c => c.id === filterPersonId) ? filterPersonId : ''}
+            onChange={setFilterPersonId}
+            options={[{ value: '', label: `More (${characters.length - 6})…` }, ...characters.slice(6).map(person => ({ value: person.id, label: person.name }))]}
+          />
+        )}
         <SegmentedControl label="Timeline order" size="sm" value={order} onChange={value => onOrderChange(value as 'reveal' | 'story')}>
           <SegmentedControlItem value="reveal" label="Reveal order" />
           <SegmentedControlItem value="story" label="Story time" />
@@ -144,7 +157,7 @@ export function MajorEventsTimeline({
               </HStack>
               <Text weight="semibold" size="sm">{point.title}</Text>
               {point.detail && <Text type="supporting" color="secondary" size="xsm" maxLines={2}>{point.detail}</Text>}
-              <VStack gap={1.5} hAlign="start" style={{ marginTop: 'auto', paddingTop: 'var(--spacing-1)' }}>
+              <VStack gap={1.5} hAlign="start" style={{ marginTop: 'auto', paddingTop: 'var(--spacing-1)', width: '100%' }}>
                 {participants.length > 0 && <HStack gap={1} align="center">
                   {participants.slice(0, 3).map(person => (
                     <CharacterAvatar key={person.id} project={project} character={person} size={24} decorative />
@@ -153,7 +166,10 @@ export function MajorEventsTimeline({
                     {participants.map(p => p.name.split(' ')[0]).join(', ')}
                   </Text>
                 </HStack>}
-                <SourceButton project={project} source={point.source} onOpen={onOpen} />
+                <HStack gap={2} align="center" justify="between" style={{ width: '100%' }}>
+                  <SourceButton project={project} source={point.source} onOpen={onOpen} />
+                  {onEdit && <Button size="sm" variant="ghost" label="Edit" onClick={() => onEdit(point)} />}
+                </HStack>
               </VStack>
             </VStack>
           </Card>;

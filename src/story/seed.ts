@@ -93,11 +93,11 @@ export function seedSeries(project: Project): Project {
   const departure = point('event', 'The last departure', ref(fourth.id, 'last ferry leave'), 50, [nora], { causeId: timetable.id, detail: 'Nora hears the last boat leave while holding the disputed paper ticket.' });
   const points = [
     opening, timetable, original, departure,
-    point('relationship', 'Nora challenges the unmarked correction', mara.source, 40, [nora, mara], { relationship: 'Conflict' }),
-    point('relationship', 'Leah passes along a warning', leah.source, 42, [nora, leah], { relationship: 'Pressure' }),
-    point('relationship', 'Jonah brings the earlier timetable', jonah.source, 46, [nora, jonah], { relationship: 'Alliance' }),
-    point('relationship', 'Elias agrees to compare records', ref(fourth.id, 'tomorrow'), 48, [nora, elias], { relationship: 'Trust' }),
-    point('relationship', 'Elias withdraws the notebook', ref(fifth.id, 'closes his notebook'), 60, [nora, elias], { relationship: 'Distance' }),
+    point('relationship', 'Nora challenges the unmarked correction', mara.source, 40, [nora, mara], { relationship: 'Conflict', bond: 'Rival' }),
+    point('relationship', 'Leah passes along a warning', leah.source, 42, [nora, leah], { relationship: 'Pressure', bond: 'Colleague' }),
+    point('relationship', 'Jonah brings the earlier timetable', jonah.source, 46, [nora, jonah], { relationship: 'Alliance', bond: 'Informant' }),
+    point('relationship', 'Elias agrees to compare records', ref(fourth.id, 'tomorrow'), 48, [nora, elias], { relationship: 'Trust', bond: 'Partner' }),
+    point('relationship', 'Elias withdraws the notebook', ref(fifth.id, 'closes his notebook'), 60, [nora, elias], { relationship: 'Distance', bond: 'Partner' }),
     point('interaction', 'Elias changes the date on the timetable', ref(fourth.id, 'tomorrow'), 47, [nora, elias]),
     point('interaction', 'Jonah shows Nora the original timetable', jonah.source, 46, [nora, jonah]),
     point('appearance', 'Nora at the ferry office', ref(fourth.id, 'NORA'), 47, [nora]),
@@ -137,23 +137,23 @@ export function seedSeries(project: Project): Project {
   };
   const cast: Character[] = [nora, elias, mara, jonah, leah];
   add(1, 6, 'hands over Nora', src => point('interaction', 'Leah gives Mara a copy of Nora’s notes', src, 62, [leah, mara]));
-  add(1, 6, 'hands over Nora', src => point('relationship', 'Leah and Mara close ranks', src, 62, [leah, mara], { relationship: 'Alliance' }));
+  add(1, 6, 'hands over Nora', src => point('relationship', 'Leah and Mara close ranks', src, 62, [leah, mara], { relationship: 'Alliance', bond: 'Employer' }));
   add(1, 6, 'hands over Nora', src => point('relationship', 'Leah passes Nora’s notes to the ministry', src, 62, [nora, leah],
-    { relationship: 'Betrayal', detail: 'Nora does not know yet.' }));
+    { relationship: 'Betrayal', bond: 'Colleague', detail: 'Nora does not know yet.' }));
   if (tomas) {
     cast.push(tomas);
     add(1, 7, 'refuses to sign', src => point('interaction', 'Tomas refuses to sign the amended log', src, 64, [nora, tomas]));
-    add(1, 7, 'refuses to sign', src => point('relationship', 'Nora presses the ferry master', src, 64, [nora, tomas], { relationship: 'Pressure' }));
+    add(1, 7, 'refuses to sign', src => point('relationship', 'Nora presses the ferry master', src, 64, [nora, tomas], { relationship: 'Pressure', bond: 'Suspect' }));
     add(1, 8, 'will not need his log', src => point('interaction', 'Mara tells Tomas the inquiry will not need his log', src, 66, [mara, tomas]));
-    add(1, 8, 'will not need his log', src => point('relationship', 'Mara leans on the ferry master', src, 66, [mara, tomas], { relationship: 'Pressure' }));
+    add(1, 8, 'will not need his log', src => point('relationship', 'Mara leans on the ferry master', src, 66, [mara, tomas], { relationship: 'Pressure', bond: 'Employer' }));
     add(1, 8, 'will not need his log', src => point('event', 'The ferry log disappears', src, 66, [mara, tomas], { causeId: timetable.id }));
   }
   add(1, 9, 'impounded', src => point('event', 'Jonah’s boat is impounded', src, 70, [jonah], { detail: 'Two days after he speaks to Nora.' }));
-  add(1, 9, 'impounded', src => point('relationship', 'Jonah blames the ministry', src, 70, [jonah, mara], { relationship: 'Conflict' }));
+  add(1, 9, 'impounded', src => point('relationship', 'Jonah blames the ministry', src, 70, [jonah, mara], { relationship: 'Conflict', bond: 'Antagonist' }));
   add(1, 9, 'stay away', src => point('interaction', 'Jonah tells Nora to stay away from the harbour', src, 70, [nora, jonah]));
   add(1, 9, 'impounded', src => point('arc', 'Pays for speaking up', src, 70, [jonah]));
   add(1, 10, 'line Leah removed', src => point('interaction', 'Nora confronts Leah over the missing line', src, 74, [nora, leah]));
-  add(1, 10, 'line Leah removed', src => point('relationship', 'Nora learns who leaked her notes', src, 74, [nora, leah], { relationship: 'Conflict' }));
+  add(1, 10, 'line Leah removed', src => point('relationship', 'Nora learns who leaked her notes', src, 74, [nora, leah], { relationship: 'Conflict', bond: 'Colleague' }));
   add(1, 10, 'line Leah removed', src => point('knowledge', 'Leah leaked Nora’s notes', src, 74, [nora], { knowledge: 'Confirmed', factKey: 'leaked-notes' }));
   add(1, 11, 'burns the page', src => point('interaction', 'Elias brings the name on the ticket, then burns the page', src, 78, [nora, elias]));
   add(1, 11, 'burns the page', src => point('knowledge', 'Nora believes the ticket was issued to a ministry driver', src, 78, [nora],
@@ -166,30 +166,30 @@ export function seedSeries(project: Project): Project {
     const broadcast = points.find(item => item.title === 'Nora broadcasts both timetables');
     add(2, 1, 'Ines Calder', src => point('event', 'The public inquiry opens', src, 160, [ines, nora], { causeId: broadcast?.id }));
     add(2, 1, 'every printed timetable', src => point('interaction', 'Ines asks Nora for every printed timetable', src, 160, [ines, nora]));
-    add(2, 1, 'every printed timetable', src => point('relationship', 'Ines takes Nora’s evidence', src, 160, [ines, nora], { relationship: 'Trust' }));
+    add(2, 1, 'every printed timetable', src => point('relationship', 'Ines takes Nora’s evidence', src, 160, [ines, nora], { relationship: 'Trust', bond: 'Informant' }));
   }
   add(2, 2, 'Elias sits beside Nora', src => point('interaction', 'Elias sits beside Nora in the inquiry gallery', src, 170, [nora, elias]));
   if (tomas) {
     add(2, 3, 'original ferry log', src => point('interaction', 'Tomas hands Nora the original ferry log', src, 175, [nora, tomas]));
-    add(2, 3, 'original ferry log', src => point('relationship', 'Tomas chooses the record', src, 175, [nora, tomas], { relationship: 'Alliance' }));
+    add(2, 3, 'original ferry log', src => point('relationship', 'Tomas chooses the record', src, 175, [nora, tomas], { relationship: 'Alliance', bond: 'Informant' }));
     add(2, 3, 'night of the storm', src => point('event', 'Tomas amends the log on the night of the storm', src, 25, [tomas],
       { detail: 'A flashback revealed in season two.' }));
     add(2, 3, 'original ferry log', src => point('arc', 'Hands over the log', src, 175, [tomas]));
   }
   add(2, 5, 'second chance', src => point('interaction', 'Leah offers Nora the ministry minutes', src, 180, [nora, leah]));
-  add(2, 5, 'second chance', src => point('relationship', 'Nora keeps Leah at arm’s length', src, 180, [nora, leah], { relationship: 'Distance' }));
+  add(2, 5, 'second chance', src => point('relationship', 'Nora keeps Leah at arm’s length', src, 180, [nora, leah], { relationship: 'Distance', bond: 'Colleague' }));
   add(2, 5, 'second chance', src => point('arc', 'Seeks to make amends', src, 180, [leah]));
   add(2, 5, 'minutes', src => point('knowledge', 'Were the ministry minutes edited before release?', src, 180, [nora],
     { knowledge: 'Unresolved', factKey: 'ministry-minutes' }));
   if (ines) {
     add(2, 7, 'no choice', src => point('interaction', 'Mara tells the inquiry the storm left no choice', src, 185, [mara, ines]));
-    add(2, 7, 'no choice', src => point('relationship', 'Ines challenges Mara’s account', src, 185, [mara, ines], { relationship: 'Conflict' }));
+    add(2, 7, 'no choice', src => point('relationship', 'Ines challenges Mara’s account', src, 185, [mara, ines], { relationship: 'Conflict', bond: 'Suspect' }));
     add(2, 9, 'Jonah testifies', src => point('interaction', 'Jonah testifies before the inquiry', src, 190, [jonah, ines]));
     add(2, 9, 'Jonah testifies', src => point('arc', 'Testifies in public', src, 190, [jonah]));
   }
   const seasonTwo = episodes.find(episode => episode.season === 2 && episode.number === 2);
   const laterDocument = episodeDocuments.find(document => document.episodeId === seasonTwo?.id);
-  if (laterDocument) points.push(point('relationship', 'Elias returns to the inquiry', ref(laterDocument.id, 'Elias sits beside Nora'), 170, [nora, elias], { relationship: 'Trust' }));
+  if (laterDocument) points.push(point('relationship', 'Elias returns to the inquiry', ref(laterDocument.id, 'Elias sits beside Nora'), 170, [nora, elias], { relationship: 'Trust', bond: 'Partner' }));
   // The season-two finale stays in the working draft until the room approves it as canon.
   const finale: [number, number, string, (src: StoryPoint['source']) => StoryPoint][] = [
     [2, 11, 'driver', src => point('knowledge', 'The ticket was issued to Mara’s driver', src, 195, [nora], { knowledge: 'Confirmed', factKey: 'unmarked-ticket' })],

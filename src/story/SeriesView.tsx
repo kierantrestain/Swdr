@@ -21,7 +21,7 @@ import { TextInput } from '@astryxdesign/core/TextInput';
 import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import {
-  AlertTriangle, ArrowRight, CalendarClock, CheckCircle2, Clapperboard, Download, GitBranch, LayoutGrid,
+  AlertTriangle, ArrowLeftRight, ArrowRight, CalendarClock, CheckCircle2, Clapperboard, Download, GitBranch, LayoutGrid,
   Network, Plus, Sparkles, Theater, Trash2, Users
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -39,18 +39,23 @@ import { RelationshipWeb } from './RelationshipWeb';
 import { StoryMap } from './StoryMap';
 import { downloadText, fields, fileStem, sourceDocument, sourceText } from './source';
 import {
-  canonStates, characterSummaryStats, flashbacks, scanProjectScripts, scriptDiscoveryPreview, stageDoublingAnalysis, storyChecks
+  allPairConnections, canonStates, characterConnections, characterSummaryStats, flashbacks, pairKey,
+  scanProjectScripts, scriptDiscoveryPreview, stageDoublingAnalysis, storyChecks
 } from './series-analysis';
 import {
-  approveCanon, CHARACTER_STATUSES, continuityConflicts, getStory, KNOWLEDGE,
-  queryStory, RELATIONSHIPS, relationshipStates, revealTime, reviewException, saveCharacter, saveStoryPoint, sceneMatrix, sortStory, STORY_KINDS
+  approveCanon, CHARACTER_STATUSES, continuityConflicts, deleteCharacter, deleteStoryPoint, getStory, KNOWLEDGE,
+  queryStory, RELATIONSHIP_BONDS, RELATIONSHIPS, relationshipStates, revealTime, reviewException, saveCharacter,
+  saveStoryPoint, sceneMatrix, sortStory, STORY_KINDS
 } from './series-model';
-import type { Character, CharacterStatus, KnowledgeState, RelationshipState, SceneMatrixRow, StoryKind, StoryPoint, StoryState } from './series-model';
+import type {
+  Character, CharacterStatus, KnowledgeState, RelationshipDirection, RelationshipState, SceneMatrixRow, StoryKind,
+  StoryPoint, StoryState
+} from './series-model';
 import { storyBillings, storyStructure } from './story-profile';
 import type { StoryStructure } from './story-profile';
 import { Choice, Empty, FormError, Glyph, initialSource, Pane, SourceButton, SourceFields, Split, StoryDialog } from './StoryControls';
-import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, typeLabels } from './StoryParts';
-import type { CanonLookup } from './StoryParts';
+import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, relationshipStyle, typeLabels } from './StoryParts';
+import type { CanonLookup, PointPrefill } from './StoryParts';
 
 const PANES = ['Relationship web', 'Story map', 'Event ledger', 'Characters', 'Scene matrix', 'Arcs and continuity'] as const;
 type View = (typeof PANES)[number];
@@ -72,9 +77,10 @@ interface EditorProps {
   close: () => void;
 }
 
-function CharacterFormDialog({ project, document, character, save, onPhotoUpdate, close }: EditorProps & {
+function CharacterFormDialog({ project, document, character, save, onDelete, onPhotoUpdate, close }: EditorProps & {
   character?: Character;
   save: (character: Character) => boolean;
+  onDelete?: (characterId: string) => void;
   onPhotoUpdate: (added: Asset[], removedIds: ReadonlyArray<string | undefined>) => void;
 }) {
   const billings = storyBillings(project.kind);
@@ -90,6 +96,7 @@ function CharacterFormDialog({ project, document, character, save, onPhotoUpdate
   const [photoAssetId, setPhotoAssetId] = useState(character?.photoAssetId);
   const [assetIds, setAssetIds] = useState<string[]>(character?.assetIds ?? []);
   const [source, setSource] = useState(character?.source ?? initialSource(project, document));
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
 
   const previewCharacter: Character = {
@@ -133,9 +140,22 @@ function CharacterFormDialog({ project, document, character, save, onPhotoUpdate
     width={760}
     onClose={close}
     onSubmit={saveCharacterForm}
-    footer={<HStack gap={2} justify="end">
-      <Button label="Cancel" onClick={close} />
-      <Button type="submit" variant="primary" label="Save character" isDisabled={!source || !name.trim()} />
+    footer={<HStack gap={2} justify="between" align="center" wrap="wrap" style={{ width: '100%' }}>
+      {character && onDelete ? (
+        confirmDelete ? (
+          <HStack gap={2} align="center">
+            <Text type="supporting" size="xsm" style={{ color: 'var(--color-text-error)' }}>Remove from working draft?</Text>
+            <Button size="sm" variant="destructive" label="Confirm delete" onClick={() => { onDelete(character.id); close(); }} />
+            <Button size="sm" variant="ghost" label="Keep" onClick={() => setConfirmDelete(false)} />
+          </HStack>
+        ) : (
+          <Button size="sm" variant="ghost" icon={<Glyph icon={Trash2} size="xsm" />} label="Delete character" onClick={() => setConfirmDelete(true)} />
+        )
+      ) : <HStack />}
+      <HStack gap={2} justify="end">
+        <Button label="Cancel" onClick={close} />
+        <Button type="submit" variant="primary" label="Save character" isDisabled={!source || !name.trim()} />
+      </HStack>
     </HStack>}
   >
     <HStack gap={5} align="start" wrap="wrap">
@@ -202,33 +222,52 @@ function CharacterFormDialog({ project, document, character, save, onPhotoUpdate
   </StoryDialog>;
 }
 
-function PointFormDialog({ project, document, data, point, save, close }: EditorProps & {
+function PointFormDialog({ project, document, data, point, prefill, save, onDelete, close }: EditorProps & {
   data: StoryState;
   point?: StoryPoint;
+  prefill?: PointPrefill;
   save: (point: StoryPoint) => boolean;
+  onDelete?: (pointId: string) => void;
 }) {
-  const [kind, setKind] = useState<StoryKind>(point?.kind ?? 'event');
+  const initialKind: StoryKind = point?.kind ?? prefill?.kind ?? 'event';
+  const initialParticipants = point?.participants ?? prefill?.participants ?? [];
+  const [kind, setKind] = useState<StoryKind>(initialKind);
   const [storyOrder, setStoryOrder] = useState<number>(point?.storyOrder ?? 10);
-  const [title, setTitle] = useState(point?.title ?? '');
+  const [title, setTitle] = useState(point?.title ?? prefill?.title ?? '');
   const [detail, setDetail] = useState(point?.detail ?? '');
-  const [source, setSource] = useState(point?.source ?? initialSource(project, document));
-  const [people, setPeople] = useState<string[]>(point?.participants ?? []);
-  const [relationship, setRelationship] = useState<RelationshipState>(point?.relationship ?? 'Trust');
+  const [source, setSource] = useState(point?.source ?? prefill?.source ?? initialSource(project, document));
+  const [people, setPeople] = useState<string[]>(initialParticipants);
+  const [fromCharId, setFromCharId] = useState<string>(initialParticipants[0] ?? '');
+  const [toCharId, setToCharId] = useState<string>(initialParticipants[1] ?? '');
+  const [relationship, setRelationship] = useState<RelationshipState>(point?.relationship ?? prefill?.relationship ?? 'Trust');
+  const [direction, setDirection] = useState<RelationshipDirection>(point?.direction ?? prefill?.direction ?? 'mutual');
+  const [bond, setBond] = useState<string>(point?.bond ?? prefill?.bond ?? '');
   const [factKey, setFactKey] = useState(point?.factKey ?? '');
   const [knowledge, setKnowledge] = useState<KnowledgeState>(point?.knowledge ?? 'Confirmed');
   const [causeId, setCauseId] = useState(point?.causeId ?? '');
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
 
   const reveal = source ? revealTime(project, source) : -1;
   const characterOptions = data.characters.filter(person => reveal < 0 || revealTime(project, person.source) <= reveal);
   const events = data.points.filter(event => event.kind === 'event' && event.id !== point?.id);
-  const minPeople = kind === 'event' ? 0 : kind === 'relationship' || kind === 'interaction' ? 2 : 1;
+  const isPairKind = kind === 'relationship' || kind === 'interaction';
+  const minPeople = kind === 'event' ? 0 : isPairKind ? 2 : 1;
 
   function savePointForm() {
     if (!source || !title.trim()) {
       setError('Enter a title and choose an exact source line.');
       return;
     }
+    const chosenParticipants = isPairKind
+      ? [fromCharId, toCharId].filter(id => Boolean(id) && characterOptions.some(person => person.id === id))
+      : people.filter(id => characterOptions.some(person => person.id === id));
+
+    if (isPairKind && (chosenParticipants.length !== 2 || chosenParticipants[0] === chosenParticipants[1])) {
+      setError('Choose two distinct characters already introduced at this script point.');
+      return;
+    }
+
     const ok = save({
       id: point?.id ?? newId(),
       kind,
@@ -236,8 +275,10 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
       detail: detail.trim(),
       source,
       storyOrder: Number.isFinite(storyOrder) ? storyOrder : 1,
-      participants: people.filter(id => characterOptions.some(person => person.id === id)),
+      participants: chosenParticipants,
       relationship: kind === 'relationship' ? relationship : undefined,
+      direction: kind === 'relationship' ? direction : undefined,
+      bond: kind === 'relationship' ? (bond.trim() || undefined) : undefined,
       knowledge: kind === 'knowledge' ? knowledge : undefined,
       factKey: kind === 'knowledge' ? factKey.trim() : undefined,
       causeId: kind === 'event' || kind === 'arc' ? causeId || undefined : undefined
@@ -246,14 +287,27 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
   }
 
   return <StoryDialog
-    title={point ? 'Edit story record' : 'Add story record'}
+    title={point ? 'Edit story record' : kind === 'relationship' ? 'Set relationship' : kind === 'interaction' ? 'Log interaction' : 'Add story record'}
     subtitle="The script line controls when the audience learns it; story order controls chronology."
     width={680}
     onClose={close}
     onSubmit={savePointForm}
-    footer={<HStack gap={2} justify="end">
-      <Button label="Cancel" onClick={close} />
-      <Button type="submit" variant="primary" label="Save record" isDisabled={!source || !title.trim()} />
+    footer={<HStack gap={2} justify="between" align="center" wrap="wrap" style={{ width: '100%' }}>
+      {point && onDelete ? (
+        confirmDelete ? (
+          <HStack gap={2} align="center">
+            <Text type="supporting" size="xsm" style={{ color: 'var(--color-text-error)' }}>Delete from working draft?</Text>
+            <Button size="sm" variant="destructive" label="Confirm delete" onClick={() => { onDelete(point.id); close(); }} />
+            <Button size="sm" variant="ghost" label="Keep" onClick={() => setConfirmDelete(false)} />
+          </HStack>
+        ) : (
+          <Button size="sm" variant="ghost" icon={<Glyph icon={Trash2} size="xsm" />} label="Delete record" onClick={() => setConfirmDelete(true)} />
+        )
+      ) : <HStack />}
+      <HStack gap={2} justify="end">
+        <Button label="Cancel" onClick={close} />
+        <Button type="submit" variant="primary" label="Save record" isDisabled={!source || !title.trim()} />
+      </HStack>
     </HStack>}
   >
     <VStack gap={3}>
@@ -261,7 +315,14 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
         <Choice
           label="Record type"
           value={kind}
-          onChange={value => setKind(value as StoryKind)}
+          onChange={value => {
+            const nextKind = value as StoryKind;
+            setKind(nextKind);
+            if ((nextKind === 'relationship' || nextKind === 'interaction') && !fromCharId && people.length) {
+              setFromCharId(people[0] ?? '');
+              setToCharId(people[1] ?? '');
+            }
+          }}
           options={STORY_KINDS.map(item => ({ value: item, label: typeLabels[item] }))}
         />
         <NumberInput
@@ -271,10 +332,72 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
           onChange={value => setStoryOrder(Number(value) || 0)}
         />
       </Grid>
-      <TextInput label={kind === 'knowledge' ? 'Fact or open question' : 'Title'} value={title} onChange={setTitle} isRequired />
+
+      {isPairKind && characterOptions.length > 0 && <VStack gap={3}>
+        <HStack gap={2} align="end" wrap="wrap">
+          <VStack style={{ flex: '1 1 11rem' }}>
+            <Choice
+              label={kind === 'relationship' && direction === 'directed' ? 'From character' : 'Character A'}
+              value={fromCharId}
+              onChange={setFromCharId}
+              options={[{ value: '', label: 'Choose character…' }, ...characterOptions.map(person => ({ value: person.id, label: person.name }))]}
+            />
+          </VStack>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<Glyph icon={ArrowLeftRight} size="xsm" />}
+            label="Swap"
+            onClick={() => {
+              setFromCharId(toCharId);
+              setToCharId(fromCharId);
+            }}
+          />
+          <VStack style={{ flex: '1 1 11rem' }}>
+            <Choice
+              label={kind === 'relationship' && direction === 'directed' ? 'Toward character' : 'Character B'}
+              value={toCharId}
+              onChange={setToCharId}
+              options={[{ value: '', label: 'Choose character…' }, ...characterOptions.map(person => ({ value: person.id, label: person.name }))]}
+            />
+          </VStack>
+        </HStack>
+
+        {kind === 'relationship' && <>
+          <VStack gap={1}>
+            <Text type="label" color="secondary">Direction</Text>
+            <SegmentedControl
+              label="Relationship direction"
+              size="sm"
+              value={direction}
+              onChange={value => setDirection(value as RelationshipDirection)}
+            >
+              <SegmentedControlItem value="mutual" label="Mutual (both ways ↔)" />
+              <SegmentedControlItem value="directed" label="One-way / asymmetric (→)" />
+            </SegmentedControl>
+          </VStack>
+          <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
+            <Choice
+              label="Relationship state"
+              value={relationship}
+              onChange={value => setRelationship(value as RelationshipState)}
+              options={RELATIONSHIPS.map(state => ({ value: state, label: state }))}
+            />
+            <Choice
+              label="Relationship type (bond)"
+              value={bond}
+              onChange={setBond}
+              options={[{ value: '', label: 'Select bond type (optional)' }, ...RELATIONSHIP_BONDS.map(item => ({ value: item, label: item }))]}
+            />
+          </Grid>
+        </>}
+      </VStack>}
+
+      <TextInput label={kind === 'knowledge' ? 'Fact or open question' : 'Title'} value={title} onChange={setTitle} placeholder={kind === 'relationship' ? 'e.g. Nora trusts Elias with the timetable' : undefined} isRequired />
       <TextArea label="Detail" value={detail} onChange={setDetail} rows={2} />
       <SourceFields project={project} value={source} onChange={setSource} />
-      {characterOptions.length > 0 && <CheckboxList
+
+      {!isPairKind && characterOptions.length > 0 && <CheckboxList
         label={`Characters${minPeople ? ` · Select ${minPeople}` : ''}`}
         density="compact"
         value={people}
@@ -284,12 +407,7 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
           <CheckboxListItem key={person.id} value={person.id} label={person.name} description={person.role || undefined} />
         ))}
       </CheckboxList>}
-      {kind === 'relationship' && <Choice
-        label="Relationship state"
-        value={relationship}
-        onChange={value => setRelationship(value as RelationshipState)}
-        options={RELATIONSHIPS.map(state => ({ value: state, label: state }))}
-      />}
+
       {kind === 'knowledge' && <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
         <TextInput label="Shared fact key" value={factKey} onChange={setFactKey} placeholder="e.g. missing-evidence" isRequired />
         <Choice
@@ -733,35 +851,68 @@ export function SeriesView({
   const [characterSearch, setCharacterSearch] = useState('');
   const [characterLayout, setCharacterLayout] = useState<'cards' | 'table'>('cards');
   const [highlightedEventId, setHighlightedEventId] = useState('');
-  const [form, setForm] = useState<{ kind: 'character'; item?: Character } | { kind: 'point'; item?: StoryPoint } | { kind: 'scan' }>();
+  const [form, setForm] = useState<
+    | { kind: 'character'; item?: Character }
+    | { kind: 'point'; item?: StoryPoint; prefill?: PointPrefill }
+    | { kind: 'scan' }
+  >();
   const [error, setError] = useState('');
 
   const store = useMemo(() => getStory(project), [project]);
   const canon = version === 'draft' ? undefined : store.canon.find(item => item.id === version) ?? store.canon.at(-1);
-  const scope = {
+  const scope = useMemo(() => ({
     season: group || undefined,
     episodeId: exact || undefined,
     asOfId: asOf || undefined,
     documentId: structure.mode === 'script' ? structure.document?.id : undefined
-  };
-  const data = queryStory(project, canon?.data ?? store.draft, scope);
+  }), [group, exact, asOf, structure.mode, structure.document?.id]);
+  const data = useMemo(() => queryStory(project, canon?.data ?? store.draft, scope), [project, canon?.data, store.draft, scope]);
   const editable = !readOnly && !canon;
   const person = data.characters.find(item => item.id === focusedPerson) ?? data.characters[0];
-  const edges = relationshipStates(project, data.points);
-  const eventRows = sortStory(project, data.points.filter(point => point.kind === 'event'), order);
-  const interactions = sortStory(project, data.points.filter(point => point.kind === 'interaction' && point.participants.includes(person?.id ?? '')), 'reveal').reverse();
+  const edges = useMemo(() => relationshipStates(project, data.points), [project, data.points]);
+  const eventRows = useMemo(() => sortStory(project, data.points.filter(point => point.kind === 'event'), order), [project, data.points, order]);
+  const interactions = useMemo(
+    () => sortStory(project, data.points.filter(point => point.kind === 'interaction' && point.participants.includes(person?.id ?? '')), 'reveal').reverse(),
+    [project, data.points, person?.id]
+  );
   const selectPerson = (id: string) => setFocusedPerson(id);
   const introOf = (item: Character) => structure.unitCodeOfSource(item.source);
   const setEditPoint = editable ? (point: StoryPoint) => setForm({ kind: 'point', item: point }) : undefined;
+  const setCreatePoint = editable ? (prefill: PointPrefill) => setForm({ kind: 'point', prefill }) : undefined;
   const displayDossier = dossier && Boolean(person);
-  const canonLookup: CanonLookup = canon ? undefined : canonStates(store);
+  const canonLookup: CanonLookup = useMemo(() => canon ? undefined : canonStates(store), [canon, store]);
   const cutoffIndex = asOf ? units.findIndex(item => item.id === asOf) : units.length - 1;
-  const scopeUnits = units.filter(item => (!group || item.groupNumber === group) && (!exact || item.id === exact));
-  const revealedUnits = scopeUnits.filter(item => units.indexOf(item) <= cutoffIndex);
-  const flashbackFlags = new Map([...flashbacks(project, data.points)].map(id => [id, 'Revealed out of order'] as const));
-  const conflicts = continuityConflicts(data.points);
-  const checks = storyChecks(project, data, revealedUnits, structure.document?.id);
-  const draftCount = canonLookup ? [...canonLookup.values()].filter(state => state !== 'approved').length : 0;
+  const scopeUnits = useMemo(
+    () => units.filter(item => (!group || item.groupNumber === group) && (!exact || item.id === exact)),
+    [units, group, exact]
+  );
+  const revealedUnits = useMemo(
+    () => scopeUnits.filter(item => units.indexOf(item) <= cutoffIndex),
+    [scopeUnits, units, cutoffIndex]
+  );
+  const flashbackFlags = useMemo(
+    () => new Map([...flashbacks(project, data.points)].map(id => [id, 'Revealed out of order'] as const)),
+    [project, data.points]
+  );
+  const conflicts = useMemo(() => continuityConflicts(data.points), [data.points]);
+  const checks = useMemo(
+    () => storyChecks(project, data, revealedUnits, structure.document?.id),
+    [project, data, revealedUnits, structure.document?.id]
+  );
+  const draftCount = useMemo(
+    () => canonLookup ? [...canonLookup.values()].filter(state => state !== 'approved').length : 0,
+    [canonLookup]
+  );
+  const statsByChar = useMemo(() => new Map(
+    data.characters.map(item => [item.id, characterSummaryStats(project, data, item.id, structure.document?.id)] as const)
+  ), [project, data, structure.document?.id]);
+  const connectionsCountByChar = useMemo(() => new Map(
+    data.characters.map(item => [item.id, characterConnections(project, data, item.id, structure.document?.id).length] as const)
+  ), [project, data, structure.document?.id]);
+  const pairSummaryMap = useMemo(
+    () => new Map(allPairConnections(project, data, structure.document?.id).map(item => [item.pairKey, item] as const)),
+    [project, data, structure.document?.id]
+  );
   const stageReport = useMemo(
     () => project.kind === 'stage' ? stageDoublingAnalysis(project, data, structure.document?.id) : undefined,
     [data, project, structure.document?.id]
@@ -992,6 +1143,14 @@ export function SeriesView({
         onPhotoUpdate={(added, removed) => {
           onProjectChange(currentProject => removeAssets(addAssets(currentProject, added), removed));
         }}
+        onDelete={id => {
+          if (change(p => deleteCharacter(p, id), 'Character removed from working draft.')) {
+            if (focusedPerson === id) {
+              setFocusedPerson('');
+              setDossier(false);
+            }
+          }
+        }}
         save={character => {
           const saved = change(p => saveCharacter(p, character), 'Character saved.');
           if (saved) setFocusedPerson(character.id);
@@ -1002,12 +1161,14 @@ export function SeriesView({
 
     {form?.kind === 'point' && (
       <PointFormDialog
-        key={form.item?.id ?? 'new-record'}
+        key={form.item?.id ?? `new-${form.prefill?.kind ?? 'record'}-${form.prefill?.participants?.join('-') ?? ''}`}
         project={project}
         document={document}
         data={store.draft}
         point={form.item}
+        prefill={form.prefill}
         close={() => setForm(undefined)}
+        onDelete={id => { change(p => deleteStoryPoint(p, id), 'Story record deleted from working draft.'); }}
         save={point => change(p => saveStoryPoint(p, point), 'Story record saved.')}
       />
     )}
@@ -1043,6 +1204,7 @@ export function SeriesView({
         setActive={setDossierPane}
         onOpen={onOpenSource}
         onEdit={setEditPoint}
+        onCreatePoint={setCreatePoint}
         onEditCharacter={editable ? () => setForm({ kind: 'character', item: person }) : undefined}
         onSelectPerson={id => { selectPerson(id); openDossier(id); }}
         canon={canonLookup}
@@ -1060,6 +1222,8 @@ export function SeriesView({
           select={selectPerson}
           dossier={() => openDossier()}
           onOpen={onOpenSource}
+          onEdit={setEditPoint}
+          onCreatePoint={setCreatePoint}
           states={canonLookup}
         />
         <MajorEventsTimeline
@@ -1072,6 +1236,7 @@ export function SeriesView({
           flashbackFlags={flashbackFlags}
           states={canonLookup}
           onOpen={onOpenSource}
+          onEdit={setEditPoint}
           onOpenLedger={() => setView('Event ledger')}
         />
       </VStack>}
@@ -1084,6 +1249,7 @@ export function SeriesView({
           units={scopeUnits}
           cutoff={cutoffIndex}
           onOpen={onOpenSource}
+          onEdit={setEditPoint}
           states={canonLookup}
           onDossier={id => { selectPerson(id); openDossier(id); }}
         />
@@ -1147,7 +1313,8 @@ export function SeriesView({
           characterLayout === 'cards' ? (
             <Grid columns={{ minWidth: 260, repeat: 'fill' }} gap={4}>
               {filteredCharacters.map(item => {
-                const stats = characterSummaryStats(project, data, item.id, structure.document?.id);
+                const stats = statsByChar.get(item.id);
+                const connCount = connectionsCountByChar.get(item.id) ?? 0;
                 return <Card role="article" key={item.id} variant="muted" padding={4}>
                   <VStack gap={3} minHeight="100%" justify="between">
                     <VStack gap={2}>
@@ -1169,7 +1336,7 @@ export function SeriesView({
                       <HStack gap={2} align="center" wrap="wrap">
                         <Token size="sm" color="blue" label={`Introduced ${introOf(item)}`} />
                         <Text type="supporting" color="secondary" size="xsm">
-                          {stats.records} record{stats.records === 1 ? '' : 's'} · {stats.relationships} link{stats.relationships === 1 ? '' : 's'}
+                          {stats?.records ?? 0} record{(stats?.records ?? 0) === 1 ? '' : 's'} · {connCount} connection{connCount === 1 ? '' : 's'}
                         </Text>
                         <CanonBadge id={item.id} states={canonLookup} />
                       </HStack>
@@ -1222,14 +1389,14 @@ export function SeriesView({
                   header: 'Records',
                   width: pixel(84),
                   align: 'end',
-                  renderCell: ({ character }) => <Text weight="semibold">{characterSummaryStats(project, data, character.id, structure.document?.id).records}</Text>
+                  renderCell: ({ character }) => <Text weight="semibold">{statsByChar.get(character.id)?.records ?? 0}</Text>
                 },
                 {
                   key: 'links',
                   header: 'Links',
                   width: pixel(76),
                   align: 'end',
-                  renderCell: ({ character }) => characterSummaryStats(project, data, character.id, structure.document?.id).relationships
+                  renderCell: ({ character }) => connectionsCountByChar.get(character.id) ?? 0
                 },
                 {
                   key: 'actions',
@@ -1298,26 +1465,60 @@ export function SeriesView({
               },
               {
                 key: 'copresence',
-                header: 'Co-presence',
-                width: pixel(135),
-                renderCell: ({ row }) => row.appearances.length > 1
-                  ? <Token size="sm" color="blue" label={`${row.appearances.length} together`} />
-                  : <Text color="secondary">—</Text>
+                header: 'Dynamics',
+                width: proportional(2, { minWidth: 165 }),
+                renderCell: ({ row }) => {
+                  if (row.appearances.length < 2) return <Text color="secondary">—</Text>;
+                  const badges: Array<{ key: string; label: string; color: ReturnType<typeof relationshipStyle[RelationshipState]['tokenColor']['toString']> }> = [];
+                  for (let i = 0; i < row.appearances.length; i += 1) {
+                    for (let j = i + 1; j < row.appearances.length; j += 1) {
+                      const summary = pairSummaryMap.get(pairKey([row.appearances[i], row.appearances[j]]));
+                      const state = summary?.mutual?.relationship ?? summary?.aToB?.relationship ?? summary?.bToA?.relationship;
+                      if (summary && state) {
+                        badges.push({
+                          key: summary.pairKey,
+                          label: `${summary.a.name.split(' ')[0]}–${summary.b.name.split(' ')[0]}: ${state}`,
+                          color: relationshipStyle[state].tokenColor
+                        });
+                      }
+                    }
+                  }
+                  return <VStack gap={1} hAlign="start">
+                    <Token size="sm" color="blue" label={`${row.appearances.length} together`} />
+                    {badges.slice(0, 2).map(badge => (
+                      <Token key={badge.key} size="sm" color={badge.color as 'blue'} label={badge.label} />
+                    ))}
+                  </VStack>;
+                }
               },
               {
                 key: 'interactions',
                 header: 'Recorded interactions',
                 width: proportional(3, { minWidth: 220 }),
-                renderCell: ({ row }) => row.interactions.length > 0 ? (
-                  <VStack gap={1.5} hAlign="start">
-                    {row.interactions.map(point => (
-                      <VStack key={point.id} gap={0.5} hAlign="start">
-                        <Text weight="medium" size="sm">{point.title}</Text>
+                renderCell: ({ row }) => <VStack gap={1.5} hAlign="start">
+                  {row.interactions.length > 0 ? row.interactions.map(point => (
+                    <VStack key={point.id} gap={0.5} hAlign="start">
+                      <Text weight="medium" size="sm">{point.title}</Text>
+                      <HStack gap={1.5} align="center">
                         <SourceButton project={project} source={point.source} onOpen={onOpenSource} />
-                      </VStack>
-                    ))}
-                  </VStack>
-                ) : <Text color="secondary">—</Text>
+                        {setEditPoint && <Button size="sm" variant="ghost" label="Edit" onClick={() => setEditPoint(point)} />}
+                      </HStack>
+                    </VStack>
+                  )) : <Text color="secondary">—</Text>}
+                  {setCreatePoint && row.appearances.length >= 2 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={<Glyph icon={Plus} size="xsm" />}
+                      label="Log interaction"
+                      onClick={() => setCreatePoint({
+                        kind: 'interaction',
+                        participants: row.appearances.slice(0, 2),
+                        source: row.source
+                      })}
+                    />
+                  )}
+                </VStack>
               }
             ]}
           />

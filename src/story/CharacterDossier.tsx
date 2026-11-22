@@ -13,18 +13,20 @@ import { Text } from '@astryxdesign/core/Text';
 import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import {
-  ArrowRight, Clapperboard, Compass, Download, FileText, Flame, HelpCircle, MessageSquare, Sparkles, Target, Users
+  ArrowRight, Clapperboard, Compass, Download, FileText, Flame, HelpCircle, MessageSquare, Plus, Sparkles, Target, Users
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Project, WorkspaceViewProps } from '../model';
-import { cellKey, characterArcStages, characterSummaryStats, findCastMatch, relationshipHistory, storyMap } from './series-analysis';
+import {
+  cellKey, characterArcStages, characterConnections, characterSummaryStats, findCastMatch, storyMap
+} from './series-analysis';
 import type { ArcStageNode } from './series-analysis';
 import { knowledgeStates, sortStory } from './series-model';
 import type { Character, StoryPoint, StoryState } from './series-model';
 import type { StoryStructure, StoryUnit } from './story-profile';
 import { Glyph, Pane, PaneHeading, SourceButton, Split } from './StoryControls';
-import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, stateTag } from './StoryParts';
-import type { CanonLookup } from './StoryParts';
+import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, relationshipStyle, stateTag } from './StoryParts';
+import type { CanonLookup, PointPrefill } from './StoryParts';
 
 export const DOSSIER_PANES = ['Overview', 'Interactions', 'Knowledge', 'Relationships', 'Scenes', 'Notes & files'] as const;
 export type DossierPane = (typeof DOSSIER_PANES)[number];
@@ -157,6 +159,7 @@ export function CharacterDossier({
   setActive,
   onOpen,
   onEdit,
+  onCreatePoint,
   onEditCharacter,
   onSelectPerson,
   units,
@@ -172,35 +175,47 @@ export function CharacterDossier({
   setActive: (value: DossierPane) => void;
   onOpen: WorkspaceViewProps['onOpenSource'];
   onEdit?: (point: StoryPoint) => void;
+  onCreatePoint?: (prefill: PointPrefill) => void;
   onEditCharacter?: () => void;
   onSelectPerson: (id: string) => void;
   canon: CanonLookup;
 }) {
   const [selectedArcId, setSelectedArcId] = useState('');
-  const points = sortStory(project, data.points.filter(point => point.participants.includes(person.id)), 'reveal');
-  const history = [...relationshipHistory(project, data.points).entries()].filter(([key]) => key.split('/').includes(person.id));
-  const cells = storyMap(project, { ...data, points }, structure.document?.id);
-  const stats = characterSummaryStats(project, data, person.id, structure.document?.id);
-  const castLink = findCastMatch(project, person);
+  const points = useMemo(
+    () => sortStory(project, data.points.filter(point => point.participants.includes(person.id)), 'reveal'),
+    [project, data.points, person.id]
+  );
+  const connections = useMemo(
+    () => characterConnections(project, data, person.id, structure.document?.id),
+    [project, data, person.id, structure.document?.id]
+  );
+  const cells = useMemo(
+    () => storyMap(project, { ...data, points }, structure.document?.id),
+    [project, data, points, structure.document?.id]
+  );
+  const stats = useMemo(
+    () => characterSummaryStats(project, data, person.id, structure.document?.id),
+    [project, data, person.id, structure.document?.id]
+  );
+  const castLink = useMemo(() => findCastMatch(project, person), [project, person]);
   const introLabel = structure.unitCodeOfSource(person.source);
-  const arcNodes = characterArcStages(project, points, structure.document?.id);
-  const arc = points.filter(point => point.kind === 'arc');
-  const interactions = points.filter(point => point.kind === 'interaction').reverse();
-  const knowledge = knowledgeStates(project, points);
-  const scenes = points.filter(point => point.kind === 'appearance');
+  const arcNodes = useMemo(() => characterArcStages(project, points, structure.document?.id), [project, points, structure.document?.id]);
+  const arc = useMemo(() => points.filter(point => point.kind === 'arc'), [points]);
+  const interactions = useMemo(() => points.filter(point => point.kind === 'interaction').reverse(), [points]);
+  const knowledge = useMemo(() => knowledgeStates(project, points), [project, points]);
+  const scenes = useMemo(() => points.filter(point => point.kind === 'appearance'), [points]);
   const linkedAssets = (person.assetIds ?? [])
     .map(id => project.assets.find(asset => asset.id === id))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
-  const nameOf = (id: string) => data.characters.find(item => item.id === id)?.name ?? 'Character';
-  const charOf = (id: string) => data.characters.find(item => item.id === id);
   const codeOf = (point: StoryPoint) => structure.unitCodeOfSource(point.source);
   const canonStatus = canon?.get(person.id);
+  const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? name;
 
   const sections: [DossierPane, string, StoryPoint[]][] = [
     ['Interactions', 'Key interactions', interactions],
     ['Knowledge', 'Knowledge and open threads', knowledge],
-    ['Relationships', 'Relationship states', states.filter(point => point.participants.includes(person.id))],
+    ['Relationships', `Everyone ${firstName(person.name)} interacts with`, states.filter(point => point.participants.includes(person.id))],
     ['Scenes', 'Recorded appearances', scenes]
   ];
 
@@ -234,7 +249,7 @@ export function CharacterDossier({
                 <Token size="sm" color="blue" label={introLabel} />
               </HStack>
               <Text type="supporting" color="secondary">{stats.records} record{stats.records === 1 ? '' : 's'}</Text>
-              <Text type="supporting" color="secondary">{stats.relationships} relationship{stats.relationships === 1 ? '' : 's'}</Text>
+              <Text type="supporting" color="secondary">{connections.length} connection{connections.length === 1 ? '' : 's'}</Text>
               <Text type="supporting" color="secondary">{stats.arcMilestones} arc beat{stats.arcMilestones === 1 ? '' : 's'}</Text>
               {stats.openQuestions > 0 && <Token size="sm" color="yellow" label={`${stats.openQuestions} open thread${stats.openQuestions === 1 ? '' : 's'}`} />}
             </HStack>
@@ -243,6 +258,15 @@ export function CharacterDossier({
 
         <HStack gap={2} align="center" wrap="wrap">
           <SourceButton project={project} source={person.source} onOpen={onOpen} />
+          {onCreatePoint && (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Glyph icon={Plus} size="xsm" />}
+              label="Add relationship"
+              onClick={() => onCreatePoint({ kind: 'relationship', participants: [person.id], direction: 'mutual' })}
+            />
+          )}
           {onEditCharacter && <Button size="sm" label="Edit character" onClick={onEditCharacter} />}
         </HStack>
       </HStack>
@@ -256,7 +280,7 @@ export function CharacterDossier({
           label={pane}
           icon={<Glyph icon={tabIcons[pane]} size="sm" />}
           endContent={pane === 'Interactions' && interactions.length > 0 ? <Badge variant="neutral" label={String(interactions.length)} />
-            : pane === 'Relationships' && history.length > 0 ? <Badge variant="neutral" label={String(history.length)} />
+            : pane === 'Relationships' && connections.length > 0 ? <Badge variant="neutral" label={String(connections.length)} />
             : pane === 'Scenes' && scenes.length > 0 ? <Badge variant="neutral" label={String(scenes.length)} />
             : undefined}
         />
@@ -361,53 +385,163 @@ export function CharacterDossier({
             </Grid>
           </Pane>}
 
+          {active === 'Overview' && connections.length > 0 && <Pane
+            title={`Connections (${connections.length})`}
+            description={`Everyone ${firstName(person.name)} relates to, interacts with, or shares scenes with.`}
+            level={2}
+            padding={5}
+            actions={<Button size="sm" variant="ghost" label="View full history" onClick={() => setActive('Relationships')} />}
+          >
+            <Grid columns={{ minWidth: 220, repeat: 'fill' }} gap={3}>
+              {connections.slice(0, 6).map(conn => (
+                <Card key={conn.pairKey} variant="muted" padding={3}>
+                  <VStack gap={1.5} hAlign="start">
+                    <HStack gap={2} align="center">
+                      <CharacterAvatar project={project} character={conn.other} size={32} decorative />
+                      <VStack gap={0} style={{ minWidth: 0 }}>
+                        <Link onClick={() => onSelectPerson(conn.other.id)}>
+                          <Text weight="semibold" size="sm">{conn.other.name}</Text>
+                        </Link>
+                        <Text type="supporting" color="secondary" size="xsm" maxLines={1}>
+                          {[conn.bond, conn.other.role].filter(Boolean).join(' · ') || 'Character'}
+                        </Text>
+                      </VStack>
+                    </HStack>
+                    <HStack gap={1} wrap="wrap">
+                      {!conn.asymmetric && conn.mutual?.relationship && (
+                        <Token size="sm" color={relationshipStyle[conn.mutual.relationship].tokenColor} label={`↔ ${conn.mutual.relationship}`} />
+                      )}
+                      {conn.outgoing?.relationship && (
+                        <Token size="sm" color={relationshipStyle[conn.outgoing.relationship].tokenColor} label={`→ ${conn.outgoing.relationship}`} />
+                      )}
+                      {conn.incoming?.relationship && (
+                        <Token size="sm" color={relationshipStyle[conn.incoming.relationship].tokenColor} label={`← ${conn.incoming.relationship}`} />
+                      )}
+                      {!conn.primaryState && (
+                        <Token size="sm" color="gray" label={conn.sharedScenes ? `${conn.sharedScenes} shared scenes` : `${conn.interactions.length} interactions`} />
+                      )}
+                    </HStack>
+                  </VStack>
+                </Card>
+              ))}
+            </Grid>
+          </Pane>}
+
           {sections
             .filter(([key]) => key === active || (active === 'Overview' && (key === 'Interactions' || key === 'Knowledge')))
             .map(([key, title, rows]) => (
-              <Pane key={key} title={title} level={2} padding={5}>
+              <Pane
+                key={key}
+                title={title}
+                level={2}
+                padding={5}
+                actions={key === 'Relationships' && onCreatePoint ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<Glyph icon={Plus} size="xsm" />}
+                    label="Add relationship"
+                    onClick={() => onCreatePoint({ kind: 'relationship', participants: [person.id], direction: 'mutual' })}
+                  />
+                ) : undefined}
+              >
                 {key === 'Relationships' ? (
-                  history.length > 0 ? <VStack as="ul" gap={0} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-                    {history.map(([pair, turns], idx) => {
-                      const otherId = pair.split('/').find(id => id !== person.id) ?? '';
-                      const other = charOf(otherId);
+                  connections.length > 0 ? <VStack as="ul" gap={0} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                    {connections.map((conn, idx) => {
+                      const turns = conn.relationshipTurns;
                       const latestTurn = turns.at(-1)?.point;
-                      return <VStack as="li" key={pair} gap={0} style={{ listStyle: 'none' }}>
+                      const metaParts: string[] = [];
+                      if (conn.bond) metaParts.push(conn.bond);
+                      if (conn.other.role) metaParts.push(conn.other.role);
+                      if (conn.interactions.length > 0) metaParts.push(`${conn.interactions.length} interaction${conn.interactions.length === 1 ? '' : 's'}`);
+                      if (conn.sharedScenes > 0) metaParts.push(`${conn.sharedScenes} shared scene${conn.sharedScenes === 1 ? '' : 's'}`);
+                      return <VStack as="li" key={conn.pairKey} gap={0} style={{ listStyle: 'none' }}>
                         {idx > 0 && <Divider />}
                         <VStack gap={2} style={{ paddingBlock: 'var(--spacing-3)' }}>
                           <HStack gap={3} align="center" justify="between" wrap="wrap">
                             <HStack gap={2} align="center">
-                              {other && <CharacterAvatar project={project} character={other} size={36} decorative />}
+                              <CharacterAvatar project={project} character={conn.other} size={36} decorative />
                               <VStack gap={0}>
-                                <Link onClick={() => onSelectPerson(otherId)}>
-                                  <Text weight="semibold">{nameOf(otherId)}</Text>
-                                </Link>
-                                {other?.role && <Text type="supporting" color="secondary" size="xsm">{other.role}</Text>}
+                                <HStack gap={1.5} align="center" wrap="wrap">
+                                  <Link onClick={() => onSelectPerson(conn.other.id)}>
+                                    <Text weight="semibold">{conn.other.name}</Text>
+                                  </Link>
+                                  {conn.bond && <Token size="sm" color="purple" label={conn.bond} />}
+                                </HStack>
+                                <Text type="supporting" color="secondary" size="xsm">{metaParts.join(' · ') || 'Connected character'}</Text>
                               </VStack>
                             </HStack>
-                            <Badge variant="neutral" label={`${turns.length} turn${turns.length === 1 ? '' : 's'}`} />
+                            <HStack gap={1.5} align="center" wrap="wrap">
+                              {turns.length > 0 && <Badge variant="neutral" label={`${turns.length} turn${turns.length === 1 ? '' : 's'}`} />}
+                              {onCreatePoint && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  label={turns.length > 0 ? 'Add turn' : 'Set relationship'}
+                                  onClick={() => onCreatePoint({
+                                    kind: 'relationship',
+                                    participants: [person.id, conn.other.id],
+                                    direction: conn.asymmetric ? 'directed' : 'mutual',
+                                    bond: conn.bond,
+                                    source: conn.firstSharedSource
+                                  })}
+                                />
+                              )}
+                            </HStack>
                           </HStack>
-                          <HStack
-                            as="ol"
-                            gap={2}
-                            align="center"
-                            wrap="wrap"
-                            aria-label={`Relationship with ${nameOf(otherId)} over time`}
-                            style={{ margin: 0, padding: 0, listStyle: 'none' }}
-                          >
-                            {turns.map(({ point }, turnIdx) => (
-                              <HStack as="li" key={point.id} gap={1.5} align="center" style={{ listStyle: 'none' }}>
-                                {turnIdx > 0 && <Glyph icon={ArrowRight} size="xsm" color="secondary" />}
-                                {stateTag(point)}
-                                <SourceButton project={project} source={point.source} onOpen={onOpen} label={codeOf(point)} />
-                                <CanonBadge id={point.id} states={canon} />
-                              </HStack>
-                            ))}
-                          </HStack>
+
+                          {/* Both-ways summary when asymmetric */}
+                          {conn.asymmetric && (
+                            <HStack gap={2} align="center" wrap="wrap">
+                              {conn.outgoing?.relationship && (
+                                <Token
+                                  size="sm"
+                                  color={relationshipStyle[conn.outgoing.relationship].tokenColor}
+                                  label={`${firstName(person.name)} → ${firstName(conn.other.name)}: ${conn.outgoing.relationship}`}
+                                />
+                              )}
+                              {conn.incoming?.relationship && (
+                                <Token
+                                  size="sm"
+                                  color={relationshipStyle[conn.incoming.relationship].tokenColor}
+                                  label={`${firstName(conn.other.name)} → ${firstName(person.name)}: ${conn.incoming.relationship}`}
+                                />
+                              )}
+                            </HStack>
+                          )}
+
+                          {turns.length > 0 ? (
+                            <HStack
+                              as="ol"
+                              gap={2}
+                              align="center"
+                              wrap="wrap"
+                              aria-label={`Relationship with ${conn.other.name} over time`}
+                              style={{ margin: 0, padding: 0, listStyle: 'none' }}
+                            >
+                              {turns.map(({ point }, turnIdx) => (
+                                <HStack as="li" key={point.id} gap={1.5} align="center" style={{ listStyle: 'none' }}>
+                                  {turnIdx > 0 && <Glyph icon={ArrowRight} size="xsm" color="secondary" />}
+                                  {stateTag(point)}
+                                  <SourceButton project={project} source={point.source} onOpen={onOpen} label={codeOf(point)} />
+                                  {onEdit && <Button size="sm" variant="ghost" label="Edit" onClick={() => onEdit(point)} />}
+                                  <CanonBadge id={point.id} states={canon} />
+                                </HStack>
+                              ))}
+                            </HStack>
+                          ) : (
+                            <HStack gap={2} align="center" wrap="wrap">
+                              <Text type="supporting" color="secondary" size="xsm">
+                                Connected via {conn.interactions.length ? `${conn.interactions.length} interaction${conn.interactions.length === 1 ? '' : 's'}` : `${conn.sharedScenes} shared script scene${conn.sharedScenes === 1 ? '' : 's'}`} · relationship type not set yet.
+                              </Text>
+                              {conn.firstSharedSource && <SourceButton project={project} source={conn.firstSharedSource} onOpen={onOpen} label="Open scene" />}
+                            </HStack>
+                          )}
                           {latestTurn?.title && <Text type="supporting" color="secondary">{latestTurn.title}</Text>}
                         </VStack>
                       </VStack>;
                     })}
-                  </VStack> : <Text type="supporting" color="secondary">No matching story records.</Text>
+                  </VStack> : <Text type="supporting" color="secondary">No relationships or interactions recorded yet.</Text>
                 ) : (
                   <PointRows
                     rows={rows}

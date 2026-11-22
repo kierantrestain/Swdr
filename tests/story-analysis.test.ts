@@ -349,4 +349,98 @@ test('documentary projects expose Story Intelligence alongside Editorial in both
   assert.equal(storyStructure(featureDoc).groups.length, 3);
 });
 
+test('bidirectional and asymmetric relationships, unified characterConnections, deletion, and cached storyStructure work together', async () => {
+  const { characterConnections, allPairConnections } = await import('../src/story/series-analysis');
+  const {
+    approveCanon, continuityConflicts, deleteCharacter, deleteStoryPoint, saveCharacter, saveStoryPoint
+  } = await import('../src/story/series-model');
+  const { storyStructure } = await import('../src/story/story-profile');
+
+  let film = createProject('Harbour Line', 'film');
+  const doc = film.documents[0];
+  doc.blocks = [
+    newBlock('scene', 'INT. DOCK OFFICE - DAY'),
+    newBlock('character', 'MARA'),
+    newBlock('dialogue', 'Keep the manifest locked.'),
+    newBlock('character', 'JONAH'),
+    newBlock('dialogue', 'I already sent a copy.'),
+    newBlock('character', 'LEAH'),
+    newBlock('dialogue', 'Not to the harbourmaster.'),
+    newBlock('scene', 'EXT. PIER - NIGHT'),
+    newBlock('character', 'MARA'),
+    newBlock('dialogue', 'Where is Leah?'),
+    newBlock('character', 'JONAH'),
+    newBlock('dialogue', 'Gone.')
+  ];
+
+  // StoryStructure WeakMap cache returns the exact same object for the same immutable Project
+  const s1 = storyStructure(film, doc.id);
+  const s2 = storyStructure(film, doc.id);
+  assert.equal(s1, s2);
+
+  const maraId = newId();
+  const jonahId = newId();
+  const leahId = newId();
+  const maraSrc = exactSource(film, doc, doc.blocks[1].id);
+  const jonahSrc = exactSource(film, doc, doc.blocks[3].id);
+  const leahSrc = exactSource(film, doc, doc.blocks[5].id);
+
+  film = saveCharacter(film, { id: maraId, name: 'Mara', role: 'Lead', motivation: '', conflict: '', aliases: ['MARA'], source: maraSrc });
+  film = saveCharacter(film, { id: jonahId, name: 'Jonah', role: 'Partner', motivation: '', conflict: '', aliases: ['JONAH'], source: jonahSrc });
+  film = saveCharacter(film, { id: leahId, name: 'Leah', role: 'Clerk', motivation: '', conflict: '', aliases: ['LEAH'], source: leahSrc });
+
+  // Asymmetric directed relationship at the SAME storyOrder: Mara -> Jonah: Trust, Jonah -> Mara: Betrayal
+  const pAB = newId();
+  const pBA = newId();
+  film = saveStoryPoint(film, {
+    id: pAB, kind: 'relationship', title: 'Mara trusts Jonah with the manifest', detail: '',
+    participants: [maraId, jonahId], direction: 'directed', bond: 'Partner', relationship: 'Trust',
+    storyOrder: 10, source: jonahSrc
+  });
+  film = saveStoryPoint(film, {
+    id: pBA, kind: 'relationship', title: 'Jonah secretly betrays Mara', detail: '',
+    participants: [jonahId, maraId], direction: 'directed', bond: 'Partner', relationship: 'Betrayal',
+    storyOrder: 10, source: jonahSrc
+  });
+
+  // Asymmetric opposite directions at the same storyOrder must NOT trigger a false conflict
+  const draft = getStory(film).draft;
+  assert.equal(continuityConflicts(draft.points).length, 0);
+
+  // Mara's connections include BOTH Jonah (formal asymmetric, 2 shared scenes) AND Leah (live script co-presence, 1 shared scene)
+  const maraConns = characterConnections(film, draft, maraId, doc.id);
+  assert.equal(maraConns.length, 2);
+  const withJonah = maraConns.find(c => c.other.id === jonahId)!;
+  assert.equal(withJonah.asymmetric, true);
+  assert.equal(withJonah.bond, 'Partner');
+  assert.equal(withJonah.outgoing?.relationship, 'Trust');
+  assert.equal(withJonah.incoming?.relationship, 'Betrayal');
+  assert.equal(withJonah.sharedScenes, 2);
+
+  // From Jonah's perspective, outgoing/incoming flip accurately!
+  const jonahConns = characterConnections(film, draft, jonahId, doc.id);
+  const jonahWithMara = jonahConns.find(c => c.other.id === maraId)!;
+  assert.equal(jonahWithMara.outgoing?.relationship, 'Betrayal');
+  assert.equal(jonahWithMara.incoming?.relationship, 'Trust');
+
+  // Leah appears in Mara's connections automatically via shared script scene even with 0 formal relationship records
+  const withLeah = maraConns.find(c => c.other.id === leahId)!;
+  assert.equal(withLeah.sharedScenes, 1);
+  assert.equal(withLeah.primaryState, undefined);
+
+  // Whole-cast pairs include all 3 pairs (Mara-Jonah, Mara-Leah, Jonah-Leah)
+  assert.equal(allPairConnections(film, draft, doc.id).length, 3);
+
+  // Approve canon, then delete a point and a character from working draft — canon stays immutable!
+  film = approveCanon(film, 'V1');
+  film = deleteStoryPoint(film, pBA);
+  assert.equal(getStory(film).draft.points.some(p => p.id === pBA), false);
+  assert.equal(getStory(film).canon[0].data.points.some(p => p.id === pBA), true);
+
+  film = deleteCharacter(film, leahId);
+  assert.equal(getStory(film).draft.characters.some(c => c.id === leahId), false);
+  assert.equal(getStory(film).canon[0].data.characters.some(c => c.id === leahId), true);
+});
+
+
 

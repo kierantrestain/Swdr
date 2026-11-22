@@ -35,16 +35,40 @@ function elementNode(block: Block): PMNode {
 
 /** Reads marks back into merged style ranges. */
 function readStyles(node: PMNode): StyleRange[] | undefined {
+  if (node.childCount === 0) return undefined;
+  if (node.childCount === 1 && node.firstChild!.marks.length === 0) return undefined;
+  let hasAnyMark = false;
+  for (let i = 0; i < node.childCount; i += 1) {
+    if (node.child(i).marks.length > 0) { hasAnyMark = true; break; }
+  }
+  if (!hasAnyMark) return undefined;
   const ranges: StyleRange[] = [];
   node.forEach((child, offset) => {
     for (const mark of child.marks) {
       const style = mark.type.name as TextStyle;
-      const previous = [...ranges].reverse().find(range => range.style === style);
+      let previous: StyleRange | undefined;
+      for (let idx = ranges.length - 1; idx >= 0; idx -= 1) {
+        if (ranges[idx].style === style) { previous = ranges[idx]; break; }
+      }
       if (previous && previous.to === offset) previous.to = offset + child.nodeSize;
       else ranges.push({ from: offset, to: offset + child.nodeSize, style });
     }
   });
   return ranges.length ? ranges : undefined;
+}
+
+function sameStyles(a?: StyleRange[], b?: StyleRange[]): boolean {
+  if (a === b) return true;
+  const lenA = a?.length ?? 0;
+  const lenB = b?.length ?? 0;
+  if (lenA !== lenB) return false;
+  if (lenA === 0) return true;
+  for (let i = 0; i < lenA; i += 1) {
+    const x = a![i];
+    const y = b![i];
+    if (x.from !== y.from || x.to !== y.to || x.style !== y.style) return false;
+  }
+  return true;
 }
 
 /** Model blocks → editor document. Dual cues and their speeches become one container. */
@@ -83,7 +107,7 @@ export function blocksToDoc(blocks: Block[]): PMNode {
 function same(a: Block, b: Block): boolean {
   return a.id === b.id && a.kind === b.kind && a.text === b.text && a.sceneId === b.sceneId && a.sceneNumber === b.sceneNumber
     && a.dual === b.dual && a.revision === b.revision && a.alternate === b.alternate
-    && JSON.stringify(a.styles ?? null) === JSON.stringify(b.styles ?? null);
+    && sameStyles(a.styles, b.styles);
 }
 
 /**
@@ -92,7 +116,8 @@ function same(a: Block, b: Block): boolean {
  * Edited text is stamped with the active revision colour, matching issued-draft rules.
  */
 export function docToBlocks(doc: PMNode, previous: Block[], revisionLabel?: string): Block[] {
-  const prior = new Map(previous.map(block => [block.id, block]));
+  const prior = new Map<string, Block>();
+  for (let i = 0; i < previous.length; i += 1) prior.set(previous[i].id, previous[i]);
   const blocks: Block[] = [];
   const read = (node: PMNode, dual?: 'left' | 'right') => {
     const kind = node.attrs.kind as BlockKind;
@@ -100,7 +125,15 @@ export function docToBlocks(doc: PMNode, previous: Block[], revisionLabel?: stri
     const text = isUppercaseElement(kind) ? raw.toUpperCase() : raw;
     const before = prior.get(node.attrs.id);
     const styles = readStyles(node);
-    const changed = !before || before.text !== text || before.kind !== kind || JSON.stringify(before.styles ?? null) !== JSON.stringify(styles ?? null);
+    const changed = !before || before.text !== text || before.kind !== kind || !sameStyles(before.styles, styles);
+    if (!changed && before && before.sceneId === (node.attrs.sceneId || undefined)
+      && before.sceneNumber === (node.attrs.sceneNumber || undefined)
+      && before.dual === (dual && kind === 'character' ? dual : undefined)
+      && before.alternate === (node.attrs.alternate || undefined)
+      && before.revision === (before.revision ?? node.attrs.revision ?? undefined)) {
+      blocks.push(before);
+      return;
+    }
     const revision = changed && revisionLabel ? revisionLabel : before?.revision ?? node.attrs.revision ?? undefined;
     const block: Block = {
       id: node.attrs.id, kind, text,

@@ -6,7 +6,7 @@ import { HStack } from '@astryxdesign/core/HStack';
 import { Text } from '@astryxdesign/core/Text';
 import { VisuallyHidden } from '@astryxdesign/core/VisuallyHidden';
 import { VStack } from '@astryxdesign/core/VStack';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import type { Project, WorkspaceViewProps } from '../model';
 import { cellKey, storyMap, unitRecords } from './series-analysis';
@@ -57,36 +57,37 @@ const FUTURE_STYLE: CSSProperties = {
   color: 'var(--color-text-disabled)'
 };
 
-export function StoryMap({ project, structure, data, units, cutoff, onOpen, onDossier, states }: {
+export function StoryMap({ project, structure, data, units, cutoff, onOpen, onEdit, onDossier, states }: {
   project: Project;
   structure: StoryStructure;
   data: StoryState;
   units: StoryUnit[];
   cutoff: number;
   onOpen: WorkspaceViewProps['onOpenSource'];
+  onEdit?: (point: StoryPoint) => void;
   onDossier: (id: string) => void;
   states: CanonLookup;
 }) {
   const [selection, setSelection] = useState<Selection>();
   const [cursor, setCursor] = useState({ row: 0, column: 0 });
-  const unitPositions = new Map(structure.units.map((unit, idx) => [unit.id, idx]));
-  const cells = storyMap(project, data, structure.document?.id);
-  const byUnit = unitRecords(project, data.points, structure.document?.id);
+  const unitPositions = useMemo(() => new Map(structure.units.map((unit, idx) => [unit.id, idx])), [structure.units]);
+  const cells = useMemo(() => storyMap(project, data, structure.document?.id), [project, data, structure.document?.id]);
+  const byUnit = useMemo(() => unitRecords(project, data.points, structure.document?.id), [project, data.points, structure.document?.id]);
   const future = (unit: StoryUnit) => (unitPositions.get(unit.id) ?? 0) > cutoff;
-  const groupNumbers = [...new Set(units.map(unit => unit.groupNumber))];
+  const groupNumbers = useMemo(() => [...new Set(units.map(unit => unit.groupNumber))], [units]);
   const groupLabelOf = (num: number) => structure.groups.find(g => g.number === num)?.label ?? `${structure.terms.groupLabel} ${num}`;
 
-  const characters = [...data.characters].sort((a, b) => {
+  const characters = useMemo(() => [...data.characters].sort((a, b) => {
     const total = (person: Character) => units.reduce((sum, unit) => sum + (cells.get(cellKey(person.id, unit.id))?.length ?? 0), 0);
     return total(b) - total(a);
-  });
-  const revealed = units.filter(unit => !future(unit));
+  }), [data.characters, units, cells]);
+  const revealed = useMemo(() => units.filter(unit => (unitPositions.get(unit.id) ?? 0) <= cutoff), [units, unitPositions, cutoff]);
   const selectedUnit = selection && units.find(unit => unit.id === selection.unitId);
   const selectedPerson = selection?.characterId ? data.characters.find(person => person.id === selection.characterId) : undefined;
   const selectedRows = !selection ? [] : selection.characterId
     ? cells.get(cellKey(selection.characterId, selection.unitId)) ?? []
     : byUnit.get(selection.unitId) ?? [];
-  const records = revealed.reduce((sum, unit) => sum + (byUnit.get(unit.id)?.length ?? 0), 0);
+  const records = useMemo(() => revealed.reduce((sum, unit) => sum + (byUnit.get(unit.id)?.length ?? 0), 0), [revealed, byUnit]);
 
   const unitNoun = structure.terms.unitSingular;
   const unitPlural = structure.terms.unitPlural;
@@ -470,6 +471,7 @@ export function StoryMap({ project, structure, data, units, cutoff, onOpen, onDo
           rows={selectedRows}
           project={project}
           onOpen={onOpen}
+          onEdit={onEdit}
           showKind
           people={data.characters}
           states={states}

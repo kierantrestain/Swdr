@@ -236,7 +236,23 @@ function partitionScenesIntoActs(
  * - Film -> Acts & Scenes (auto-grouped into crisp Sequences when a feature exceeds 24 scenes)
  * - Stage Play -> Acts & Scenes (respecting explicit Act breaks & Intermission structure)
  */
+const structureCache = new WeakMap<Project, Map<string, StoryStructure>>();
+
 export function storyStructure(project: Project, documentId?: string): StoryStructure {
+  const cacheKey = documentId ?? '';
+  let byDoc = structureCache.get(project);
+  const cached = byDoc?.get(cacheKey);
+  if (cached) return cached;
+  const computed = buildStoryStructure(project, documentId);
+  if (!byDoc) {
+    byDoc = new Map();
+    structureCache.set(project, byDoc);
+  }
+  byDoc.set(cacheKey, computed);
+  return computed;
+}
+
+function buildStoryStructure(project: Project, documentId?: string): StoryStructure {
   const episodes = orderedEpisodes(project);
   const workspaceTitle = storyWorkspaceTitle(project.kind);
 

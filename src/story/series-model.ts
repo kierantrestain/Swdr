@@ -7,6 +7,12 @@ export const STORY_KINDS = ['event', 'appearance', 'interaction', 'relationship'
 export type StoryKind = (typeof STORY_KINDS)[number];
 export const RELATIONSHIPS = ['Trust', 'Alliance', 'Romance', 'Conflict', 'Betrayal', 'Pressure', 'Distance'] as const;
 export type RelationshipState = (typeof RELATIONSHIPS)[number];
+export const RELATIONSHIP_BONDS = [
+  'Partner', 'Colleague', 'Family', 'Friend', 'Mentor', 'Romantic',
+  'Rival', 'Antagonist', 'Suspect', 'Informant', 'Employer', 'Neighbour'
+] as const;
+export type RelationshipBond = (typeof RELATIONSHIP_BONDS)[number];
+export type RelationshipDirection = 'mutual' | 'directed';
 export const KNOWLEDGE = ['Confirmed', 'Unresolved', 'Believes', 'Refuted'] as const;
 export type KnowledgeState = (typeof KNOWLEDGE)[number];
 export const CHARACTER_STATUSES = ['Active', 'Supporting', 'Departed', 'Archived'] as const;
@@ -40,6 +46,10 @@ export interface StoryPoint {
   source: SourceRef;
   storyOrder: number;
   relationship?: RelationshipState;
+  /** Social/dramatic relationship type (e.g. Partner, Family, Rival, Suspect, or custom). */
+  bond?: string;
+  /** 'mutual' (default, A ↔ B) or 'directed' (asymmetric: participants[0] → participants[1]). */
+  direction?: RelationshipDirection;
   knowledge?: KnowledgeState;
   factKey?: string;
   causeId?: string;
@@ -144,6 +154,36 @@ export function saveStoryPoint(project: Project, point: StoryPoint): Project {
   return withStory(retained, { ...store, draft: { ...store.draft, points: upsert(store.draft.points, { ...point, participants: linked }) } });
 }
 
+export function deleteStoryPoint(project: Project, pointId: string): Project {
+  const store = getStory(project);
+  const points = store.draft.points
+    .filter(item => item.id !== pointId)
+    .map(item => item.causeId === pointId ? { ...item, causeId: undefined } : item);
+  return withStory(project, { ...store, draft: { ...store.draft, points } });
+}
+
+export function deleteCharacter(project: Project, characterId: string): Project {
+  const store = getStory(project);
+  const characters = store.draft.characters.filter(item => item.id !== characterId);
+  const removedEventIds = new Set<string>();
+  const points: StoryPoint[] = [];
+  for (const item of store.draft.points) {
+    if (!item.participants.includes(characterId)) {
+      points.push(item);
+      continue;
+    }
+    if (item.kind === 'event') {
+      points.push({ ...item, participants: item.participants.filter(id => id !== characterId) });
+    } else {
+      removedEventIds.add(item.id);
+    }
+  }
+  const cleaned = removedEventIds.size
+    ? points.map(item => item.causeId && removedEventIds.has(item.causeId) ? { ...item, causeId: undefined } : item)
+    : points;
+  return withStory(project, { ...store, draft: { ...store.draft, characters, points: cleaned } });
+}
+
 export function approveCanon(project: Project, label?: string): Project {
   const store = getStory(project);
   if (!store.draft.characters.length && !store.draft.points.length) throw new Error('Add story records before approving canon.');
@@ -208,28 +248,53 @@ export function queryStory(project: Project, data: StoryState, scope: StoryScope
 }
 
 export function sortStory(project: Project, points: StoryPoint[], order: 'reveal' | 'story'): StoryPoint[] {
+  if (points.length < 2) return [...points];
   const structure = storyStructure(project);
-  const revisionDocuments = new Map([
-    ...project.documents.map(document => [`${document.id}:${document.revisionId}`, document] as const),
-    ...project.snapshots.map(({ document }) => [`${document.id}:${document.revisionId}`, document] as const)
-  ]);
-  const line = (point: StoryPoint) => revisionDocuments.get(`${point.source.documentId}:${point.source.revisionId}`)
-    ?.blocks.findIndex(block => block.id === point.source.blockId) ?? -1;
-  const reveal = (point: StoryPoint) => structure.mode === 'episodic'
-    ? structure.unitIndexOfSource(point.source)
-    : structure.sceneIndexOfSource(point.source);
-  return [...points].sort((a, b) => (order === 'story' ? a.storyOrder - b.storyOrder : 0)
-    || reveal(a) - reveal(b) || line(a) - line(b) || a.storyOrder - b.storyOrder);
+  const blockIndexByDoc = new Map<string, Map<string, number>>();
+  const indexDoc = (doc: { id: string; revisionId: string; blocks: Array<{ id: string }> }) => {
+    const key = `${doc.id}:${doc.revisionId}`;
+    if (blockIndexByDoc.has(key)) return;
+    const map = new Map<string, number>();
+    for (let i = 0; i < doc.blocks.length; i += 1) map.set(doc.blocks[i].id, i);
+    blockIndexByDoc.set(key, map);
+  };
+  for (const doc of project.documents) indexDoc(doc);
+  for (const snap of project.snapshots) indexDoc(snap.document);
+
+  const meta = new Map<string, { reveal: number; line: number }>();
+  for (const point of points) {
+    const reveal = structure.mode === 'episodic'
+      ? structure.unitIndexOfSource(point.source)
+      : structure.sceneIndexOfSource(point.source);
+    const line = point.source.blockId
+      ? (blockIndexByDoc.get(`${point.source.documentId}:${point.source.revisionId}`)?.get(point.source.blockId) ?? -1)
+      : -1;
+    meta.set(point.id, { reveal, line });
+  }
+  return [...points].sort((a, b) => {
+    if (order === 'story' && a.storyOrder !== b.storyOrder) return a.storyOrder - b.storyOrder;
+    const ma = meta.get(a.id)!;
+    const mb = meta.get(b.id)!;
+    return (ma.reveal - mb.reveal) || (ma.line - mb.line) || (a.storyOrder - b.storyOrder);
+  });
 }
 
-function relationshipKey(point: StoryPoint): string {
+/**
+ * Canonical channel key for relationship state tracking:
+ * - Mutual relationships (`direction !== 'directed'`) share one symmetric key `minId/maxId` (works both ways).
+ * - Directed relationships (`direction === 'directed'`) use `fromId>toId` so A→B and B→A can hold independent states.
+ */
+export function relationshipChannelKey(point: Pick<StoryPoint, 'participants' | 'direction'>): string {
+  if (point.direction === 'directed' && point.participants.length === 2) {
+    return `${point.participants[0]}>${point.participants[1]}`;
+  }
   return [...point.participants].sort().join('/');
 }
 
 export function relationshipStates(project: Project, points: StoryPoint[]): StoryPoint[] {
   const states = new Map<string, StoryPoint>();
   for (const point of sortStory(project, points.filter(item => item.kind === 'relationship'), 'reveal')) {
-    states.set(relationshipKey(point), point);
+    states.set(relationshipChannelKey(point), point);
   }
   return [...states.values()];
 }
@@ -280,7 +345,7 @@ export function continuityConflicts(points: StoryPoint[]): ContinuityConflict[] 
     if (point.kind === 'knowledge' && (point.knowledge === 'Confirmed' || point.knowledge === 'Refuted')) {
       key = `knowledge:${point.participants[0]}:${point.factKey?.trim().toLowerCase()}:${point.storyOrder}`;
     } else if (point.kind === 'relationship') {
-      key = `relationship:${relationshipKey(point)}:${point.storyOrder}`;
+      key = `relationship:${relationshipChannelKey(point)}:${point.storyOrder}`;
     }
     if (key) groups.set(key, [...(groups.get(key) ?? []), point]);
   }
