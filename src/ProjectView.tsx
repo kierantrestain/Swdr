@@ -20,6 +20,7 @@ import { sectionsFor } from './shell/routes';
 import { PitchSheet } from './PitchSheet';
 import { projectPulse } from './pulse';
 import { ProjectPulse } from './ProjectPulse';
+import { getStory } from './story/series-model';
 
 export type ProjectDestination = 'write' | 'outline' | 'av' | 'story' | 'editorial' | 'production' | 'creator' | 'media' | 'import';
 
@@ -97,11 +98,17 @@ export function ProjectView({ project, current, open, update, archive }: Props) 
     open(project.kind === 'documentary' && episode ? 'editorial' : kind === 'av' ? 'av' : 'write', document);
   }
 
+  const storyStore = sections.series ? getStory(project) : undefined;
+  const activeStory = storyStore ? (storyStore.canon.at(-1)?.data ?? storyStore.draft) : undefined;
+  const storySummary = activeStory && (activeStory.characters.length || activeStory.points.length)
+    ? `${activeStory.characters.length} character${activeStory.characters.length === 1 ? '' : 's'} · ${activeStory.points.length} canon record${activeStory.points.length === 1 ? '' : 's'}.`
+    : 'Characters, relationships, arcs and canon.';
+
   const cards: { id: ProjectDestination; label: string; text: string; icon: typeof FileText }[] = [
     ...(sections.creator ? [{ id: 'creator' as const, label: 'Creator studio', text: 'Board, previews, packaging and publishing.', icon: Video }] : []),
     { id: project.kind === 'commercial' || project.kind === 'creator' ? 'av' : 'write', label: 'Write', text: 'Open the current manuscript.', icon: FileText },
     { id: 'outline', label: 'Outline', text: 'Build beats and jump to scenes.', icon: LayoutGrid },
-    ...(sections.series ? [{ id: 'story' as const, label: 'Series Intelligence', text: 'Characters, canon and the event ledger.', icon: BookOpen }] : []),
+    ...(sections.series ? [{ id: 'story' as const, label: 'Series Intelligence', text: storySummary, icon: BookOpen }] : []),
     ...(sections.editorial ? [{ id: 'editorial' as const, label: 'Editorial', text: 'Segments, evidence and producer outputs.', icon: Mic }] : []),
     ...(sections.production ? [{ id: 'production' as const, label: 'Production', text: 'From released script to shooting schedule.', icon: Clapperboard }] : []),
     { id: 'media', label: 'Files & media', text: 'Photos, storyboards, imports and references.', icon: Images }

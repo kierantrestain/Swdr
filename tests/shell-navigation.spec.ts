@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { element, expect, loadDemo, test } from './support/browser';
+import { choose, element, expect, loadDemo, test } from './support/browser';
 
 const sections = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const trail = (page: Page) => page.getByRole('navigation', { name: 'You are here' });
@@ -90,10 +90,10 @@ test('switching episode keeps the section and updates Write, Outline, Production
   expect(page.url()).toContain('tab=breakdown');
 
   await sections(page).getByRole('link', { name: 'Series Intelligence', exact: true }).click();
-  await expect(page.getByLabel('As of episode').locator('option:checked')).toHaveText('As of S1E04');
+  await expect(page.getByRole('combobox', { name: 'As of episode', exact: true })).toContainText('As of S1E04');
   await page.keyboard.press(']');
   await expect(currentEpisode(page)).toHaveText(/S1E05/);
-  await expect(page.getByLabel('As of episode').locator('option:checked')).toHaveText('As of S1E05');
+  await expect(page.getByRole('combobox', { name: 'As of episode', exact: true })).toContainText('As of S1E05');
   expect(pageFaults).toEqual([]);
 });
 
@@ -103,7 +103,7 @@ test('switching episode in a factual series updates the editorial outline', asyn
   await sections(page).getByRole('link', { name: 'Editorial', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'The Price of Progress', level: 1 })).toBeVisible();
   await expect(page.getByText(/75-minute outline/)).toBeVisible();
-  await page.getByRole('navigation', { name: 'Editorial workspaces' }).getByRole('button', { name: 'Claims', exact: true }).click();
+  await page.locator('[aria-label="Editorial workspaces"]').getByRole('button', { name: /^Claims/ }).click();
 
   await page.getByRole('button', { name: 'Next episode', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Case 2', level: 1 })).toBeVisible();
@@ -111,7 +111,7 @@ test('switching episode in a factual series updates the editorial outline', asyn
   await expect(page.getByRole('heading', { name: 'Claim verification' })).toBeVisible();
 
   // The page's own document picker moves the shell too.
-  await page.getByLabel('Editorial document').selectOption({ label: 'Case 3' });
+  await choose(page, 'Editorial document', 'Case 3');
   await expect(currentEpisode(page)).toHaveText(/S1E03 · Case 3/);
   // Picking a document replaces the entry, so Back returns to the episode before the switch.
   await page.getByRole('button', { name: 'Back', exact: true }).click();

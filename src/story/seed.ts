@@ -56,23 +56,41 @@ export function seedSeries(project: Project): Project {
     const match = text && document.blocks.find(block => block.text.toLowerCase().includes(text.toLowerCase()));
     return exactSource(prepared, document, (match && match.id) || sceneList(document)[0].blockId);
   };
-  const person = (name: string, role: string, motivation: string, conflict: string, source: Character['source'], aliases: string[]): Character => ({
-    id: newId(), name, role, motivation, conflict, source, aliases
+  const person = (
+    name: string, role: string, motivation: string, conflict: string, source: Character['source'], aliases: string[],
+    extra: Partial<Pick<Character, 'portraitUrl' | 'billing' | 'status' | 'bio'>> = {}
+  ): Character => ({
+    id: newId(), name, role, motivation, conflict, source, aliases, ...extra
   });
   const nora = person('Nora Vale', 'Producer', 'Find out who changed the ferry records and trace the passenger on the unmarked ticket.',
-    'The crew know who corrected the route. Nobody will put it in writing.', ref(first.id, 'Nora Vale'), ['Nora']);
-  const mara = person('Mara Quinn', 'Political adviser', 'Keep the inquiry focused on the storm.', 'An original timetable could contradict her account.', ref(second.id, 'Mara Quinn'), ['Mara']);
-  const leah = person('Leah Hart', 'Government liaison', 'Protect a contact at the ferry authority.', 'Nora is asking the questions Leah cannot ask publicly.', ref(second.id, 'Leah Hart'), ['Leah']);
-  const jonah = person('Jonah Price', 'Fisherman', 'Make sure the old record is heard.', 'He is wary of what an interview will cost his neighbours.', ref(third.id, 'Jonah Price'), ['Jonah']);
-  const elias = person('Elias Crowe', 'Journalist', 'Keep his original source anonymous.', 'His source and the papers may tell different stories.', ref(fourth.id, 'Elias Crowe'), ['Elias']);
+    'The crew know who corrected the route. Nobody will put it in writing.', ref(first.id, 'Nora Vale'), ['Nora'], {
+      portraitUrl: '/portraits/nora-vale.jpg', billing: 'Series regular', status: 'Active',
+      bio: 'A determined coastal radio producer who comes to the harbour to document a routine cancellation, only to uncover a deliberate paper trail.'
+    });
+  const mara = person('Mara Quinn', 'Political adviser', 'Keep the inquiry focused on the storm.', 'An original timetable could contradict her account.', ref(second.id, 'Mara Quinn'), ['Mara'], {
+    portraitUrl: '/portraits/mara-quinn.jpg', billing: 'Series regular', status: 'Active',
+    bio: 'A disciplined ministry adviser tasked with containing local fallout before the transport review reaches Westminster.'
+  });
+  const leah = person('Leah Hart', 'Government liaison', 'Protect a contact at the ferry authority.', 'Nora is asking the questions Leah cannot ask publicly.', ref(second.id, 'Leah Hart'), ['Leah'], {
+    portraitUrl: '/portraits/leah-hart.jpg', billing: 'Series regular', status: 'Active',
+    bio: 'Caught between departmental loyalty and her own unease over the missing timetable records.'
+  });
+  const jonah = person('Jonah Price', 'Fisherman', 'Make sure the old record is heard.', 'He is wary of what an interview will cost his neighbours.', ref(third.id, 'Jonah Price'), ['Jonah'], {
+    portraitUrl: '/portraits/jonah-price.jpg', billing: 'Series regular', status: 'Active',
+    bio: 'A lifelong North Shore fisherman who pocketed the original storm-night timetable before it could be replaced.'
+  });
+  const elias = person('Elias Crowe', 'Journalist', 'Keep his original source anonymous.', 'His source and the papers may tell different stories.', ref(fourth.id, 'Elias Crowe'), ['Elias'], {
+    portraitUrl: '/portraits/elias-crowe.jpg', billing: 'Series regular', status: 'Active',
+    bio: 'A sharp field reporter working the same ferry story from the paper side, balancing trust with Nora against protecting his own lead.'
+  });
   const point = (kind: StoryPoint['kind'], title: string, source: StoryPoint['source'], storyOrder: number,
     participants: Character[] = [], extra: Partial<StoryPoint> = {}): StoryPoint => ({
     id: newId(), kind, title, source, storyOrder, participants: participants.map(character => character.id), detail: '', ...extra
   });
-  const opening = point('event', 'The first cancellation', nora.source, 30, [nora]);
-  const timetable = point('event', 'The timetable changes', mara.source, 40, [nora, mara], { causeId: opening.id });
+  const opening = point('event', 'The first cancellation', nora.source, 30, [nora], { detail: 'Nora notices an unexplained gap in the harbour log.' });
+  const timetable = point('event', 'The timetable changes', mara.source, 40, [nora, mara], { causeId: opening.id, detail: 'A revised schedule is posted without a correction note.' });
   const original = point('event', 'Jonah produces the original', jonah.source, 10, [nora, jonah], { detail: 'A flashback shows when Jonah kept the earlier printing.' });
-  const departure = point('event', 'The last departure', ref(fourth.id, 'last ferry leave'), 50, [nora], { causeId: timetable.id });
+  const departure = point('event', 'The last departure', ref(fourth.id, 'last ferry leave'), 50, [nora], { causeId: timetable.id, detail: 'Nora hears the last boat leave while holding the disputed paper ticket.' });
   const points = [
     opening, timetable, original, departure,
     point('relationship', 'Nora challenges the unmarked correction', mara.source, 40, [nora, mara], { relationship: 'Conflict' }),
@@ -104,9 +122,15 @@ export function seedSeries(project: Project): Project {
   const tomasSource = line(1, 7, 'Tomas Rhee');
   const inesSource = line(2, 1, 'Ines Calder');
   const tomas = tomasSource && person('Tomas Rhee', 'Ferry master', 'Keep his licence and his crew working.',
-    'He signed the amended log the night of the storm.', tomasSource, ['Tomas', 'The ferry master']);
+    'He signed the amended log the night of the storm.', tomasSource, ['Tomas', 'The ferry master'], {
+      portraitUrl: '/portraits/tomas-rhee.jpg', billing: 'Recurring', status: 'Active',
+      bio: 'Veteran ferry master who altered the storm-night departure log under pressure and now holds the missing original.'
+    });
   const ines = inesSource && person('Ines Calder', 'Inquiry chair', 'Put every printed timetable on the public record.',
-    'The ministry controls the documents she needs.', inesSource, ['Ines']);
+    'The ministry controls the documents she needs.', inesSource, ['Ines'], {
+      portraitUrl: '/portraits/ines-calder.jpg', billing: 'Recurring', status: 'Active',
+      bio: 'Independent public inquiry chair determined to reconcile every printed record before closing the hearing.'
+    });
   const add = (season: number, number: number, text: string, make: (src: StoryPoint['source']) => StoryPoint) => {
     const source = line(season, number, text);
     if (source) points.push(make(source));

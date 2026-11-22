@@ -6,6 +6,7 @@ import type { SearchSource } from '@astryxdesign/core/Typeahead';
 import { useEffect, useMemo, useRef } from 'react';
 import type { DocumentModel, Project } from '../model';
 import { sceneList } from '../model';
+import { getStory } from '../story/series-model';
 import { projectNavigation, workspaceTabs } from './navigation';
 import { documentForEpisode, episodeCode, orderedEpisodes } from './routes';
 import type { Route } from './routes';
@@ -56,6 +57,35 @@ export function CommandMenu({ isOpen, onOpenChange, projects, project, document,
           auxiliaryData: { group: 'Episodes', hint: episode.id === document?.episodeId ? 'Current' : undefined,
             keywords: [`season ${episode.season}`, `episode ${episode.number}`],
             run: () => switchEpisode(episode.id) } });
+      }
+      if (project.kind === 'series') {
+        const story = getStory(project);
+        const activeStory = story.canon.at(-1)?.data ?? story.draft;
+        for (const person of activeStory.characters) {
+          list.push({
+            id: `character-${person.id}`,
+            label: `${person.name} · Character dossier`,
+            auxiliaryData: {
+              group: 'Characters',
+              hint: person.role || 'Series Intelligence',
+              keywords: [person.name, person.role, ...person.aliases, 'dossier', 'character'].filter(Boolean),
+              run: () => navigate({ view: 'story', projectId: project.id, documentId: document?.id, character: person.id })
+            }
+          });
+        }
+        for (const eventPoint of activeStory.points.filter(point => point.kind === 'event').slice(0, 16)) {
+          const ep = orderedEpisodes(project).find(item => item.id === eventPoint.source.episodeId);
+          list.push({
+            id: `event-${eventPoint.id}`,
+            label: eventPoint.title,
+            auxiliaryData: {
+              group: 'Major events',
+              hint: ep ? `${episodeCode(ep)} · Series event` : 'Series event',
+              keywords: [eventPoint.title, eventPoint.detail, 'event', 'timeline'].filter(Boolean),
+              run: () => navigate({ view: 'story', projectId: project.id, documentId: document?.id, tab: 'event-ledger' })
+            }
+          });
+        }
       }
     }
     list.push(...actions);

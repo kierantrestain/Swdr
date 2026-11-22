@@ -3,6 +3,8 @@
  * writer is in, and a sample of their own pages for voice. Built on the device from the project.
  */
 import type { Block, DocumentModel, Project } from '../model';
+import { getStory, knowledgeStates, queryStory, relationshipStates, sortStory } from '../story/series-model';
+import { episodeCode, orderedEpisodes } from '../story/source';
 import { scriptReport } from '../writing/script-insights';
 
 const LIMIT = 50_000;
@@ -38,6 +40,40 @@ export function aiContext(project: Project, document: DocumentModel | undefined,
   if (pitch?.comps) parts.push(`Comparable titles: ${pitch.comps}`);
   const episode = document?.episodeId && project.episodes.find(item => item.id === document.episodeId);
   if (episode) parts.push(`Current episode: S${episode.season}E${episode.number} "${episode.title}"${episode.synopsis ? ` — ${episode.synopsis}` : ''}`);
+  if (project.kind === 'series') {
+    const store = getStory(project);
+    const activeData = store.canon.at(-1)?.data ?? store.draft;
+    const scoped = queryStory(project, activeData, { asOfId: document?.episodeId });
+    const allEpisodes = orderedEpisodes(project);
+    const epTag = (id?: string) => {
+      const ep = allEpisodes.find(item => item.id === id);
+      return ep ? episodeCode(ep) : '';
+    };
+    if (scoped.characters.length) {
+      parts.push(`Series Intelligence — Characters (spoiler-safe${episode ? ` as of ${episodeCode(episode)}` : ''}):\n${scoped.characters.slice(0, 12).map(person =>
+        `- ${person.name}${person.role ? ` (${person.role})` : ''}${person.motivation ? ` — Motivation: ${person.motivation}` : ''}${person.conflict ? ` | Conflict: ${person.conflict}` : ''}`
+      ).join('\n')}`);
+    }
+    const rels = relationshipStates(project, scoped.points);
+    if (rels.length) {
+      const nameOf = (id: string) => scoped.characters.find(person => person.id === id)?.name ?? 'Character';
+      parts.push(`Series Intelligence — Current relationships:\n${rels.slice(0, 16).map(edge =>
+        `- ${edge.participants.map(nameOf).join(' & ')}: ${edge.relationship} (${edge.title}${epTag(edge.source.episodeId) ? `, ${epTag(edge.source.episodeId)}` : ''})`
+      ).join('\n')}`);
+    }
+    const openThreads = knowledgeStates(project, scoped.points).filter(item => item.knowledge === 'Unresolved' || item.knowledge === 'Believes');
+    if (openThreads.length) {
+      parts.push(`Series Intelligence — Open story questions:\n${openThreads.slice(0, 8).map(item =>
+        `- [${item.knowledge}] ${item.title}${epTag(item.source.episodeId) ? ` (${epTag(item.source.episodeId)})` : ''}`
+      ).join('\n')}`);
+    }
+    const recentEvents = sortStory(project, scoped.points.filter(point => point.kind === 'event'), 'reveal').slice(-8);
+    if (recentEvents.length) {
+      parts.push(`Series Intelligence — Major events so far:\n${recentEvents.map(item =>
+        `- ${epTag(item.source.episodeId) ? `${epTag(item.source.episodeId)}: ` : ''}${item.title}${item.detail ? ` — ${item.detail}` : ''}`
+      ).join('\n')}`);
+    }
+  }
   if (document && document.kind !== 'av' && document.blocks.length) {
     const report = scriptReport(document);
     if (report.characters.length) parts.push(`Characters (by dialogue):\n${report.characters.slice(0, 12).map(item => `- ${item.name}: ${item.speeches} speeches, first in scene ${item.firstScene}`).join('\n')}`);

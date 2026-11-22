@@ -3,17 +3,33 @@ import { FileInput } from '@astryxdesign/core/FileInput';
 import { HStack } from '@astryxdesign/core/HStack';
 import { useState } from 'react';
 import type { Asset, Project } from '../model';
+import { resolveCharacterPhoto } from '../story/series-analysis';
+import { getStory } from '../story/series-model';
 import type { Person } from './model';
 import { PHOTO_TYPES, assetUrl, photoAsset } from './photos';
 
-/** A cast or crew member's photo, falling back to initials. Decorative where the name is already shown. */
+function storyPortraitFor(project: Project, person: Pick<Person, 'name'>): string | undefined {
+  if (project.kind !== 'series') return undefined;
+  const needle = person.name.trim().toLocaleLowerCase('en-GB');
+  if (!needle) return undefined;
+  const characters = getStory(project).draft.characters;
+  const match = characters.find(item =>
+    item.name.toLocaleLowerCase('en-GB') === needle
+    || item.name.split(/\s+/)[0]?.toLocaleLowerCase('en-GB') === needle
+    || item.aliases.some(alias => alias.toLocaleLowerCase('en-GB') === needle)
+  );
+  return match ? resolveCharacterPhoto(project, match) : undefined;
+}
+
+/** A cast or crew member's photo, falling back to their Series Intelligence portrait or initials. Decorative where the name is already shown. */
 export function PersonAvatar({ project, person, size = 'md', decorative }: {
   project: Project;
   person: Pick<Person, 'name' | 'photoAssetId'>;
   size?: 'xsm' | 'sm' | 'md' | 'lg' | 'xl' | 24 | 32 | 40 | 48 | 64 | 96;
   decorative?: boolean;
 }) {
-  const avatar = <Avatar src={assetUrl(project, person.photoAssetId)} name={person.name} size={size} tooltip={false} />;
+  const src = assetUrl(project, person.photoAssetId) ?? storyPortraitFor(project, person);
+  const avatar = <Avatar src={src} name={person.name} size={size} tooltip={false} />;
   return <HStack as="span" align="center" aria-hidden={decorative || undefined}>{avatar}</HStack>;
 }
 

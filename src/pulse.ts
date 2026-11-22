@@ -5,9 +5,13 @@
 import { checks, creatorModule } from './creator/model';
 import type { DocumentModel, Project } from './model';
 import { budgetTotals, getProductionPlan, orderedDays, scheduleConflicts } from './production/model';
+import { claimBoard, getEditorial, issueCorrections } from './story/editorial-model';
+import { canonStates, storyChecks } from './story/series-analysis';
+import { continuityConflicts, getStory } from './story/series-model';
+import { orderedEpisodes } from './story/source';
 import { formatIssues, words } from './writing/script-insights';
 
-export type PulseTarget = 'write' | 'av' | 'production' | 'creator' | 'outline' | 'media';
+export type PulseTarget = 'write' | 'av' | 'production' | 'creator' | 'outline' | 'media' | 'story' | 'editorial';
 
 export interface PulseTile { id: string; label: string; value: string; detail: string; tone?: 'good' | 'warn' | 'bad'; target?: PulseTarget; progress?: number }
 /**
@@ -190,6 +194,90 @@ export function projectPulse(project: Project, current: DocumentModel | undefine
       why: 'A steady cadence matters more than any single video, for the audience and for the algorithm.' }));
     else if (ideas >= 3) steps.push(step({ id: 'ideas', impact: 'momentum', text: `${ideas} ideas are waiting. Move the strongest one into scripting.`, action: 'Open the board', target: 'creator', minutes: 5,
       why: 'Ideas age. Committing to one now keeps the pipeline full behind the next publish date.' }));
+  }
+
+  if (project.kind === 'series') {
+    const story = getStory(project);
+    const active = story.canon.at(-1)?.data ?? story.draft;
+    if (story.draft.characters.length || story.draft.points.length) {
+      const states = canonStates(story);
+      const unapproved = [...states.values()].filter(value => value !== 'approved').length;
+      const conflicts = continuityConflicts(story.draft.points);
+      const unreviewed = conflicts.filter(conflict => !story.draft.exceptions.some(item => item.id === conflict.id));
+      const allChecks = storyChecks(project, story.draft, orderedEpisodes(project));
+      const drifted = allChecks.filter(check => check.kind === 'source-changed');
+      const openThreads = allChecks.filter(check => check.kind === 'open-thread');
+      tiles.push({
+        id: 'story',
+        label: 'Series canon',
+        value: `${active.characters.length} cast`,
+        detail: `${active.points.length} canon records${unapproved ? ` · ${unapproved} in draft` : ''}${openThreads.length ? ` · ${openThreads.length} open thread${openThreads.length === 1 ? '' : 's'}` : ''}`,
+        tone: unreviewed.length ? 'bad' : drifted.length ? 'warn' : 'good',
+        target: 'story'
+      });
+      if (unreviewed.length) {
+        steps.push(step({
+          id: 'story-conflicts',
+          impact: 'risk',
+          text: `${unreviewed.length} continuity ${unreviewed.length === 1 ? 'conflict needs' : 'conflicts need'} review in Series Intelligence.`,
+          action: 'Review continuity',
+          target: 'story',
+          minutes: 10 * unreviewed.length,
+          why: 'Contradictory facts or inverted cause-and-effect records travel into every episode outline until resolved or marked intentional.'
+        }));
+      }
+      if (drifted.length) {
+        steps.push(step({
+          id: 'story-drift',
+          impact: 'risk',
+          text: `${drifted.length} story ${drifted.length === 1 ? 'record cites' : 'records cite'} a rewritten script line.`,
+          action: 'Check source lines',
+          target: 'story',
+          minutes: 5 * Math.min(4, drifted.length),
+          why: 'The live script has moved on from the line cited in the series register. Confirm each beat still holds.'
+        }));
+      }
+      if (unapproved > 0) {
+        steps.push(step({
+          id: 'story-draft',
+          impact: 'upkeep',
+          text: `${unapproved} draft story ${unapproved === 1 ? 'record is' : 'records are'} waiting for canon approval.`,
+          action: 'Open Series Intelligence',
+          target: 'story',
+          minutes: 5,
+          why: 'Unapproved records stay out of frozen canon snapshots and spoiler-safe exports until approved.'
+        }));
+      }
+    }
+  }
+
+  if (project.kind === 'documentary' || project.kind === 'commercial') {
+    const editorial = getEditorial(project);
+    if (editorial.claims.length || editorial.issues.length) {
+      const board = claimBoard(project, editorial);
+      const disputed = board.filter(card => card.lane === 'Disputed');
+      const verified = board.filter(card => card.lane === 'Verified');
+      const staleIssues = editorial.issues.filter(issue => issueCorrections(editorial, issue).length > 0);
+      tiles.push({
+        id: 'editorial',
+        label: 'Editorial claims',
+        value: `${verified.length}/${board.length} verified`,
+        detail: disputed.length ? `${disputed.length} disputed` : `${editorial.issues.length} issued`,
+        tone: disputed.length || staleIssues.length ? 'warn' : 'good',
+        target: 'editorial'
+      });
+      if (staleIssues.length) {
+        steps.push(step({
+          id: 'editorial-reissue',
+          impact: 'risk',
+          text: `${staleIssues.length} editorial ${staleIssues.length === 1 ? 'issue needs' : 'issues need'} reissue after source corrections.`,
+          action: 'Review editorial issues',
+          target: 'editorial',
+          minutes: 10,
+          why: 'Host guides and producer rundowns frozen before the correction still carry the prior wording.'
+        }));
+      }
+    }
   }
 
   // Projects live in this browser: remind people to keep a copy once there is real work in it.

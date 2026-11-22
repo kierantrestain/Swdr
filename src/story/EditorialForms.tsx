@@ -1,8 +1,18 @@
+import { Button } from '@astryxdesign/core/Button';
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
+import { CheckboxList, CheckboxListItem } from '@astryxdesign/core/CheckboxList';
+import { Grid } from '@astryxdesign/core/Grid';
+import { Heading } from '@astryxdesign/core/Heading';
+import { HStack } from '@astryxdesign/core/HStack';
+import { NumberInput } from '@astryxdesign/core/NumberInput';
+import { TextArea } from '@astryxdesign/core/TextArea';
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { VStack } from '@astryxdesign/core/VStack';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { newId, sourceFor } from '../model';
 import type { Project, SourceRef } from '../model';
-import { initialSource, SourceFields } from './StoryControls';
+import { Choice, initialSource, Pane, SourceFields } from './StoryControls';
 import {
   APPROVAL_STATES, CUE_KINDS, EVIDENCE_STATES, SEGMENT_KINDS,
   getEditorial
@@ -15,185 +25,325 @@ import { fields, sourceDocument, sourceLabel } from './source';
 
 type CommonProps = { project: Project; close: () => void };
 
-const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
-const multi = (form: FormData, key: string) => form.getAll(key).map(String);
-
 function FormActions({ close, label }: { close: () => void; label: string }) {
-  return <div className="actions"><button className="primary" type="submit">{label}</button><button type="button" onClick={close}>Cancel</button></div>;
+  return <HStack gap={2} justify="end">
+    <Button label="Cancel" onClick={close} />
+    <Button variant="primary" type="submit" label={label} />
+  </HStack>;
 }
 
-function Links({ label, name, items, selected }: { label: string; name: string; items: { id: string; title: string }[]; selected: string[] }) {
+function Links({ label, items, value, onChange }: {
+  label: string;
+  items: { id: string; title: string }[];
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
   if (!items.length) return null;
-  return <fieldset><legend>{label}</legend><div className="swdr-story-checks">
-    {items.map(item => <label key={item.id}><input type="checkbox" name={name} value={item.id} defaultChecked={selected.includes(item.id)} />{item.title}</label>)}
-  </div></fieldset>;
+  return <CheckboxList label={label} density="compact" value={value} onChange={onChange}>
+    {items.map(item => <CheckboxListItem key={item.id} value={item.id} label={item.title} />)}
+  </CheckboxList>;
 }
 
-function AssetSelect({ project, selected }: { project: Project; selected?: string }) {
-  return <label>Project asset<select name="assetId" defaultValue={selected ?? ''}>
-    <option value="">No linked asset</option>{project.assets.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
-  </select></label>;
+function AssetSelect({ project, value, onChange }: {
+  project: Project;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return <Choice
+    label="Project asset"
+    value={value}
+    onChange={onChange}
+    options={[{ value: '', label: 'No linked asset' }, ...project.assets.map(asset => ({ value: asset.id, label: asset.name }))]}
+  />;
 }
 
 export function SegmentForm({ project, segment, save, close }: CommonProps & {
-  segment?: Segment; save: (updated: Segment) => boolean;
+  segment?: Segment;
+  save: (updated: Segment) => boolean;
 }) {
   const store = getEditorial(project);
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const [title, setTitle] = useState(segment?.title ?? '');
+  const [kind, setKind] = useState<SegmentKind>(segment?.kind ?? SEGMENT_KINDS[0]);
+  const [seconds, setSeconds] = useState<number>(segment?.seconds ?? 60);
+  const [purpose, setPurpose] = useState(segment?.purpose ?? '');
+  const [points, setPoints] = useState(segment?.points.join('\n') ?? '');
+  const [questions, setQuestions] = useState(segment?.questions.join('\n') ?? '');
+  const [counterarguments, setCounterarguments] = useState(segment?.counterarguments.join('\n') ?? '');
+  const [evidenceIds, setEvidenceIds] = useState<string[]>(segment?.evidenceIds ?? []);
+  const [claimIds, setClaimIds] = useState<string[]>(segment?.claimIds ?? []);
+
+  function submit(event: FormEvent) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
     if (save({
-      id: segment?.id ?? newId(), title: text(form, 'title'), purpose: text(form, 'purpose'),
-      kind: text(form, 'kind') as SegmentKind, seconds: Number(form.get('seconds')),
-      points: fields(text(form, 'points')), questions: fields(text(form, 'questions')), counterarguments: fields(text(form, 'counterarguments')),
-      evidenceIds: multi(form, 'evidence'), claimIds: multi(form, 'claims'), cues: segment?.cues ?? []
+      id: segment?.id ?? newId(),
+      title: title.trim(),
+      purpose: purpose.trim(),
+      kind,
+      seconds: Number.isFinite(seconds) ? seconds : 60,
+      points: fields(points),
+      questions: fields(questions),
+      counterarguments: fields(counterarguments),
+      evidenceIds,
+      claimIds,
+      cues: segment?.cues ?? []
     })) close();
   }
-  return <form className="swdr-story-form" onSubmit={submit}>
-    <h2>{segment ? 'Edit segment' : 'Add segment'}</h2>
-    <label>Segment title<input required name="title" defaultValue={segment?.title} /></label>
-    <div className="swdr-story-field-row">
-      <label>Segment type<select name="kind" defaultValue={segment?.kind}>{SEGMENT_KINDS.map(kind => <option key={kind}>{kind}</option>)}</select></label>
-      <label>Runtime in seconds<input required name="seconds" type="number" min="1" max="36000" defaultValue={segment?.seconds ?? 60} /></label>
-    </div>
-    <label>Purpose<textarea name="purpose" rows={2} defaultValue={segment?.purpose} /></label>
-    <label>Talking points, one per line<textarea name="points" rows={4} defaultValue={segment?.points.join('\n')} /></label>
-    <label>Questions, one per line<textarea name="questions" rows={3} defaultValue={segment?.questions.join('\n')} /></label>
-    <label>Counterarguments, one per line<textarea name="counterarguments" rows={3} defaultValue={segment?.counterarguments.join('\n')} /></label>
-    <Links label="Linked evidence" name="evidence" selected={segment?.evidenceIds ?? []}
-      items={store.evidence.map(item => ({ id: item.id, title: item.versions.at(-1)?.title ?? 'Source' }))} />
-    <Links label="Linked claims" name="claims" selected={segment?.claimIds ?? []}
-      items={store.claims.map(item => ({ id: item.id, title: item.versions.at(-1)?.text ?? 'Claim' }))} />
+
+  return <VStack as="form" gap={3} onSubmit={submit}>
+    <Heading level={2}>{segment ? 'Edit segment' : 'Add segment'}</Heading>
+    <TextInput label="Segment title" value={title} onChange={setTitle} isRequired />
+    <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
+      <Choice
+        label="Segment type"
+        value={kind}
+        onChange={value => setKind(value as SegmentKind)}
+        options={SEGMENT_KINDS.map(value => ({ value, label: value }))}
+      />
+      <NumberInput label="Runtime in seconds" min={1} max={36000} value={seconds} onChange={value => setSeconds(Number(value) || 60)} />
+    </Grid>
+    <TextArea label="Purpose" value={purpose} onChange={setPurpose} rows={2} />
+    <TextArea label="Talking points, one per line" value={points} onChange={setPoints} rows={4} />
+    <TextArea label="Questions, one per line" value={questions} onChange={setQuestions} rows={3} />
+    <TextArea label="Counterarguments, one per line" value={counterarguments} onChange={setCounterarguments} rows={3} />
+    <Links
+      label="Linked evidence"
+      value={evidenceIds}
+      onChange={setEvidenceIds}
+      items={store.evidence.map(item => ({ id: item.id, title: item.versions.at(-1)?.title ?? 'Source' }))}
+    />
+    <Links
+      label="Linked claims"
+      value={claimIds}
+      onChange={setClaimIds}
+      items={store.claims.map(item => ({ id: item.id, title: item.versions.at(-1)?.text ?? 'Claim' }))}
+    />
     <FormActions close={close} label="Save segment" />
-  </form>;
+  </VStack>;
 }
 
 export function EvidenceForm({ project, item, save, close }: CommonProps & {
-  item?: Evidence; save: (version: SourceContent, id?: string, correction?: string) => boolean;
+  item?: Evidence;
+  save: (version: SourceContent, id?: string, correction?: string) => boolean;
 }) {
   const current = item?.versions.at(-1);
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const [title, setTitle] = useState(current?.title ?? '');
+  const [locator, setLocator] = useState(current?.locator ?? '');
+  const [status, setStatus] = useState<EvidenceState>(current?.status ?? 'Check required');
+  const [url, setUrl] = useState(current?.url ?? '');
+  const [assetId, setAssetId] = useState(current?.assetId ?? '');
+  const [notes, setNotes] = useState(current?.notes ?? '');
+  const [correction, setCorrection] = useState('');
+
+  function submit(event: FormEvent) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
     if (save({
-      title: text(form, 'title'), url: text(form, 'url'), locator: text(form, 'locator'),
-      status: text(form, 'status') as EvidenceState, notes: text(form, 'notes'),
-      assetId: text(form, 'assetId') || undefined
-    }, item?.id, text(form, 'correction'))) close();
+      title: title.trim(),
+      url: url.trim(),
+      locator: locator.trim(),
+      status,
+      notes: notes.trim(),
+      assetId: assetId || undefined
+    }, item?.id, correction.trim())) close();
   }
-  return <form className="swdr-story-card swdr-story-form" onSubmit={submit}>
-    <h2>{item ? 'Correct source' : 'Add source'}</h2>
-    <label>Source title<input required name="title" defaultValue={current?.title} /></label>
-    <div className="swdr-story-field-row">
-      <label>Location in source<input name="locator" placeholder="Page, section or timecode" defaultValue={current?.locator} /></label>
-      <label>Verification<select name="status" defaultValue={current?.status ?? 'Check required'}>{EVIDENCE_STATES.map(state => <option key={state}>{state}</option>)}</select></label>
-    </div>
-    <label>Source URL<input name="url" type="url" defaultValue={current?.url} placeholder="https://" /></label>
-    <AssetSelect project={project} selected={current?.assetId} />
-    <label>Research notes<textarea rows={3} name="notes" defaultValue={current?.notes} /></label>
-    {item && <label>Reason for correction<input required name="correction" /></label>}
-    <FormActions close={close} label="Save source" />
-  </form>;
+
+  return <Pane title={item ? 'Correct source' : 'Add source'} level={2} padding={5}>
+    <VStack as="form" gap={3} onSubmit={submit}>
+      <TextInput label="Source title" value={title} onChange={setTitle} isRequired />
+      <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
+        <TextInput label="Location in source" value={locator} onChange={setLocator} placeholder="Page, section or timecode" />
+        <Choice
+          label="Verification"
+          value={status}
+          onChange={value => setStatus(value as EvidenceState)}
+          options={EVIDENCE_STATES.map(state => ({ value: state, label: state }))}
+        />
+      </Grid>
+      <TextInput label="Source URL" type="url" value={url} onChange={setUrl} placeholder="https://" />
+      <AssetSelect project={project} value={assetId} onChange={setAssetId} />
+      <TextArea label="Research notes" value={notes} onChange={setNotes} rows={3} />
+      {item && <TextInput label="Reason for correction" value={correction} onChange={setCorrection} isRequired />}
+      <FormActions close={close} label="Save source" />
+    </VStack>
+  </Pane>;
 }
 
 export function ClaimForm({ project, item, save, close }: CommonProps & {
-  item?: Claim; save: (version: ClaimContent, id?: string, correction?: string) => boolean;
+  item?: Claim;
+  save: (version: ClaimContent, id?: string, correction?: string) => boolean;
 }) {
   const current = item?.versions.at(-1);
+  const [claimText, setClaimText] = useState(current?.text ?? '');
+  const [status, setStatus] = useState<EvidenceState>(current?.status ?? 'Check required');
+  const [evidenceIds, setEvidenceIds] = useState<string[]>(current?.evidenceIds ?? []);
   const [line, setLine] = useState<SourceRef | undefined>(current?.scriptLine);
   const [linked, setLinked] = useState(Boolean(current?.scriptLine));
+  const [correction, setCorrection] = useState('');
   const scripted = project.documents.find(document => document.kind !== 'av' && document.blocks.some(block => block.text.trim()));
-  function submit(event: FormEvent<HTMLFormElement>) {
+
+  function submit(event: FormEvent) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    if (save({ text: text(form, 'text'), status: text(form, 'status') as EvidenceState,
-      evidenceIds: multi(form, 'evidence'), scriptLine: linked ? line : undefined }, item?.id, text(form, 'correction'))) close();
+    if (save({
+      text: claimText.trim(),
+      status,
+      evidenceIds,
+      scriptLine: linked ? line : undefined
+    }, item?.id, correction.trim())) close();
   }
-  return <form className="swdr-story-card swdr-story-form" onSubmit={submit}>
-    <h2>{item ? 'Correct claim' : 'Add shared claim'}</h2>
-    <label>Exact claim<textarea required name="text" rows={3} defaultValue={current?.text} /></label>
-    <label>Verification<select name="status" defaultValue={current?.status ?? 'Check required'}>{EVIDENCE_STATES.map(state => <option key={state}>{state}</option>)}</select></label>
-    <Links label="Evidence for this claim" name="evidence" selected={current?.evidenceIds ?? []}
-      items={getEditorial(project).evidence.map(item => ({ id: item.id, title: item.versions.at(-1)?.title ?? 'Source' }))} />
-    <fieldset><legend>Script line</legend>
-      <label className="swdr-story-inline-check"><input type="checkbox" checked={linked} onChange={event => {
-        const next = event.currentTarget.checked;
-        setLinked(next);
-        if (next && !line && scripted) setLine(initialSource(project, scripted));
-      }} />Link the exact line where this claim is said</label>
-      {linked && <SourceFields project={project} value={line} onChange={setLine} />}
-    </fieldset>
-    {item && <label>Reason for correction<input required name="correction" /></label>}
-    <FormActions close={close} label="Save claim" />
-  </form>;
+
+  return <Pane title={item ? 'Correct claim' : 'Add shared claim'} level={2} padding={5}>
+    <VStack as="form" gap={3} onSubmit={submit}>
+      <TextArea label="Exact claim" value={claimText} onChange={setClaimText} rows={3} isRequired />
+      <Choice
+        label="Verification"
+        value={status}
+        onChange={value => setStatus(value as EvidenceState)}
+        options={EVIDENCE_STATES.map(state => ({ value: state, label: state }))}
+      />
+      <Links
+        label="Evidence for this claim"
+        value={evidenceIds}
+        onChange={setEvidenceIds}
+        items={getEditorial(project).evidence.map(entry => ({ id: entry.id, title: entry.versions.at(-1)?.title ?? 'Source' }))}
+      />
+      <VStack gap={2}>
+        <CheckboxInput
+          label="Link the exact line where this claim is said"
+          value={linked}
+          onChange={next => {
+            setLinked(next);
+            if (next && !line && scripted) setLine(initialSource(project, scripted));
+          }}
+        />
+        {linked && <SourceFields project={project} value={line} onChange={setLine} />}
+      </VStack>
+      {item && <TextInput label="Reason for correction" value={correction} onChange={setCorrection} isRequired />}
+      <FormActions close={close} label="Save claim" />
+    </VStack>
+  </Pane>;
 }
 
 export function CueForm({ project, cue, segments, segmentId, save, close }: CommonProps & {
-  cue?: VisualCue; segments: Segment[]; segmentId?: string; save: (id: string, cue: VisualCue) => boolean;
+  cue?: VisualCue;
+  segments: Segment[];
+  segmentId?: string;
+  save: (id: string, cue: VisualCue) => boolean;
 }) {
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const [targetSegment, setTargetSegment] = useState(segmentId ?? segments[0]?.id ?? '');
+  const [title, setTitle] = useState(cue?.title ?? '');
+  const [type, setType] = useState<CueKind>(cue?.type ?? CUE_KINDS[0]);
+  const [status, setStatus] = useState<ApprovalState>(cue?.status ?? APPROVAL_STATES[0]);
+  const [specification, setSpecification] = useState(cue?.specification ?? '');
+  const [assetId, setAssetId] = useState(cue?.assetId ?? '');
+
+  function submit(event: FormEvent) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    if (save(text(form, 'segment'), {
-      id: cue?.id ?? newId(), title: text(form, 'title'), type: text(form, 'type') as CueKind,
-      specification: text(form, 'specification'), status: text(form, 'status') as ApprovalState,
-      assetId: text(form, 'assetId') || undefined
+    if (save(targetSegment, {
+      id: cue?.id ?? newId(),
+      title: title.trim(),
+      type,
+      specification: specification.trim(),
+      status,
+      assetId: assetId || undefined
     })) close();
   }
-  return <form className="swdr-story-card swdr-story-form" onSubmit={submit}>
-    <h2>{cue ? 'Edit visual cue' : 'Add visual cue'}</h2>
-    <label>Episode segment<select name="segment" required defaultValue={segmentId ?? ''}>
-      <option value="">Select a segment</option>{segments.map(segment => <option key={segment.id} value={segment.id}>{segment.title}</option>)}
-    </select></label>
-    <label>Cue title<input name="title" required defaultValue={cue?.title} /></label>
-    <div className="swdr-story-field-row">
-      <label>Type<select name="type" defaultValue={cue?.type}>{CUE_KINDS.map(kind => <option key={kind}>{kind}</option>)}</select></label>
-      <label>Approval<select name="status" defaultValue={cue?.status}>{APPROVAL_STATES.map(state => <option key={state}>{state}</option>)}</select></label>
-    </div>
-    <label>Specification<textarea name="specification" rows={4} defaultValue={cue?.specification} /></label>
-    <AssetSelect project={project} selected={cue?.assetId} />
-    <FormActions close={close} label="Save cue" />
-  </form>;
+
+  return <Pane title={cue ? 'Edit visual cue' : 'Add visual cue'} level={2} padding={5}>
+    <VStack as="form" gap={3} onSubmit={submit}>
+      <Choice
+        label="Episode segment"
+        value={targetSegment}
+        onChange={setTargetSegment}
+        placeholder="Select a segment"
+        options={segments.map(segment => ({ value: segment.id, label: segment.title }))}
+      />
+      <TextInput label="Cue title" value={title} onChange={setTitle} isRequired />
+      <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
+        <Choice
+          label="Type"
+          value={type}
+          onChange={value => setType(value as CueKind)}
+          options={CUE_KINDS.map(kind => ({ value: kind, label: kind }))}
+        />
+        <Choice
+          label="Approval"
+          value={status}
+          onChange={value => setStatus(value as ApprovalState)}
+          options={APPROVAL_STATES.map(state => ({ value: state, label: state }))}
+        />
+      </Grid>
+      <TextArea label="Specification" value={specification} onChange={setSpecification} rows={4} />
+      <AssetSelect project={project} value={assetId} onChange={setAssetId} />
+      <FormActions close={close} label="Save cue" />
+    </VStack>
+  </Pane>;
 }
 
 export function BriefForm({ project, brief, save, close }: CommonProps & {
-  brief?: Brief; save: (value: Brief) => boolean;
+  brief?: Brief;
+  save: (value: Brief) => boolean;
 }) {
   const previous = brief?.avSource && sourceDocument(project, brief.avSource);
   const documents = project.documents.filter(document => document.kind === 'av');
   const known = previous && !documents.some(document => document.id === previous.id && document.revisionId === previous.revisionId);
   const entries = known ? [previous, ...documents] : documents;
+  const [client, setClient] = useState(brief?.client ?? '');
+  const [audience, setAudience] = useState(brief?.audience ?? '');
+  const [objective, setObjective] = useState(brief?.objective ?? '');
+  const [copy, setCopy] = useState(brief?.copy ?? '');
+  const [deliverables, setDeliverables] = useState(brief?.deliverables.join('\n') ?? '');
   const [avKey, setAvKey] = useState(previous ? `${previous.id}:${previous.revisionId}` : '');
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const [approval, setApproval] = useState<ApprovalState>(brief?.approval ?? APPROVAL_STATES[0]);
+  const [approver, setApprover] = useState(brief?.approver ?? '');
+
+  function submit(event: FormEvent) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
     const av = entries.find(document => `${document.id}:${document.revisionId}` === avKey);
     if (save({
-      client: text(form, 'client'), objective: text(form, 'objective'), audience: text(form, 'audience'),
-      copy: text(form, 'copy'), deliverables: fields(text(form, 'deliverables')),
-      avSource: av ? sourceFor(project, av) : undefined, approval: text(form, 'approval') as ApprovalState,
-      approver: text(form, 'approver')
+      client: client.trim(),
+      objective: objective.trim(),
+      audience: audience.trim(),
+      copy: copy.trim(),
+      deliverables: fields(deliverables),
+      avSource: av ? sourceFor(project, av) : undefined,
+      approval,
+      approver: approver.trim()
     })) close();
   }
-  return <form className="swdr-story-card swdr-story-form" onSubmit={submit}>
-    <h2>{brief ? 'Edit branded brief' : 'Create branded brief'}</h2>
-    <div className="swdr-story-field-row">
-      <label>Client<input required name="client" defaultValue={brief?.client} /></label>
-      <label>Audience<input name="audience" defaultValue={brief?.audience} /></label>
-    </div>
-    <label>Objective<textarea required name="objective" rows={2} defaultValue={brief?.objective} /></label>
-    <label>Approved or working copy<textarea name="copy" rows={3} defaultValue={brief?.copy} /></label>
-    <label>Deliverables, one per line<textarea name="deliverables" rows={3} defaultValue={brief?.deliverables.join('\n')} /></label>
-    <label>Linked AV version<select name="av" value={avKey} onChange={event => setAvKey(event.currentTarget.value)}>
-      <option value="">No AV revision linked</option>{entries.map(document => {
-        const source = sourceFor(project, document);
-        return <option key={`${document.id}:${document.revisionId}`} value={`${document.id}:${document.revisionId}`}>{sourceLabel(project, source)} · {documents.includes(document) ? 'Current draft' : 'Retained revision'}</option>;
-      })}
-    </select></label>
-    <div className="swdr-story-field-row">
-      <label>Approval<select name="approval" defaultValue={brief?.approval}>{APPROVAL_STATES.map(item => <option key={item}>{item}</option>)}</select></label>
-      <label>Approver<input name="approver" defaultValue={brief?.approver} /></label>
-    </div>
-    <FormActions close={close} label="Save brief" />
-  </form>;
+
+  return <Pane title={brief ? 'Edit branded brief' : 'Create branded brief'} level={2} padding={5}>
+    <VStack as="form" gap={3} onSubmit={submit}>
+      <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
+        <TextInput label="Client" value={client} onChange={setClient} isRequired />
+        <TextInput label="Audience" value={audience} onChange={setAudience} />
+      </Grid>
+      <TextArea label="Objective" value={objective} onChange={setObjective} rows={2} isRequired />
+      <TextArea label="Approved or working copy" value={copy} onChange={setCopy} rows={3} />
+      <TextArea label="Deliverables, one per line" value={deliverables} onChange={setDeliverables} rows={3} />
+      <Choice
+        label="Linked AV version"
+        value={avKey}
+        onChange={setAvKey}
+        options={[
+          { value: '', label: 'No AV revision linked' },
+          ...entries.map(document => {
+            const source = sourceFor(project, document);
+            return {
+              value: `${document.id}:${document.revisionId}`,
+              label: `${sourceLabel(project, source)} · ${documents.includes(document) ? 'Current draft' : 'Retained revision'}`
+            };
+          })
+        ]}
+      />
+      <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
+        <Choice
+          label="Approval"
+          value={approval}
+          onChange={value => setApproval(value as ApprovalState)}
+          options={APPROVAL_STATES.map(item => ({ value: item, label: item }))}
+        />
+        <TextInput label="Approver" value={approver} onChange={setApprover} />
+      </Grid>
+      <FormActions close={close} label="Save brief" />
+    </VStack>
+  </Pane>;
 }

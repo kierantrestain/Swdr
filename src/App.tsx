@@ -194,6 +194,14 @@ export function App() {
     });
   }, []);
 
+  const setCharacter = useCallback((character?: string) => {
+    setRoute(current => {
+      const next = { ...current, character };
+      window.history.replaceState({ swdrDepth: historyDepth() }, '', encodeRoute(next));
+      return next;
+    });
+  }, []);
+
   const selectDocument = useCallback((documentId: string) => {
     if (!active || documentId === route.documentId) return;
     go({ ...route, documentId, revisionId: undefined, sceneId: undefined, blockId: undefined, shotId: undefined }, { replace: true });
@@ -327,12 +335,13 @@ export function App() {
   else if (route.view === 'write' && shared && hasRequestedRevision) page = <div className="script-stage" id="main-content">
     <WritingView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} onFocusChange={setFocus}
       onOpenOutline={() => openProject(shared.project, 'outline', shared.document)}
+      onOpenSeries={shared.project.kind === 'series' ? (characterId?: string) => go({ view: 'story', projectId: shared.project.id, documentId: shared.document.id, character: characterId }) : undefined}
       toolbarEnd={<><AiPartner {...shared} mode="continue" /><ScriptTools {...shared} /><ExportActions {...shared} /></>} />
   </div>;
   else if (route.view === 'outline' && shared) page = <OutlineView key={shared.project.id} {...shared} onSelectDocument={selectDocument} toolbarEnd={<AiPartner {...shared} mode="outline" />} />;
   else if (route.view === 'av' && shared && hasRequestedRevision) page = <AVView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} toolbarEnd={<><AiPartner {...shared} /><ExportActions {...shared} /></>} />;
   else if (route.view === 'production' && shared) page = <ProductionView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} />;
-  else if (route.view === 'story' && shared) page = <SeriesView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} />;
+  else if (route.view === 'story' && shared) page = <SeriesView key={shared.document.id} {...shared} tab={route.tab} onTabChange={setTab} characterId={route.character} onCharacterChange={setCharacter} />;
   else if (route.view === 'media' && shared) page = <MediaLibrary key={shared.project.id} {...shared} />;
   else if (route.view === 'creator' && shared) page = <CreatorStudio key={shared.project.id} {...shared} />;
   else if (route.view === 'editorial' && shared) page = <EditorialView key={shared.project.id} {...shared} tab={route.tab} onTabChange={setTab} onSelectDocument={selectDocument} />;

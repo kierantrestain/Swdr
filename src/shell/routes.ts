@@ -16,6 +16,8 @@ export interface Route {
   reviewKey?: string;
   /** The workspace tab inside a section (production pane, series view, editorial pane). */
   tab?: string;
+  /** Optional character dossier id opened inside Series Intelligence. */
+  character?: string;
 }
 
 const projectViews = new Set<Destination>(['project', 'write', 'outline', 'av', 'story', 'editorial', 'production', 'creator', 'media', 'import']);
@@ -31,7 +33,7 @@ export function parseRoute(location: Pick<Location, 'hash' | 'pathname'> = windo
   return {
     projectId, documentId: documentId || undefined, view: view as Destination, revisionId: params.get('rev') ?? undefined,
     sceneId: params.get('scene') ?? undefined, blockId: params.get('block') ?? undefined, shotId: params.get('shot') ?? undefined,
-    tab: params.get('tab') ?? undefined
+    tab: params.get('tab') ?? undefined, character: params.get('character') ?? undefined
   };
 }
 
@@ -44,6 +46,7 @@ export function encodeRoute(route: Route): string {
   if (route.blockId) params.set('block', route.blockId);
   if (route.shotId) params.set('shot', route.shotId);
   if (route.tab) params.set('tab', route.tab);
+  if (route.character) params.set('character', route.character);
   const query = params.size ? `?${params}` : '';
   return `#p/${route.projectId}/${route.view}${route.documentId ? `/${route.documentId}` : ''}${query}`;
 }

@@ -1,23 +1,52 @@
+import { Card } from '@astryxdesign/core/Card';
+import { Divider } from '@astryxdesign/core/Divider';
+import { Grid } from '@astryxdesign/core/Grid';
+import { Heading } from '@astryxdesign/core/Heading';
+import { HStack } from '@astryxdesign/core/HStack';
+import { Text } from '@astryxdesign/core/Text';
+import { VStack } from '@astryxdesign/core/VStack';
 import { useState } from 'react';
 import type { Episode, Project, WorkspaceViewProps } from '../model';
 import { episodeCode } from './source';
 import { episodePositions } from './series-analysis';
 import { sortStory } from './series-model';
 import type { StoryPoint, StoryState } from './series-model';
-import { PointRows } from './StoryParts';
+import { Pane, PaneHeading } from './StoryControls';
+import { CharacterAvatar, PointRows } from './StoryParts';
 import type { CanonLookup } from './StoryParts';
 
-interface Thread { id: string; title: string; start: number; end: number; open: boolean; records: StoryPoint[] }
+interface Thread {
+  id: string;
+  title: string;
+  start: number;
+  end: number;
+  open: boolean;
+  records: StoryPoint[];
+}
 
-export function ArcTimeline({ project, data, episodes, onOpen, onEdit, states }: {
-  project: Project; data: StoryState; episodes: Episode[]; onOpen: WorkspaceViewProps['onOpenSource'];
-  onEdit?: (point: StoryPoint) => void; states: CanonLookup;
+const LANE_COLORS = [
+  'var(--color-accent)',
+  'var(--color-warning)',
+  'var(--color-error)',
+  'var(--color-success)',
+  'var(--color-icon-purple)'
+];
+
+export function ArcTimeline({ project, data, episodes, onOpen, onEdit, onDossier, states }: {
+  project: Project;
+  data: StoryState;
+  episodes: Episode[];
+  onOpen: WorkspaceViewProps['onOpenSource'];
+  onEdit?: (point: StoryPoint) => void;
+  onDossier?: (characterId: string) => void;
+  states: CanonLookup;
 }) {
   const [selected, setSelected] = useState<{ title: string; records: StoryPoint[] }>();
   const positions = episodePositions(project);
   const column = new Map(episodes.map((episode, index) => [positions.get(episode.id) ?? -1, index]));
   const columnOf = (point: StoryPoint) => column.get(positions.get(point.source.episodeId ?? '') ?? -2);
   const count = episodes.length;
+
   const rows = data.characters.map(person => {
     const own = sortStory(project, data.points.filter(point => point.participants.includes(person.id)), 'reveal');
     const milestones = own.filter(point => point.kind === 'arc' && columnOf(point) !== undefined);
@@ -34,55 +63,246 @@ export function ArcTimeline({ project, data, episodes, onOpen, onEdit, states }:
       const start = columnOf(records[first]);
       if (start === undefined) continue;
       const end = answer ? columnOf(answer) ?? count - 1 : count - 1;
-      threads.push({ id: `${person.id}:${key}`, title: records[first].title, start, end: Math.max(start, end), open: !answer,
-        records: records.slice(first, answer ? records.indexOf(answer) + 1 : undefined) });
+      threads.push({
+        id: `${person.id}:${key}`,
+        title: records[first].title,
+        start,
+        end: Math.max(start, end),
+        open: !answer,
+        records: records.slice(first, answer ? records.indexOf(answer) + 1 : undefined)
+      });
     }
-    return { person, milestones, threads, present: new Set(own.map(columnOf).filter((value): value is number => value !== undefined)) };
+    return {
+      person,
+      milestones,
+      threads,
+      present: new Set(own.map(columnOf).filter((value): value is number => value !== undefined))
+    };
   });
+
   const lanes = rows.filter(row => row.milestones.length || row.threads.length);
   const quiet = rows.filter(row => !row.milestones.length && !row.threads.length);
-  const template = { gridTemplateColumns: `repeat(${Math.max(1, count)}, minmax(0, 1fr))` };
   const openCount = lanes.reduce((sum, row) => sum + row.threads.filter(thread => thread.open).length, 0);
+  const colTemplate = `repeat(${Math.max(1, count)}, minmax(0, 1fr))`;
 
-  return <section className="swdr-story-card swdr-story-arcs" aria-labelledby="swdr-story-arcs-title">
-    <div className="swdr-story-card-head">
-      <div><h2 id="swdr-story-arcs-title">Arc timeline</h2>
-        <p className="swdr-story-muted">Arc milestones and story questions by reveal episode · {openCount} question{openCount === 1 ? '' : 's'} still open</p></div>
-      <div className="swdr-story-map-key"><span><i className="swdr-story-arc-key milestone" />Milestone</span>
-        <span><i className="swdr-story-arc-key open" />Open question</span><span><i className="swdr-story-arc-key resolved" />Answered</span></div>
-    </div>
-    {lanes.length && count ? <div className="swdr-story-arc-scroll"><div className="swdr-story-arc-grid">
-      <div className="swdr-story-arc-name" aria-hidden="true" />
-      <div className="swdr-story-arc-axis" style={template} aria-hidden="true">{episodes.map(episode =>
-        <span key={episode.id} className={episode.number === 1 ? 'starts-season' : undefined} title={`${episodeCode(episode)} · ${episode.title}`}>
-          {episode.number === 1 && <b>S{episode.season}</b>}{episode.number}</span>)}</div>
-      {lanes.map(({ person, milestones, threads, present }) => <div className="swdr-story-arc-row" key={person.id} role="group" aria-label={`${person.name} arc`}>
-        <div className="swdr-story-arc-name"><strong>{person.name}</strong><small>{person.role}</small></div>
-        <div className="swdr-story-arc-lane" style={template}>
-          <div className="swdr-story-arc-presence" style={{ ...template, gridColumn: `1 / ${count + 1}` }} aria-hidden="true">
-            {episodes.map((episode, index) => <i key={episode.id} className={present.has(index) ? 'is-present' : undefined} />)}</div>
-          {threads.map(thread => <button type="button" key={thread.id} className={`swdr-story-arc-thread${thread.open ? ' is-open' : ''}`}
-            style={{ gridColumn: `${thread.start + 1} / ${thread.end + 2}` }} title={thread.title}
-            aria-label={`${thread.open ? 'Open question' : 'Answered question'}: ${thread.title}, from ${episodeCode(episodes[thread.start])}${thread.open ? '' : ` to ${episodeCode(episodes[thread.end])}`}`}
-            onClick={() => setSelected({ title: thread.title, records: thread.records })}>
-            <span>{thread.open ? '? ' : '✓ '}{thread.title}</span></button>)}
-          {milestones.map(point => {
-            const start = columnOf(point)!;
-            const atEnd = count > 4 && start > count - 4;
-            const columns = atEnd ? `${start - 2} / ${start + 2}` : `${start + 1} / ${Math.min(count, start + 4) + 1}`;
-            return <button type="button" key={point.id} className={`swdr-story-arc-milestone${atEnd ? ' is-end' : ''}${states?.get(point.id) && states.get(point.id) !== 'approved' ? ' is-draft' : ''}`}
-              style={{ gridColumn: columns }} title={point.title}
-              aria-label={`${person.name} arc milestone in ${episodeCode(episodes[start])}: ${point.title}`}
-              onClick={() => setSelected({ title: `${person.name} · ${point.title}`, records: [point] })}>
-              <i aria-hidden="true" /><span>{point.title}</span></button>;
-          })}
-        </div>
-      </div>)}
-    </div></div> : <p className="swdr-story-muted">Record arc milestones or open questions to build the timeline.</p>}
-    {quiet.length > 0 && <p className="swdr-story-muted swdr-story-arc-quiet">No arc milestones yet: {quiet.map(row => row.person.name).join(', ')}</p>}
-    {selected && <div className="swdr-story-map-detail" aria-live="polite">
-      <h3>{selected.title}</h3>
-      <PointRows rows={selected.records} project={project} onOpen={onOpen} onEdit={onEdit} showKind states={states} empty="No records." />
-    </div>}
-  </section>;
+  return <Pane label="Arc timeline" padding={5}>
+    <PaneHeading
+      title="Arc timeline"
+      description={`Arc milestones and story questions by reveal episode · ${openCount} question${openCount === 1 ? '' : 's'} still open`}
+      level={2}
+      actions={<HStack gap={4} align="center" wrap="wrap">
+        <HStack as="span" gap={1.5} align="center">
+          <Card padding={0} aria-hidden="true" style={{ width: '16px', height: '10px', borderRadius: 'var(--radius-full)', background: 'var(--color-accent-muted)', border: '1px solid var(--color-accent)' }} />
+          <Text type="supporting" color="secondary" size="xsm">Milestone</Text>
+        </HStack>
+        <HStack as="span" gap={1.5} align="center">
+          <Card padding={0} aria-hidden="true" style={{ width: '16px', height: '10px', borderRadius: 'var(--radius-full)', background: 'var(--color-warning-muted)', border: '1.5px dashed var(--color-warning)' }} />
+          <Text type="supporting" color="secondary" size="xsm">Open question</Text>
+        </HStack>
+        <HStack as="span" gap={1.5} align="center">
+          <Card padding={0} aria-hidden="true" style={{ width: '16px', height: '10px', borderRadius: 'var(--radius-full)', background: 'var(--color-success-muted)', border: '1px solid var(--color-success)' }} />
+          <Text type="supporting" color="secondary" size="xsm">Answered</Text>
+        </HStack>
+      </HStack>}
+    />
+
+    {lanes.length > 0 && count > 0 ? <VStack style={{ overflowX: 'auto' }}>
+      <VStack gap={0} style={{ minWidth: `${Math.max(700, 196 + count * 32)}px` }}>
+        {/* Episode axis */}
+        <Grid columns={1} style={{ gridTemplateColumns: '196px minmax(0, 1fr)', alignItems: 'end', paddingBottom: 'var(--spacing-2)' }}>
+          <Text type="supporting" color="secondary" size="xsm" weight="semibold">Character</Text>
+          <Grid columns={count} gap={0} style={{ gridTemplateColumns: colTemplate }} aria-hidden="true">
+            {episodes.map(episode => (
+              <VStack
+                key={episode.id}
+                gap={0}
+                hAlign="center"
+                style={{
+                  borderLeft: episode.number === 1 ? '2px solid var(--color-border-emphasized)' : undefined,
+                  paddingTop: 'var(--spacing-0-5)'
+                }}
+              >
+                <Text size="xsm" weight="semibold" color={episode.number === 1 ? 'primary' : 'secondary'}>
+                  {episode.number === 1 ? `S${episode.season}` : '\u00a0'}
+                </Text>
+                <Text size="xsm" color="secondary">{episode.number}</Text>
+              </VStack>
+            ))}
+          </Grid>
+        </Grid>
+
+        {/* Character arc lanes */}
+        {lanes.map(({ person, milestones, threads, present }, laneIdx) => {
+          const laneStroke = LANE_COLORS[laneIdx % LANE_COLORS.length];
+          const presentIndices = [...present].sort((a, b) => a - b);
+          return <VStack key={person.id} gap={0}>
+            <Divider />
+            <Grid
+              role="group"
+              aria-label={`${person.name} arc`}
+              columns={1}
+              style={{ gridTemplateColumns: '196px minmax(0, 1fr)', paddingBlock: 'var(--spacing-3)', alignItems: 'start' }}
+            >
+              <HStack gap={2} align="center" style={{ paddingRight: 'var(--spacing-2)' }}>
+                <CharacterAvatar project={project} character={person} size={32} decorative />
+                <VStack gap={0} style={{ minWidth: 0 }}>
+                  {onDossier ? (
+                    <button
+                      type="button"
+                      onClick={() => onDossier(person.id)}
+                      style={{
+                        padding: 0, minHeight: 0, border: 'none', background: 'transparent',
+                        textAlign: 'left', cursor: 'pointer'
+                      }}
+                    >
+                      <Text weight="semibold" size="sm" maxLines={1}>{person.name}</Text>
+                    </button>
+                  ) : (
+                    <Text weight="semibold" size="sm" maxLines={1}>{person.name}</Text>
+                  )}
+                  <Text type="supporting" color="secondary" size="xsm" maxLines={1}>{person.role}</Text>
+                </VStack>
+              </HStack>
+
+              <VStack gap={1.5}>
+                {/* Connected episode presence & arc curve rail */}
+                <svg
+                  viewBox={`0 0 ${count * 40} 18`}
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                  style={{ width: '100%', height: '18px', display: 'block' }}
+                >
+                  <line x1="20" y1="9" x2={count * 40 - 20} y2="9" stroke="var(--color-border)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                  {presentIndices.length > 1 && (
+                    <polyline
+                      fill="none"
+                      stroke={laneStroke}
+                      strokeWidth="2"
+                      opacity="0.55"
+                      vectorEffect="non-scaling-stroke"
+                      points={presentIndices.map(idx => `${idx * 40 + 20},9`).join(' ')}
+                    />
+                  )}
+                  {episodes.map((episode, idx) => {
+                    const isMilestone = milestones.some(point => columnOf(point) === idx);
+                    const isPresent = present.has(idx);
+                    return <circle
+                      key={episode.id}
+                      cx={idx * 40 + 20}
+                      cy={9}
+                      r={isMilestone ? 4.5 : isPresent ? 3.2 : 1.6}
+                      fill={isMilestone ? laneStroke : isPresent ? 'var(--color-accent)' : 'var(--color-border-emphasized)'}
+                      stroke={isMilestone ? 'var(--color-background-surface)' : 'none'}
+                      strokeWidth={isMilestone ? 1.5 : 0}
+                    />;
+                  })}
+                </svg>
+
+                {/* Story question span bars & milestone pills */}
+                <Grid columns={count} gap={1} style={{ gridTemplateColumns: colTemplate, gridAutoFlow: 'row dense', rowGap: 'var(--spacing-1-5)' }}>
+                  {threads.map(thread => (
+                    <button
+                      type="button"
+                      key={thread.id}
+                      title={thread.title}
+                      aria-label={`${thread.open ? 'Open question' : 'Answered question'}: ${thread.title}, from ${episodeCode(episodes[thread.start])}${thread.open ? '' : ` to ${episodeCode(episodes[thread.end])}`}`}
+                      onClick={() => setSelected({ title: thread.title, records: thread.records })}
+                      style={{
+                        gridColumn: `${thread.start + 1} / ${thread.end + 2}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-start',
+                        minHeight: 0,
+                        height: '26px',
+                        padding: '0 var(--spacing-2-5, 10px)',
+                        borderRadius: 'var(--radius-full)',
+                        border: thread.open ? '1.5px dashed var(--color-warning)' : '1px solid var(--color-border-success)',
+                        background: thread.open
+                          ? 'color-mix(in srgb, var(--color-warning) 12%, var(--color-background-surface))'
+                          : 'color-mix(in srgb, var(--color-success) 14%, var(--color-background-surface))',
+                        color: thread.open ? 'var(--color-text-warning)' : 'var(--color-text-success)',
+                        fontSize: 'var(--font-size-xs)',
+                        fontWeight: 600,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {thread.open ? `? ${thread.title}` : `✓ ${thread.title}`}
+                    </button>
+                  ))}
+
+                  {milestones.map(point => {
+                    const start = columnOf(point)!;
+                    const span = Math.min(6, count);
+                    const atEnd = count > span && start > count - span;
+                    const columns = atEnd
+                      ? `${Math.max(1, start - span + 2)} / ${start + 2}`
+                      : `${start + 1} / ${Math.min(count, start + span) + 1}`;
+                    const isDraft = Boolean(states?.get(point.id) && states.get(point.id) !== 'approved');
+                    return <button
+                      type="button"
+                      key={point.id}
+                      title={point.title}
+                      aria-label={`${person.name} arc milestone in ${episodeCode(episodes[start])}: ${point.title}`}
+                      onClick={() => setSelected({ title: `${person.name} · ${point.title}`, records: [point] })}
+                      style={{
+                        gridColumn: columns,
+                        display: 'flex',
+                        flexDirection: atEnd ? 'row-reverse' : 'row',
+                        alignItems: 'center',
+                        justifyContent: 'flex-start',
+                        gap: 'var(--spacing-1-5)',
+                        minWidth: 0,
+                        minHeight: 0,
+                        height: '26px',
+                        padding: '0 var(--spacing-2)',
+                        borderRadius: 'var(--radius-element)',
+                        border: isDraft ? '1.5px dashed var(--color-warning)' : '1px solid var(--color-border-info)',
+                        background: 'var(--color-accent-muted)',
+                        color: 'var(--color-text-accent)',
+                        overflow: 'hidden',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Card
+                        padding={0}
+                        aria-hidden="true"
+                        style={{
+                          flex: 'none',
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: 'var(--radius-full)',
+                          background: 'var(--color-accent)',
+                          border: 'none'
+                        }}
+                      />
+                      <Text as="span" size="xsm" weight="semibold" color="accent" maxLines={1}>
+                        {point.title}
+                      </Text>
+                    </button>;
+                  })}
+                </Grid>
+              </VStack>
+            </Grid>
+          </VStack>;
+        })}
+      </VStack>
+    </VStack> : <Text type="supporting" color="secondary">Record arc milestones or open questions to build the timeline.</Text>}
+
+    {quiet.length > 0 && <Text type="supporting" color="secondary">
+      No arc milestones yet: {quiet.map(row => row.person.name).join(', ')}
+    </Text>}
+
+    {selected && <>
+      <Divider />
+      <Card variant="muted" padding={4} role="region" aria-label="Selected arc detail" aria-live="polite">
+        <VStack gap={2}>
+          <Heading level={3}>{selected.title}</Heading>
+          <PointRows rows={selected.records} project={project} onOpen={onOpen} onEdit={onEdit} showKind states={states} empty="No records." />
+        </VStack>
+      </Card>
+    </>}
+  </Pane>;
 }

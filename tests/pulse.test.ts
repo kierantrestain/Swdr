@@ -69,3 +69,24 @@ test('the daily brief ranks by impact and urgency, and favours quick wins', () =
   assert.match(brief.summary, /^\d+ things? needs? you · .*about \d+ minutes$/);
   assert.equal(dailyBrief([]).summary, 'Nothing needs you today.');
 });
+
+test('series projects surface Series canon tile and unapproved draft records in the project pulse', async () => {
+  const { seedSeries } = await import('../src/story/seed');
+  const { newDocument, newId } = await import('../src/model');
+  const base = createProject('Harbour', 'series');
+  base.episodes = Array.from({ length: 24 }, (_, index) => ({
+    id: newId(), title: `Episode ${index + 1}`, number: index % 12 + 1, season: Math.floor(index / 12) + 1, synopsis: ''
+  }));
+  base.documents = base.episodes.map(episode => {
+    const doc = newDocument(episode.title, 'screenplay', episode.id);
+    doc.blocks = [newBlock('scene', 'EXT. HARBOUR – DAWN'), newBlock('action', 'Nora checks the log.')];
+    return doc;
+  });
+  const seeded = seedSeries(base);
+  const { tiles, steps } = projectPulse(seeded, seeded.documents[3], new Date('2026-11-18T10:00:00Z'));
+  const canonTile = tiles.find(tile => tile.id === 'story');
+  assert.ok(canonTile, 'Series canon tile should appear on series project pulse');
+  assert.equal(canonTile.value, '7 cast');
+  assert.ok(steps.some(step => step.target === 'story' && /draft story records/.test(step.text)));
+});
+

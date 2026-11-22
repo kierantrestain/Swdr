@@ -8,6 +8,10 @@ export const RELATIONSHIPS = ['Trust', 'Alliance', 'Romance', 'Conflict', 'Betra
 export type RelationshipState = (typeof RELATIONSHIPS)[number];
 export const KNOWLEDGE = ['Confirmed', 'Unresolved', 'Believes', 'Refuted'] as const;
 export type KnowledgeState = (typeof KNOWLEDGE)[number];
+export const CHARACTER_STATUSES = ['Active', 'Supporting', 'Departed', 'Archived'] as const;
+export type CharacterStatus = (typeof CHARACTER_STATUSES)[number];
+export const CHARACTER_BILLINGS = ['Series regular', 'Recurring', 'Guest'] as const;
+export type CharacterBilling = (typeof CHARACTER_BILLINGS)[number];
 
 export interface Character {
   id: string;
@@ -17,6 +21,13 @@ export interface Character {
   conflict: string;
   aliases: string[];
   source: SourceRef;
+  photoAssetId?: string;
+  portraitUrl?: string;
+  billing?: string;
+  status?: CharacterStatus;
+  bio?: string;
+  notes?: string;
+  assetIds?: string[];
 }
 
 export interface StoryPoint {

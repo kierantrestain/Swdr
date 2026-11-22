@@ -138,3 +138,38 @@ test('the claim board derives lanes from claim and source status and links exact
   assert.throws(() => saveClaim(factual, { text: 'Bad line.', status: 'Check required', evidenceIds: [], scriptLine: { ...line, blockId: 'missing' } }),
     /exact script line/);
 });
+
+test('character portraits, arc progression stages, script scanning and spoiler-safe AI context stay connected', async () => {
+  const { characterArcStages, characterSummaryStats, resolveCharacterPhoto, scanSeriesScripts } = await import('../src/story/series-analysis');
+  const { aiContext } = await import('../src/ai/context');
+
+  const nora = store.draft.characters.find(person => person.name === 'Nora Vale')!;
+  assert.equal(resolveCharacterPhoto(series, nora), '/portraits/nora-vale.jpg');
+  const stats = characterSummaryStats(series, store.draft, nora.id);
+  assert(stats.records > 10 && stats.arcMilestones >= 3 && stats.relationships >= 4);
+
+  const stages = characterArcStages(series, store.draft.points.filter(point => point.participants.includes(nora.id)));
+  assert.equal(stages[0].stageLabel, 'Setup');
+  assert.equal(stages.at(-1)!.stageLabel, 'Resolution');
+  const canonStages = characterArcStages(series, store.canon[0].data.points.filter(point => point.participants.includes(nora.id)));
+  assert.equal(canonStages.at(-1)!.stageLabel, 'Choice');
+
+  // Scanning scripts finds unrecorded speaking characters with exact line citations.
+  const withNewSpeaker: Project = {
+    ...series,
+    documents: series.documents.map((doc, idx) => idx === 0
+      ? { ...doc, blocks: [...doc.blocks, newBlock('character', 'CAPTAIN REID'), newBlock('dialogue', 'We never cancelled that crossing.')] }
+      : doc)
+  };
+  const scan = scanSeriesScripts(withNewSpeaker, store.draft);
+  assert(scan.newCharacters.some(item => item.name === 'Captain Reid' && item.source.blockId), 'unrecorded speaking character discovered with citation');
+
+  // Spoiler-safe AI context respects the current episode cutoff.
+  const ep3Context = aiContext(series, series.documents[2]);
+  assert(ep3Context.includes('Series Intelligence — Characters'));
+  assert(ep3Context.includes('Jonah Price'));
+  assert(!ep3Context.includes('Elias Crowe'), 'future character Elias must stay hidden in S1E03 AI context');
+  const ep4Context = aiContext(series, series.documents[3]);
+  assert(ep4Context.includes('Elias Crowe'), 'Elias enters AI context once introduced in S1E04');
+});
+

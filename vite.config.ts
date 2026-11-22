@@ -9,12 +9,13 @@ function offlineShell(): Plugin {
     generateBundle(_options, bundle) {
       const assets = Object.keys(bundle).filter(name => /\.(?:css|js|woff2)$/.test(name)).sort();
       const version = createHash('sha256').update(assets.join('\n')).digest('hex').slice(0, 16);
+      const portraits = ['nora-vale', 'elias-crowe', 'mara-quinn', 'jonah-price', 'leah-hart', 'tomas-rhee', 'ines-calder'].map(slug => `portraits/${slug}.jpg`);
       this.emitFile({
         type: 'asset',
         fileName: 'sw.js',
         source: `const CURRENT = 'swdr-app-${version}';
 const SHELL = new URL('index.html', self.registration.scope).href;
-const FILES = new Set(${JSON.stringify(['index.html', 'manifest.webmanifest', 'swdr-192.png', 'swdr-512.png', ...assets])}.map(path => new URL(path, self.registration.scope).href));
+const FILES = new Set(${JSON.stringify(['index.html', 'manifest.webmanifest', 'swdr-192.png', 'swdr-512.png', ...portraits, ...assets])}.map(path => new URL(path, self.registration.scope).href));
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CURRENT).then(cache => cache.addAll([...FILES])).then(() => self.skipWaiting()));

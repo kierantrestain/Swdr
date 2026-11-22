@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import {
-  Check, ChevronDown, CircleCheck, MessageSquarePlus, NotebookPen, Columns2, Expand, List, MessageSquareText, Printer, Redo2, Replace, Search, Undo2, X
+  BookOpen, Check, ChevronDown, CircleCheck, MessageSquarePlus, NotebookPen, Columns2, Expand, List, MessageSquareText, Printer, Redo2, Replace, Search, Undo2, X
 } from 'lucide-react';
 import { baseKeymap, toggleMark } from 'prosemirror-commands';
 import { closeHistory, history, redo, redoDepth, undo, undoDepth } from 'prosemirror-history';
@@ -17,6 +17,7 @@ import { newId } from '../model';
 import type { Block, BlockKind, DocumentModel, ScriptComment, SourceRef, WorkspaceViewProps } from '../model';
 import { geometryFor, paginateDocument } from './layout';
 import { pairDialogue } from './keyboard';
+import { StoryDrawer } from './StoryDrawer';
 import { WritingContext } from './writing-context';
 import { useScriptPrint } from './print';
 import { blocksToDoc, docToBlocks } from './pm/convert';
@@ -35,6 +36,8 @@ export interface WritingProps extends WorkspaceViewProps {
   saveLabel?: string;
   /** Kept for callers; the project sidebar now carries Outline. */
   onOpenOutline?: () => void;
+  /** Opens Series Intelligence (optionally straight into a character's dossier) for series projects. */
+  onOpenSeries?: (characterId?: string) => void;
 }
 
 /** Below this manuscript width the page renders as a fluid column without sheet gaps. */
@@ -80,7 +83,7 @@ export function WritingView(props: WritingProps) {
   const measureFrame = useRef(0);
 
   const [active, setActive] = useState<{ id: string; kind: BlockKind }>({ id: document.blocks[0]?.id ?? '', kind: document.blocks[0]?.kind ?? 'scene' });
-  const [drawer, setDrawer] = useState<'scenes' | 'notes' | 'comments' | null>(null);
+  const [drawer, setDrawer] = useState<'scenes' | 'notes' | 'comments' | 'story' | null>(null);
   const [activeComment, setActiveComment] = useState('');
   const [showResolved, setShowResolved] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
@@ -641,6 +644,10 @@ export function WritingView(props: WritingProps) {
         <IconButton label="Find and replace" tooltip="Find and replace (Ctrl+F)" icon={<Search size={16} />} variant="ghost" size="sm"
           onClick={() => { setFinder(previous => ({ ...previous, open: !previous.open })); requestAnimationFrame(() => globalThis.document.querySelector<HTMLInputElement>('#swdr-find-input')?.focus()); }} />
         <Button label="Scenes" variant={drawer === 'scenes' ? 'secondary' : 'ghost'} size="sm" icon={<List size={16} />} onClick={() => setDrawer(previous => previous === 'scenes' ? null : 'scenes')} />
+        {props.project.kind === 'series' && (
+          <IconButton label="Story bible" tooltip="Series Intelligence (characters & open questions)" variant={drawer === 'story' ? 'secondary' : 'ghost'} size="sm" icon={<BookOpen size={16} />}
+            onClick={() => setDrawer(previous => previous === 'story' ? null : 'story')} />
+        )}
         <IconButton label="Notes" tooltip="Draft notes, title page and revisions" variant={drawer === 'notes' ? 'secondary' : 'ghost'} size="sm" icon={<NotebookPen size={16} />} onClick={() => { setNotesSection(undefined); setDrawer(previous => previous === 'notes' ? null : 'notes'); }} />
         <span className="swdr-w-count-host">
           <IconButton label={openComments.length ? `Comments ${openComments.length}` : 'Comments'} tooltip="Comments" variant={drawer === 'comments' ? 'secondary' : 'ghost'} size="sm" icon={<MessageSquareText size={16} />}
@@ -722,6 +729,15 @@ export function WritingView(props: WritingProps) {
           </div>
         </li>)}</ol>
       </aside>}
+      {!focused && drawer === 'story' && props.project.kind === 'series' && (
+        <StoryDrawer
+          project={props.project}
+          document={document}
+          onOpenSource={props.onOpenSource}
+          onOpenSeries={props.onOpenSeries}
+          onClose={() => setDrawer(null)}
+        />
+      )}
       {!focused && drawer === 'notes' && activeBlock && <WritingContext {...props} key={notesSection ?? 'notes'} section={notesSection} active={activeBlock} onClose={() => { setDrawer(null); setNotesSection(undefined); }} onDocumentChange={commit} onResetHistory={() => undefined} onPrint={print.requestPrint} />}
 
       <footer className="swdr-write-footer">
