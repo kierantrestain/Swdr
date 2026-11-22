@@ -1,4 +1,5 @@
 import type { DocumentModel, Project } from '../model';
+import { isStoryProject, storyWorkspaceTitle } from '../story/story-profile';
 export { episodeCode, orderedEpisodes } from '../story/source';
 
 /** Every view that belongs to an open project. */
@@ -14,9 +15,9 @@ export interface Route {
   blockId?: string;
   shotId?: string;
   reviewKey?: string;
-  /** The workspace tab inside a section (production pane, series view, editorial pane). */
+  /** The workspace tab inside a section (production pane, story view, editorial pane). */
   tab?: string;
-  /** Optional character dossier id opened inside Series Intelligence. */
+  /** Optional character dossier id opened inside Story/Series Intelligence. */
   character?: string;
 }
 
@@ -56,6 +57,11 @@ export const SECTION_LABELS: Record<Destination, string> = {
   av: 'AV script', story: 'Series Intelligence', editorial: 'Editorial', production: 'Production', creator: 'Creator studio', media: 'Files & media', import: 'Import'
 };
 
+/** Medium-native title for the Story Intelligence workspace (Series / Film / Stage / Story Intelligence). */
+export function storyLabel(project?: Pick<Project, 'kind'>): string {
+  return project ? storyWorkspaceTitle(project.kind) : SECTION_LABELS.story;
+}
+
 /** Production panes, in the order the workspace shows them, with their URL slugs. */
 export const PRODUCTION_TABS = [
   { slug: 'schedule', pane: 'Stripboard', label: 'Schedule' },
@@ -83,8 +89,9 @@ export function scriptView(project: Project, document?: DocumentModel): 'write' 
 }
 
 /** Which workspaces make sense for each kind of project. */
-export function sectionsFor(project: Project): { series: boolean; editorial: boolean; production: boolean; creator: boolean } {
+export function sectionsFor(project: Project): { story: boolean; series: boolean; editorial: boolean; production: boolean; creator: boolean } {
   return {
+    story: isStoryProject(project),
     series: project.kind === 'series',
     creator: project.kind === 'creator' || project.kind === 'commercial',
     editorial: project.kind === 'documentary' || project.kind === 'commercial',

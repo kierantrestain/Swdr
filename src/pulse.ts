@@ -8,7 +8,7 @@ import { budgetTotals, getProductionPlan, orderedDays, scheduleConflicts } from 
 import { claimBoard, getEditorial, issueCorrections } from './story/editorial-model';
 import { canonStates, storyChecks } from './story/series-analysis';
 import { continuityConflicts, getStory } from './story/series-model';
-import { orderedEpisodes } from './story/source';
+import { isStoryProject, storyStructure } from './story/story-profile';
 import { formatIssues, words } from './writing/script-insights';
 
 export type PulseTarget = 'write' | 'av' | 'production' | 'creator' | 'outline' | 'media' | 'story' | 'editorial';
@@ -196,34 +196,39 @@ export function projectPulse(project: Project, current: DocumentModel | undefine
       why: 'Ideas age. Committing to one now keeps the pipeline full behind the next publish date.' }));
   }
 
-  if (project.kind === 'series') {
+  if (isStoryProject(project)) {
     const story = getStory(project);
     const active = story.canon.at(-1)?.data ?? story.draft;
     if (story.draft.characters.length || story.draft.points.length) {
+      const structure = storyStructure(project, current?.id);
+      const workspaceTitle = structure.terms.workspaceTitle;
       const states = canonStates(story);
       const unapproved = [...states.values()].filter(value => value !== 'approved').length;
       const conflicts = continuityConflicts(story.draft.points);
       const unreviewed = conflicts.filter(conflict => !story.draft.exceptions.some(item => item.id === conflict.id));
-      const allChecks = storyChecks(project, story.draft, orderedEpisodes(project));
+      const allChecks = storyChecks(project, story.draft, structure.units, current?.id);
       const drifted = allChecks.filter(check => check.kind === 'source-changed');
       const openThreads = allChecks.filter(check => check.kind === 'open-thread');
+      const turnarounds = allChecks.filter(check => check.kind === 'turnaround');
       tiles.push({
         id: 'story',
-        label: 'Series canon',
+        label: structure.terms.canonLabel,
         value: `${active.characters.length} cast`,
-        detail: `${active.points.length} canon records${unapproved ? ` · ${unapproved} in draft` : ''}${openThreads.length ? ` · ${openThreads.length} open thread${openThreads.length === 1 ? '' : 's'}` : ''}`,
-        tone: unreviewed.length ? 'bad' : drifted.length ? 'warn' : 'good',
+        detail: `${active.points.length} canon records${unapproved ? ` · ${unapproved} in draft` : ''}${openThreads.length ? ` · ${openThreads.length} open thread${openThreads.length === 1 ? '' : 's'}` : ''}${turnarounds.length ? ` · ${turnarounds.length} quick-change` : ''}`,
+        tone: unreviewed.length ? 'bad' : (drifted.length || turnarounds.length) ? 'warn' : 'good',
         target: 'story'
       });
       if (unreviewed.length) {
         steps.push(step({
           id: 'story-conflicts',
           impact: 'risk',
-          text: `${unreviewed.length} continuity ${unreviewed.length === 1 ? 'conflict needs' : 'conflicts need'} review in Series Intelligence.`,
+          text: `${unreviewed.length} continuity ${unreviewed.length === 1 ? 'conflict needs' : 'conflicts need'} review in ${workspaceTitle}.`,
           action: 'Review continuity',
           target: 'story',
           minutes: 10 * unreviewed.length,
-          why: 'Contradictory facts or inverted cause-and-effect records travel into every episode outline until resolved or marked intentional.'
+          why: structure.mode === 'episodic'
+            ? 'Contradictory facts or inverted cause-and-effect records travel into every episode outline until resolved or marked intentional.'
+            : 'Contradictory facts or inverted cause-and-effect records undermine the script until resolved or marked intentional.'
         }));
       }
       if (drifted.length) {
@@ -234,7 +239,18 @@ export function projectPulse(project: Project, current: DocumentModel | undefine
           action: 'Check source lines',
           target: 'story',
           minutes: 5 * Math.min(4, drifted.length),
-          why: 'The live script has moved on from the line cited in the series register. Confirm each beat still holds.'
+          why: 'The live script has moved on from the cited line. Confirm each beat still holds.'
+        }));
+      }
+      if (turnarounds.length) {
+        steps.push(step({
+          id: 'story-turnaround',
+          impact: 'risk',
+          text: `${turnarounds.length} stage quick-change ${turnarounds.length === 1 ? 'alert needs' : 'alerts need'} a turnaround check.`,
+          action: `Open ${workspaceTitle}`,
+          target: 'story',
+          minutes: 5 * Math.min(4, turnarounds.length),
+          why: 'Back-to-back scenes in different settings within the same Act can trap an actor backstage without enough time to change.'
         }));
       }
       if (unapproved > 0) {
@@ -242,7 +258,7 @@ export function projectPulse(project: Project, current: DocumentModel | undefine
           id: 'story-draft',
           impact: 'upkeep',
           text: `${unapproved} draft story ${unapproved === 1 ? 'record is' : 'records are'} waiting for canon approval.`,
-          action: 'Open Series Intelligence',
+          action: `Open ${workspaceTitle}`,
           target: 'story',
           minutes: 5,
           why: 'Unapproved records stay out of frozen canon snapshots and spoiler-safe exports until approved.'

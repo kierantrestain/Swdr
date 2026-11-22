@@ -9,54 +9,84 @@ import { Link } from '@astryxdesign/core/Link';
 import { Text } from '@astryxdesign/core/Text';
 import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
-import { ArrowUpRight, BookOpen, HelpCircle, Users, X } from 'lucide-react';
+import { ArrowUpRight, BookOpen, HelpCircle, Sparkles, Users, X } from 'lucide-react';
 import type { DocumentModel, Project, SourceRef } from '../model';
+import { scriptDiscoveryPreview } from '../story/series-analysis';
 import { getStory, knowledgeStates, queryStory, relationshipStates, sortStory } from '../story/series-model';
-import { episodeCode, orderedEpisodes } from '../story/source';
+import { episodeCode, exactSource, orderedEpisodes } from '../story/source';
+import { storyStructure } from '../story/story-profile';
 import { Glyph } from '../story/StoryControls';
 import { CharacterAvatar, EpisodeChip, relationshipStyle } from '../story/StoryParts';
 
 /**
- * Spoiler-safe Series Intelligence companion drawer inside the script editor: keeps characters,
- * motivations, current relationships and open story questions right beside the manuscript pages.
+ * Spoiler-safe Story Intelligence companion drawer inside the script editor: keeps characters,
+ * motivations, current relationships and open story questions right beside the manuscript pages
+ * across Series, Film, Stage Play and Documentary projects.
  */
-export function StoryDrawer({ project, document, onOpenSource, onOpenSeries, onClose }: {
+export function StoryDrawer({ project, document, activeBlockId, onOpenSource, onOpenSeries, onClose }: {
   project: Project;
   document: DocumentModel;
+  activeBlockId?: string;
   onOpenSource: (source: SourceRef) => void;
   onOpenSeries?: (characterId?: string) => void;
   onClose: () => void;
 }) {
   const store = getStory(project);
   const activeData = store.canon.at(-1)?.data ?? store.draft;
-  const scoped = queryStory(project, activeData, { asOfId: document.episodeId });
-  const episode = orderedEpisodes(project).find(item => item.id === document.episodeId);
+  const structure = storyStructure(project, document.id);
+  const episode = structure.mode === 'episodic'
+    ? orderedEpisodes(project).find(item => item.id === document.episodeId)
+    : undefined;
+  const activeSceneId = structure.mode === 'script' && activeBlockId
+    ? exactSource(project, document, activeBlockId).sceneId
+    : undefined;
+  const activeSlot = activeSceneId
+    ? structure.scenes.find(slot => slot.scene.id === activeSceneId)
+    : undefined;
+  const asOfId = structure.mode === 'episodic' ? document.episodeId : activeSlot?.scene.id;
+  const scoped = queryStory(project, activeData, { asOfId, documentId: document.id });
   const rels = relationshipStates(project, scoped.points);
   const openQuestions = knowledgeStates(project, scoped.points).filter(item => item.knowledge === 'Unresolved' || item.knowledge === 'Believes');
-  const episodePoints = sortStory(project, scoped.points.filter(point => !document.episodeId || point.source.episodeId === document.episodeId), 'reveal');
-  const inEpisode = new Set(episodePoints.flatMap(point => point.participants));
-  const sortedChars = [...scoped.characters].sort((a, b) => Number(inEpisode.has(b.id)) - Number(inEpisode.has(a.id)));
 
-  return <aside className="swdr-w-drawer swdr-w-context" aria-label="Series Intelligence">
+  const currentPoints = sortStory(
+    project,
+    scoped.points.filter(point => structure.mode === 'episodic'
+      ? (!document.episodeId || point.source.episodeId === document.episodeId)
+      : (!activeSceneId || point.source.sceneId === activeSceneId)),
+    'reveal'
+  );
+  const inCurrent = new Set(currentPoints.flatMap(point => point.participants));
+  const sortedChars = [...scoped.characters].sort((a, b) => Number(inCurrent.has(b.id)) - Number(inCurrent.has(a.id)));
+
+  const workspaceTitle = structure.terms.workspaceTitle;
+  const scopeLabel = structure.mode === 'episodic'
+    ? (episode ? `Spoiler-safe as of ${episodeCode(episode)}` : 'Series bible')
+    : activeSlot
+      ? `Spoiler-safe as of ${activeSlot.actLabel} · Sc ${activeSlot.scene.number}`
+      : `${workspaceTitle} bible`;
+  const currentBadgeLabel = structure.mode === 'episodic' ? 'In ep.' : 'In scene';
+  const discovery = !activeData.characters.length ? scriptDiscoveryPreview(project, document.id) : undefined;
+
+  return <aside className="swdr-w-drawer swdr-w-context" aria-label={workspaceTitle}>
     <VStack gap={4} padding={4}>
       <HStack justify="between" align="center">
         <HStack gap={2} align="center">
           <Glyph icon={BookOpen} color="accent" />
           <VStack gap={0}>
-            <Heading level={3}>Series Intelligence</Heading>
+            <Heading level={3}>{workspaceTitle}</Heading>
             <Text type="supporting" color="secondary" size="xsm">
-              {episode ? `Spoiler-safe as of ${episodeCode(episode)}` : 'Series bible'}
+              {scopeLabel}
             </Text>
           </VStack>
         </HStack>
-        <IconButton variant="ghost" size="sm" label="Close Series Intelligence" icon={<Glyph icon={X} />} onClick={onClose} />
+        <IconButton variant="ghost" size="sm" label={`Close ${workspaceTitle}`} icon={<Glyph icon={X} />} onClick={onClose} />
       </HStack>
 
       {onOpenSeries && (
         <Button
           size="sm"
           variant="secondary"
-          label="Open full Series Intelligence"
+          label={`Open full ${workspaceTitle}`}
           icon={<Glyph icon={ArrowUpRight} size="xsm" />}
           onClick={() => onOpenSeries()}
         />
@@ -91,7 +121,7 @@ export function StoryDrawer({ project, document, onOpenSource, onOpenSeries, onC
                       <Text type="supporting" color="secondary" size="xsm" maxLines={1}>{person.role || 'Character'}</Text>
                     </VStack>
                   </HStack>
-                  {inEpisode.has(person.id) && <Token size="sm" color="blue" label="In ep." />}
+                  {inCurrent.has(person.id) && <Token size="sm" color="blue" label={currentBadgeLabel} />}
                 </HStack>
                 {person.motivation && <Text type="supporting" color="secondary" size="xsm" maxLines={2}>{person.motivation}</Text>}
                 {ownRels.length > 0 && <HStack gap={1} wrap="wrap">
@@ -110,7 +140,29 @@ export function StoryDrawer({ project, document, onOpenSource, onOpenSeries, onC
               </VStack>
             </Card>;
           })}
-        </VStack> : <Text type="supporting" color="secondary" size="xsm">No characters recorded up to this episode yet.</Text>}
+        </VStack> : discovery && discovery.speakingRoles > 0 ? (
+          <Card variant="muted" padding={3}>
+            <VStack gap={2} hAlign="start">
+              <HStack gap={1.5} align="center">
+                <Glyph icon={Sparkles} size="xsm" color="accent" />
+                <Text weight="semibold" size="sm">
+                  {discovery.speakingRoles} speaking {discovery.speakingRoles === 1 ? 'role' : 'roles'} in this script
+                </Text>
+              </HStack>
+              <Text type="supporting" color="secondary" size="xsm">
+                Detected across {discovery.scenes} {discovery.scenes === 1 ? 'scene' : 'scenes'}{discovery.topNames.length ? `: ${discovery.topNames.join(', ')}` : ''}. Scan into draft to track arcs, relationships and continuity.
+              </Text>
+              {onOpenSeries && (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  label={`Build ${workspaceTitle} draft`}
+                  onClick={() => onOpenSeries()}
+                />
+              )}
+            </VStack>
+          </Card>
+        ) : <Text type="supporting" color="secondary" size="xsm">No characters recorded up to this {structure.mode === 'episodic' ? 'episode' : 'scene'} yet.</Text>}
       </VStack>
 
       {openQuestions.length > 0 && <>
@@ -128,7 +180,7 @@ export function StoryDrawer({ project, document, onOpenSource, onOpenSeries, onC
               <Card key={item.id} variant="muted" padding={2}>
                 <VStack gap={1} hAlign="start">
                   <HStack gap={1.5} align="center" wrap="wrap">
-                    <EpisodeChip project={project} episodeId={item.source.episodeId} color="yellow" />
+                    <EpisodeChip project={project} episodeId={item.source.episodeId} source={item.source} color="yellow" />
                     <Text weight="medium" size="xsm">{item.title}</Text>
                   </HStack>
                   <Link onClick={() => onOpenSource(item.source)}>

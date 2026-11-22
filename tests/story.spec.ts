@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { choose, expect, loadDemo, test } from './support/browser';
+import { choose, expect, loadDemo, openHome, test } from './support/browser';
 import { expectPassage } from './story-passage';
 
 test('filters a 24-episode series, exports spoiler-safe data and traces a dossier interaction to its line', async ({ page, pageFaults }, testInfo) => {
@@ -125,3 +125,196 @@ test('corrects a claim in a 75-minute outline and downloads four files from the 
   expect(revisions.size).toBe(1);
   expect(pageFaults).toEqual([]);
 });
+
+test('Film Intelligence maps a multi-act feature via one-click script scan, act filters and cursor-aware Story bible drawer', async ({ page, pageFaults }) => {
+  await openHome(page);
+  await page.evaluate(async () => {
+    const blocks: Array<{ id: string; kind: string; text: string; sceneId?: string }> = [];
+    for (let i = 1; i <= 30; i += 1) {
+      blocks.push({ id: `sc-${i}`, kind: 'scene', text: i % 2 === 1 ? `INT. LAB ${i} - DAY` : `EXT. HARBOUR ${i} - NIGHT`, sceneId: `scene-${i}` });
+      blocks.push({ id: `ac-${i}`, kind: 'action', text: `Sequence ${i} begins.` });
+      blocks.push({ id: `ch-aris-${i}`, kind: 'character', text: 'DR. ARIS' });
+      blocks.push({ id: `dl-aris-${i}`, kind: 'dialogue', text: `Run ${i} confirms the forecast.` });
+      if (i <= 20 || i >= 26) {
+        blocks.push({ id: `ch-maya-${i}`, kind: 'character', text: 'MAYA' });
+        blocks.push({ id: `dl-maya-${i}`, kind: 'dialogue', text: `Shut it down before run ${i}.` });
+      }
+      if (i >= 25) {
+        blocks.push({ id: `ch-vance-${i}`, kind: 'character', text: 'DIRECTOR VANCE' });
+        blocks.push({ id: `dl-vance-${i}`, kind: 'dialogue', text: `Phase ${i} stays online.` });
+      }
+    }
+    const now = new Date().toISOString();
+    const project = {
+      id: 'film-pred-1',
+      title: 'The Prediction Engine',
+      kind: 'film',
+      synopsis: 'A systems theorist races to shut down her own forecasting engine.',
+      createdAt: now,
+      updatedAt: now,
+      episodes: [],
+      documents: [{
+        id: 'doc-pred-1',
+        title: 'The Prediction Engine',
+        kind: 'screenplay',
+        paper: 'letter',
+        revisionId: 'rev-pred-1',
+        revisionLabel: 'First draft',
+        titlePage: { title: 'The Prediction Engine', author: 'Kieran', draftDate: '', contact: '', copyright: '', notes: '' },
+        blocks,
+        avRows: [],
+        beats: [],
+        notes: ''
+      }],
+      snapshots: [],
+      assets: [],
+      modules: {}
+    };
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open('swdr-workspace', 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains('projects')) req.result.createObjectStore('projects', { keyPath: 'id' });
+        if (!req.result.objectStoreNames.contains('cache')) req.result.createObjectStore('cache');
+      };
+      req.onsuccess = () => {
+        const tx = req.result.transaction('projects', 'readwrite');
+        tx.objectStore('projects').put({ id: project.id, stamp: 'seed-1', project });
+        tx.oncomplete = () => { req.result.close(); resolve(); };
+        tx.onerror = () => reject(tx.error);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  });
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Open project The Prediction Engine' }).click();
+  await expect(page.getByRole('button', { name: /^Film Intelligence/ })).toContainText('Scan 30 scenes to map 3 speaking roles');
+  await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Film Intelligence', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Film Intelligence', level: 1 })).toBeVisible();
+  await expect(page.getByText(/Found 3 speaking characters across 30 scenes/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Scan script & build draft', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Scan scripts for characters & appearances' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Dr. Aris · Lead');
+  await dialog.getByRole('button', { name: /Import .* to draft/ }).click();
+
+  // Relationship web now holds imported characters and shared-scene links.
+  await expect(page.getByRole('complementary', { name: 'Selected character' })).toContainText('Dr. Aris');
+
+  // Story map shows 3-Act headers with bucketed Sequence columns.
+  await page.locator('[aria-label="Series workspaces"]').getByRole('button', { name: 'Story map', exact: true }).click();
+  const map = page.getByRole('region', { name: 'Story map' });
+  await expect(map.getByRole('columnheader', { name: 'Act I', exact: true })).toBeVisible();
+  await expect(map.getByRole('columnheader', { name: 'Act II', exact: true })).toBeVisible();
+  await expect(map.getByRole('columnheader', { name: 'Act III', exact: true })).toBeVisible();
+
+  // Filtering to Act I hides Act III-only character Director Vance.
+  await choose(page, 'Act', 'Act I');
+  await expect(page.getByRole('button', { name: 'Open Dr. Aris dossier' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open Director Vance dossier' })).toHaveCount(0);
+
+  // Script editor Story bible drawer is scene-aware and spoiler-safe at Scene 1.
+  await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Script', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Manuscript editor' })).toBeVisible();
+  await page.getByRole('button', { name: 'Story bible', exact: true }).click();
+  const drawer = page.getByRole('complementary', { name: 'Film Intelligence' });
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toContainText('Spoiler-safe as of Act I · Sc 1');
+  await expect(drawer).toContainText('Dr. Aris');
+  await expect(drawer).not.toContainText('Director Vance');
+  expect(pageFaults).toEqual([]);
+});
+
+test('Stage Intelligence honours explicit Act breaks, flags quick-change turnarounds and computes repertory doubling', async ({ page, pageFaults }) => {
+  await openHome(page);
+  await page.evaluate(async () => {
+    const blocks = [
+      { id: 'act-1', kind: 'act', text: 'ACT I' },
+      { id: 'sc-1', kind: 'scene', text: 'INT. PARLOUR - EVENING', sceneId: 'scene-1' },
+      { id: 'c1', kind: 'character', text: 'CLARA' },
+      { id: 'd1', kind: 'dialogue', text: 'Light the lamps before the bell.' },
+      { id: 'c2', kind: 'character', text: 'PORTER' },
+      { id: 'd2', kind: 'dialogue', text: 'The coach is at the gate.' },
+      { id: 'sc-2', kind: 'scene', text: 'EXT. COURTYARD - NIGHT', sceneId: 'scene-2' },
+      { id: 'c3', kind: 'character', text: 'CLARA' },
+      { id: 'd3', kind: 'dialogue', text: 'Wait in the rain — I heard footsteps.' },
+      { id: 'inter', kind: 'act', text: 'INTERMISSION' },
+      { id: 'act-2', kind: 'act', text: 'ACT II' },
+      { id: 'sc-3', kind: 'scene', text: 'INT. CONSERVATORY - MORNING', sceneId: 'scene-3' },
+      { id: 'c4', kind: 'character', text: 'CLARA' },
+      { id: 'd4', kind: 'dialogue', text: 'The glass has cracked overnight.' },
+      { id: 'c5', kind: 'character', text: 'JUDGE' },
+      { id: 'd5', kind: 'dialogue', text: 'We begin the inquiry now.' }
+    ];
+    const now = new Date().toISOString();
+    const project = {
+      id: 'stage-parlour-1',
+      title: 'The Glass Parlour',
+      kind: 'stage',
+      synopsis: 'A two-act chamber drama.',
+      createdAt: now,
+      updatedAt: now,
+      episodes: [],
+      documents: [{
+        id: 'doc-parlour-1',
+        title: 'The Glass Parlour',
+        kind: 'stageplay',
+        paper: 'a4',
+        revisionId: 'rev-parlour-1',
+        revisionLabel: 'Rehearsal draft',
+        titlePage: { title: 'The Glass Parlour', author: 'Kieran', draftDate: '', contact: '', copyright: '', notes: '' },
+        blocks,
+        avRows: [],
+        beats: [],
+        notes: ''
+      }],
+      snapshots: [],
+      assets: [],
+      modules: {}
+    };
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open('swdr-workspace', 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains('projects')) req.result.createObjectStore('projects', { keyPath: 'id' });
+        if (!req.result.objectStoreNames.contains('cache')) req.result.createObjectStore('cache');
+      };
+      req.onsuccess = () => {
+        const tx = req.result.transaction('projects', 'readwrite');
+        tx.objectStore('projects').put({ id: project.id, stamp: 'seed-1', project });
+        tx.oncomplete = () => { req.result.close(); resolve(); };
+        tx.onerror = () => reject(tx.error);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  });
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Open project The Glass Parlour' }).click();
+  await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Stage Intelligence', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Stage Intelligence', level: 1 })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Scan script & build draft', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Scan scripts for characters & appearances' });
+  await expect(dialog).toContainText('Clara · Principal');
+  await dialog.getByRole('button', { name: /Import .* to draft/ }).click();
+
+  await page.locator('[aria-label="Series workspaces"]').getByRole('button', { name: 'Story map', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^I\.1 / })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^I\.2 / })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^II\.1 / })).toBeVisible();
+
+  await page.locator('[aria-label="Series workspaces"]').getByRole('button', { name: /^Arcs and continuity/ }).click();
+  const doubling = page.getByRole('region', { name: 'Stage presence and doubling' });
+  await expect(doubling).toBeVisible();
+  await expect(doubling).toContainText('Porter');
+  await expect(doubling).toContainText('Judge');
+  await expect(page.getByText(/Quick-change alert: Clara/)).toBeVisible();
+
+  // Overview pulse tile surfaces Stage canon + quick-change alert.
+  await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Project pulse' })).toContainText('Stage canon');
+  await expect(page.getByRole('region', { name: 'Project pulse' })).toContainText('1 quick-change');
+  expect(pageFaults).toEqual([]);
+});
+

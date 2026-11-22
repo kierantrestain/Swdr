@@ -17,10 +17,10 @@ import { VStack } from '@astryxdesign/core/VStack';
 import { ArrowRight, BookOpen, Clapperboard, Compass, Flame, Flag, MessageSquare, Sparkles, Target, Users, X } from 'lucide-react';
 import { useState } from 'react';
 import type { Project, WorkspaceViewProps } from '../model';
-import { episodeCode, orderedEpisodes } from './source';
 import { characterSummaryStats, findCastMatch, pairKey, relationshipHistory } from './series-analysis';
 import { RELATIONSHIPS, sortStory } from './series-model';
 import type { Character, RelationshipState, StoryPoint } from './series-model';
+import type { StoryStructure } from './story-profile';
 import { Choice, Glyph, Pane, PaneHeading, SourceButton, Split } from './StoryControls';
 import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, relationshipStyle, stateTag } from './StoryParts';
 import type { CanonLookup } from './StoryParts';
@@ -35,6 +35,14 @@ interface Placed {
 }
 
 type InspectorTab = 'Overview' | 'Journey' | 'Scenes' | 'Notes';
+
+const HONORIFICS = new Set(['dr.', 'dr', 'mr.', 'mr', 'mrs.', 'mrs', 'ms.', 'ms', 'miss', 'prof.', 'prof', 'sir', 'lord', 'lady', 'director', 'inspector', 'judge', 'captain', 'detective', 'agent', 'officer', 'rev.', 'father', 'sister']);
+
+function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2 && HONORIFICS.has(parts[0].toLowerCase())) return parts[1];
+  return parts[0] ?? name;
+}
 
 function ring(people: Character[], rx: number, ry: number, offset = -Math.PI / 2): Placed[] {
   return people.map((person, index) => {
@@ -121,8 +129,9 @@ function connectorGeometry(
   };
 }
 
-export function RelationshipWeb({ project, person, characters, edges, points, interactions, select, dossier, onOpen, states }: {
+export function RelationshipWeb({ project, structure, person, characters, edges, points, interactions, select, dossier, onOpen, states }: {
   project: Project;
+  structure: StoryStructure;
   person?: Character;
   characters: Character[];
   edges: StoryPoint[];
@@ -142,11 +151,7 @@ export function RelationshipWeb({ project, person, characters, edges, points, in
 
   const shown = edges.filter(edge => !category || category === edge.relationship);
   const history = relationshipHistory(project, points);
-  const episodes = orderedEpisodes(project);
-  const code = (point: StoryPoint) => {
-    const episode = episodes.find(item => item.id === point.source.episodeId);
-    return episode ? episodeCode(episode) : '';
-  };
+  const code = (point: StoryPoint) => structure.unitCodeOfSource(point.source);
   const linkCount = (id: string) => shown.filter(edge => edge.participants.includes(id)).length;
 
   const neighbours = person ? characters.filter(item => item.id !== person.id
@@ -400,7 +405,7 @@ export function RelationshipWeb({ project, person, characters, edges, points, in
           </HStack>)}
         </HStack>
         {mode === 'focus' && unlinked > 0 && <Text type="supporting" color="secondary">
-          {unlinked} other character{unlinked === 1 ? '' : 's'} not linked to {person.name.split(' ')[0]}
+          {unlinked} other character{unlinked === 1 ? '' : 's'} not linked to {shortName(person.name)}
         </Text>}
       </HStack>
 
@@ -529,7 +534,7 @@ export function RelationshipWeb({ project, person, characters, edges, points, in
                   {person.status && <Badge variant={person.status === 'Active' ? 'success' : 'neutral'} label={person.status} />}
                 </HStack>
                 <Text type="supporting" color="secondary">
-                  {[person.role || 'Character', person.billing].filter(Boolean).join(' · ')}
+                  {[person.role || 'Character', person.billing].filter((value, idx, list) => Boolean(value) && list.indexOf(value) === idx).join(' · ')}
                 </Text>
               </VStack>
             </HStack>
@@ -573,12 +578,12 @@ export function RelationshipWeb({ project, person, characters, edges, points, in
                     {idx > 0 && <Divider />}
                     <Item
                       density="compact"
-                      label={<Text weight="semibold" size="sm">{partner ? `With ${partner.name.split(' ')[0]}` : item.title}</Text>}
+                      label={<Text weight="semibold" size="sm">{partner ? `With ${shortName(partner.name)}` : item.title}</Text>}
                       description={<VStack gap={0.5} hAlign="start">
                         <Text type="supporting" color="secondary">{item.title}</Text>
                         <SourceButton project={project} source={item.source} onOpen={onOpen} />
                       </VStack>}
-                      endContent={<EpisodeChip project={project} episodeId={item.source.episodeId} color="blue" />}
+                      endContent={<EpisodeChip project={project} episodeId={item.source.episodeId} source={item.source} color="blue" />}
                     />
                   </VStack>;
                 })}
@@ -594,8 +599,10 @@ export function RelationshipWeb({ project, person, characters, edges, points, in
                 </HStack>
                 <VStack as="ul" gap={1.5} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                   {personEvents.slice(0, 4).map(item => <HStack as="li" key={item.id} gap={2} align="center" justify="between" style={{ listStyle: 'none' }}>
-                    <HStack gap={2} align="center" style={{ minWidth: 0 }}>
-                      <EpisodeChip project={project} episodeId={item.source.episodeId} color={item.kind === 'arc' ? 'purple' : 'blue'} />
+                    <HStack gap={2} align="center" style={{ minWidth: 0, flex: 1 }}>
+                      <HStack as="span" style={{ flexShrink: 0 }}>
+                        <EpisodeChip project={project} episodeId={item.source.episodeId} source={item.source} color={item.kind === 'arc' ? 'purple' : 'blue'} />
+                      </HStack>
                       <Text size="sm" maxLines={1}>{item.title}</Text>
                     </HStack>
                     <Link onClick={() => onOpen(item.source)} label={`Open script for ${item.title}`}>

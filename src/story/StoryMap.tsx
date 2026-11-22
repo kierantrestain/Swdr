@@ -8,10 +8,10 @@ import { VisuallyHidden } from '@astryxdesign/core/VisuallyHidden';
 import { VStack } from '@astryxdesign/core/VStack';
 import { useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
-import type { Episode, Project, WorkspaceViewProps } from '../model';
-import { episodeCode } from './source';
-import { cellKey, episodePositions, episodeRecords, storyMap } from './series-analysis';
+import type { Project, WorkspaceViewProps } from '../model';
+import { cellKey, storyMap, unitRecords } from './series-analysis';
 import type { Character, StoryPoint, StoryState } from './series-model';
+import type { StoryStructure, StoryUnit } from './story-profile';
 import { Pane, PaneHeading } from './StoryControls';
 import { CharacterAvatar, PointRows, relationshipStyle } from './StoryParts';
 import type { CanonLookup } from './StoryParts';
@@ -48,7 +48,7 @@ function describe(points: StoryPoint[]): string {
 }
 
 interface Selection {
-  episodeId: string;
+  unitId: string;
   characterId?: string;
 }
 
@@ -57,10 +57,11 @@ const FUTURE_STYLE: CSSProperties = {
   color: 'var(--color-text-disabled)'
 };
 
-export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, states }: {
+export function StoryMap({ project, structure, data, units, cutoff, onOpen, onDossier, states }: {
   project: Project;
+  structure: StoryStructure;
   data: StoryState;
-  episodes: Episode[];
+  units: StoryUnit[];
   cutoff: number;
   onOpen: WorkspaceViewProps['onOpenSource'];
   onDossier: (id: string) => void;
@@ -68,22 +69,28 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
 }) {
   const [selection, setSelection] = useState<Selection>();
   const [cursor, setCursor] = useState({ row: 0, column: 0 });
-  const positions = episodePositions(project);
-  const cells = storyMap(project, data);
-  const byEpisode = episodeRecords(project, data.points);
-  const future = (episode: Episode) => (positions.get(episode.id) ?? 0) > cutoff;
-  const seasons = [...new Set(episodes.map(episode => episode.season))];
+  const unitPositions = new Map(structure.units.map((unit, idx) => [unit.id, idx]));
+  const cells = storyMap(project, data, structure.document?.id);
+  const byUnit = unitRecords(project, data.points, structure.document?.id);
+  const future = (unit: StoryUnit) => (unitPositions.get(unit.id) ?? 0) > cutoff;
+  const groupNumbers = [...new Set(units.map(unit => unit.groupNumber))];
+  const groupLabelOf = (num: number) => structure.groups.find(g => g.number === num)?.label ?? `${structure.terms.groupLabel} ${num}`;
+
   const characters = [...data.characters].sort((a, b) => {
-    const total = (person: Character) => episodes.reduce((sum, episode) => sum + (cells.get(cellKey(person.id, episode.id))?.length ?? 0), 0);
+    const total = (person: Character) => units.reduce((sum, unit) => sum + (cells.get(cellKey(person.id, unit.id))?.length ?? 0), 0);
     return total(b) - total(a);
   });
-  const revealed = episodes.filter(episode => !future(episode));
-  const selectedEpisode = selection && episodes.find(episode => episode.id === selection.episodeId);
+  const revealed = units.filter(unit => !future(unit));
+  const selectedUnit = selection && units.find(unit => unit.id === selection.unitId);
   const selectedPerson = selection?.characterId ? data.characters.find(person => person.id === selection.characterId) : undefined;
   const selectedRows = !selection ? [] : selection.characterId
-    ? cells.get(cellKey(selection.characterId, selection.episodeId)) ?? []
-    : byEpisode.get(selection.episodeId) ?? [];
-  const records = revealed.reduce((sum, episode) => sum + (byEpisode.get(episode.id)?.length ?? 0), 0);
+    ? cells.get(cellKey(selection.characterId, selection.unitId)) ?? []
+    : byUnit.get(selection.unitId) ?? [];
+  const records = revealed.reduce((sum, unit) => sum + (byUnit.get(unit.id)?.length ?? 0), 0);
+
+  const unitNoun = structure.terms.unitSingular;
+  const unitPlural = structure.terms.unitPlural;
+  const minCellPx = structure.bucketed ? 54 : 29;
 
   function move(event: KeyboardEvent<HTMLTableElement>) {
     const steps: Record<string, [number, number]> = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowDown: [1, 0], ArrowUp: [-1, 0] };
@@ -105,7 +112,7 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
   return <Pane label="Story map" padding={5}>
     <PaneHeading
       title="Story map"
-      description={`${characters.length} characters · ${revealed.length} of ${episodes.length} episodes revealed · ${records} records. Select a cell for the exact scenes.`}
+      description={`${characters.length} character${characters.length === 1 ? '' : 's'} · ${revealed.length} of ${units.length} ${units.length === 1 ? unitNoun : unitPlural} revealed · ${records} record${records === 1 ? '' : 's'}. Select a cell for the exact scenes.`}
       level={2}
     />
 
@@ -173,11 +180,11 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
       </HStack>
     </HStack>
 
-    {characters.length ? <VStack style={{ overflowX: 'auto', paddingBottom: 'var(--spacing-1)' }}>
+    {characters.length && units.length ? <VStack style={{ overflowX: 'auto', paddingBottom: 'var(--spacing-1)' }}>
       <table
         onKeyDown={move}
-        aria-label="Characters by episode. Use arrow keys to move between cells."
-        style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '2px', tableLayout: 'fixed', minWidth: `${Math.max(640, 158 + episodes.length * 29 + 44)}px` }}
+        aria-label={`Characters by ${unitNoun}. Use arrow keys to move between cells.`}
+        style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '2px', tableLayout: 'fixed', minWidth: `${Math.max(640, 158 + units.length * minCellPx + 44)}px` }}
       >
         <thead>
           <tr>
@@ -192,17 +199,17 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
             >
               Character
             </th>
-            {seasons.map(season => <th
-              key={season}
+            {groupNumbers.map(groupNum => <th
+              key={groupNum}
               scope="colgroup"
-              colSpan={episodes.filter(episode => episode.season === season).length}
+              colSpan={units.filter(unit => unit.groupNumber === groupNum).length}
               style={{
                 textAlign: 'left', padding: 'var(--spacing-1) var(--spacing-2)',
                 borderBottom: '1px solid var(--color-border-emphasized)',
                 fontSize: 'var(--font-size-xs)', color: 'var(--color-text-primary)', fontWeight: 700
               }}
             >
-              Season {season}
+              {groupLabelOf(groupNum)}
             </th>)}
             <th
               rowSpan={2}
@@ -216,16 +223,16 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
             </th>
           </tr>
           <tr>
-            {episodes.map(episode => {
-              const isFuture = future(episode);
-              const isSelectedCol = Boolean(selection && !selection.characterId && selection.episodeId === episode.id);
-              const seasonBorder = episode.number === 1 ? '2px solid var(--color-border-emphasized)' : undefined;
+            {units.map(unit => {
+              const isFuture = future(unit);
+              const isSelectedCol = Boolean(selection && !selection.characterId && selection.unitId === unit.id);
+              const groupBorder = unit.isGroupStart ? '2px solid var(--color-border-emphasized)' : undefined;
               return <th
-                key={episode.id}
+                key={unit.id}
                 scope="col"
                 style={{
                   ...(isFuture ? FUTURE_STYLE : {}),
-                  borderLeft: seasonBorder,
+                  borderLeft: groupBorder,
                   padding: '2px',
                   textAlign: 'center',
                   fontSize: 'var(--font-size-xs)',
@@ -233,15 +240,15 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
                 }}
               >
                 {isFuture ? (
-                  <Text as="span" type="supporting" color="disabled" size="xsm" aria-label={`${episodeCode(episode)} · not yet revealed`}>
-                    {episode.number}
+                  <Text as="span" type="supporting" color="disabled" size="xsm" aria-label={`${unit.code} · not yet revealed`}>
+                    {unit.shortAxis}
                   </Text>
                 ) : (
                   <button
                     type="button"
-                    title={`${episodeCode(episode)} · ${episode.title}`}
-                    aria-label={`${episodeCode(episode)} ${episode.title}: show every record`}
-                    onClick={() => setSelection({ episodeId: episode.id })}
+                    title={`${unit.code} · ${unit.title}`}
+                    aria-label={`${unit.code} ${unit.title}: show every record`}
+                    onClick={() => setSelection({ unitId: unit.id })}
                     style={{
                       width: '100%',
                       minHeight: '24px',
@@ -255,7 +262,7 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
                       cursor: 'pointer'
                     }}
                   >
-                    {episode.number}
+                    {unit.shortAxis}
                   </button>
                 )}
               </th>;
@@ -273,17 +280,17 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
                 fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', fontWeight: 600
               }}
             >
-              Major events
+              {structure.mode === 'episodic' ? 'Major events' : 'Major beats'}
             </th>
-            {episodes.map(episode => {
-              const isFuture = future(episode);
-              const events = (byEpisode.get(episode.id) ?? []).filter(point => point.kind === 'event');
+            {units.map(unit => {
+              const isFuture = future(unit);
+              const events = (byUnit.get(unit.id) ?? []).filter(point => point.kind === 'event');
               return <td
-                key={episode.id}
+                key={unit.id}
                 title={events.map(event => event.title).join('\n')}
                 style={{
                   ...(isFuture ? FUTURE_STYLE : {}),
-                  borderLeft: episode.number === 1 ? '2px solid var(--color-border-emphasized)' : undefined,
+                  borderLeft: unit.isGroupStart ? '2px solid var(--color-border-emphasized)' : undefined,
                   height: '24px',
                   textAlign: 'center',
                   verticalAlign: 'middle'
@@ -300,12 +307,13 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
               </td>;
             })}
             <td style={{ textAlign: 'center', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-              {revealed.reduce((sum, episode) => sum + (byEpisode.get(episode.id) ?? []).filter(point => point.kind === 'event').length, 0)}
+              {revealed.reduce((sum, unit) => sum + (byUnit.get(unit.id) ?? []).filter(point => point.kind === 'event').length, 0)}
             </td>
           </tr>
 
           {characters.map((person, row) => {
             let total = 0;
+            const introUnitId = structure.unitOfSource(person.source)?.id;
             return <tr key={person.id}>
               <th
                 scope="row"
@@ -340,35 +348,35 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
                 </button>
               </th>
 
-              {episodes.map(episode => {
-                const seasonBorder = episode.number === 1 ? '2px solid var(--color-border-emphasized)' : undefined;
-                if (future(episode)) {
+              {units.map(unit => {
+                const groupBorder = unit.isGroupStart ? '2px solid var(--color-border-emphasized)' : undefined;
+                if (future(unit)) {
                   return <td
-                    key={episode.id}
-                    aria-label={`${episodeCode(episode)} not yet revealed`}
-                    style={{ ...FUTURE_STYLE, borderLeft: seasonBorder, borderRadius: 'var(--radius-inner)' }}
+                    key={unit.id}
+                    aria-label={`${unit.code} not yet revealed`}
+                    style={{ ...FUTURE_STYLE, borderLeft: groupBorder, borderRadius: 'var(--radius-inner)' }}
                   />;
                 }
-                const column = revealed.indexOf(episode);
-                const points = cells.get(cellKey(person.id, episode.id)) ?? [];
+                const column = revealed.indexOf(unit);
+                const points = cells.get(cellKey(person.id, unit.id)) ?? [];
                 total += points.length;
                 const lvl = level(points.length);
                 const turn = points.filter(point => point.kind === 'relationship').at(-1);
                 const hasArc = points.some(point => point.kind === 'arc');
                 const hasOpen = points.some(point => point.knowledge === 'Unresolved' || point.knowledge === 'Believes');
                 const draft = points.some(point => states?.get(point.id) && states.get(point.id) !== 'approved');
-                const selected = selection?.characterId === person.id && selection.episodeId === episode.id;
-                const intro = person.source.episodeId === episode.id;
+                const selected = selection?.characterId === person.id && selection.unitId === unit.id;
+                const intro = introUnitId === unit.id;
 
-                return <td key={episode.id} style={{ borderLeft: seasonBorder, padding: '1px' }}>
+                return <td key={unit.id} style={{ borderLeft: groupBorder, padding: '1px' }}>
                   <button
                     type="button"
                     data-cell={`${row}:${column}`}
                     tabIndex={cursor.row === row && cursor.column === column ? 0 : -1}
                     aria-pressed={selected}
-                    aria-label={`${person.name} in ${episodeCode(episode)} ${episode.title}: ${points.length ? describe(points) : 'no records'}${intro ? ', introduced' : ''}${draft ? ', includes draft records not in canon' : ''}`}
+                    aria-label={`${person.name} in ${unit.code} ${unit.title}: ${points.length ? describe(points) : 'no records'}${intro ? ', introduced' : ''}${draft ? ', includes draft records not in canon' : ''}`}
                     onFocus={() => setCursor({ row, column })}
-                    onClick={() => setSelection({ episodeId: episode.id, characterId: person.id })}
+                    onClick={() => setSelection({ unitId: unit.id, characterId: person.id })}
                     style={{
                       position: 'relative',
                       width: '100%',
@@ -389,22 +397,36 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
                     }}
                   >
                     {points.length > 0 ? points.length : ''}
-                    {(turn?.relationship || hasArc || hasOpen) && (
+                    {turn?.relationship && (
                       <svg
-                        viewBox="0 0 36 36"
+                        viewBox="0 0 36 4"
                         preserveAspectRatio="none"
                         aria-hidden="true"
-                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+                        style={{ position: 'absolute', left: '10%', width: '80%', bottom: '3px', height: '3.5px', pointerEvents: 'none' }}
                       >
-                        {turn?.relationship && (
-                          <rect x="4" y="30" width="28" height="3.5" rx="1.75" fill={relationshipStyle[turn.relationship].stroke} />
-                        )}
-                        {hasArc && (
-                          <circle cx="30" cy="6" r="3.2" fill="var(--color-accent)" stroke="var(--color-background-surface)" strokeWidth="1.5" />
-                        )}
-                        {hasOpen && (
-                          <circle cx="6" cy="6" r="3.2" fill="var(--color-background-surface)" stroke="var(--color-warning)" strokeWidth="1.8" />
-                        )}
+                        <rect x="0" y="0" width="36" height="4" rx="2" fill={relationshipStyle[turn.relationship].stroke} />
+                      </svg>
+                    )}
+                    {hasArc && (
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 10 10"
+                        aria-hidden="true"
+                        style={{ position: 'absolute', top: '3px', right: '3px', pointerEvents: 'none' }}
+                      >
+                        <circle cx="5" cy="5" r="3.4" fill="var(--color-accent)" stroke="var(--color-background-surface)" strokeWidth="1.5" />
+                      </svg>
+                    )}
+                    {hasOpen && (
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 10 10"
+                        aria-hidden="true"
+                        style={{ position: 'absolute', top: '3px', left: '3px', pointerEvents: 'none' }}
+                      >
+                        <circle cx="5" cy="5" r="3.2" fill="var(--color-background-surface)" stroke="var(--color-warning)" strokeWidth="1.8" />
                       </svg>
                     )}
                   </button>
@@ -423,16 +445,16 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
     <Divider />
 
     <Card variant="muted" padding={4} role="region" aria-label="Selected story map detail" aria-live="polite">
-      {selectedEpisode ? <VStack gap={3}>
+      {selectedUnit ? <VStack gap={3}>
         <HStack gap={3} align="center" justify="between" wrap="wrap">
           <HStack gap={3} align="center">
             {selectedPerson && <CharacterAvatar project={project} character={selectedPerson} size={40} decorative />}
             <VStack gap={0.5}>
               <Heading level={3}>
-                {selectedPerson ? `${selectedPerson.name} · ${episodeCode(selectedEpisode)}` : `${episodeCode(selectedEpisode)} · every record`}
+                {selectedPerson ? `${selectedPerson.name} · ${selectedUnit.code}` : `${selectedUnit.code} · every record`}
               </Heading>
               <Text type="supporting" color="secondary">
-                {selectedEpisode.title}{selectedPerson && selectedPerson.source.episodeId === selectedEpisode.id ? ' · introduced in this episode' : ''}
+                {selectedUnit.title}{selectedPerson && structure.unitOfSource(selectedPerson.source)?.id === selectedUnit.id ? ` · introduced in this ${unitNoun}` : ''}
               </Text>
             </VStack>
           </HStack>
@@ -451,11 +473,11 @@ export function StoryMap({ project, data, episodes, cutoff, onOpen, onDossier, s
           showKind
           people={data.characters}
           states={states}
-          empty={selectedPerson ? `${selectedPerson.name} has no records in this episode.` : 'No records in this episode.'}
+          empty={selectedPerson ? `${selectedPerson.name} has no records in this ${unitNoun}.` : `No records in this ${unitNoun}.`}
         />
       </VStack> : (
         <Text type="supporting" color="secondary">
-          Choose a character and episode to list the interactions, turns and reveals behind it, each linked to its exact script line.
+          Choose a character and {unitNoun} to list the interactions, turns and reveals behind it, each linked to its exact script line.
         </Text>
       )}
     </Card>

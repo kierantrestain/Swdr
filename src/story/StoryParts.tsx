@@ -11,6 +11,7 @@ import { resolveCharacterPhoto } from './series-analysis';
 import type { CanonState } from './series-analysis';
 import type { Character, KnowledgeState, RelationshipState, StoryKind, StoryPoint } from './series-model';
 import { episodeCode, orderedEpisodes } from './source';
+import { storyStructure } from './story-profile';
 import { SourceButton } from './StoryControls';
 
 export const typeLabels: Record<StoryKind, string> = {
@@ -147,14 +148,20 @@ export function stateTag(point: StoryPoint, showKind = false) {
   return null;
 }
 
-/** Compact episode code chip (e.g. S1E04) styled cleanly for timelines and interactions. */
-export function EpisodeChip({ project, episodeId, color = 'blue' }: {
+/** Compact narrative unit chip (e.g. S1E04 for series, Act I · Sc 4 for film, I.2 for stage play). */
+export function EpisodeChip({ project, episodeId, source, color = 'blue' }: {
   project: Project;
   episodeId?: string;
+  source?: import('../model').SourceRef;
   color?: TokenColor;
 }) {
   const episode = episodeId ? orderedEpisodes(project).find(item => item.id === episodeId) : undefined;
-  return <Token size="sm" color={color} label={episode ? episodeCode(episode) : 'Script'} />;
+  const label = episode
+    ? episodeCode(episode)
+    : source
+      ? storyStructure(project, source.documentId).unitCodeOfSource(source)
+      : 'Script';
+  return <Token size="sm" color={color} label={label} />;
 }
 
 /** Dense structured list of story records using Astryx Item rows and Dividers (never card-wrapped lists). */

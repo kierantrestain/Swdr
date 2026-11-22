@@ -90,3 +90,40 @@ test('series projects surface Series canon tile and unapproved draft records in 
   assert.ok(steps.some(step => step.target === 'story' && /draft story records/.test(step.text)));
 });
 
+test('film and stage projects surface medium-native canon tiles and quick-change alerts once populated', async () => {
+  const { saveCharacter, saveStoryPoint } = await import('../src/story/series-model');
+  const { exactSource } = await import('../src/story/source');
+  const { newId } = await import('../src/model');
+
+  // Blank film has no story tile yet (zero noise).
+  const blankFilm = createProject('Quiet Feature', 'film');
+  assert.equal(projectPulse(blankFilm, blankFilm.documents[0]).tiles.find(t => t.id === 'story'), undefined);
+
+  // Stage play with a quick-change surfaces Stage canon tile and quick-change brief item.
+  let play = createProject('Curtain Call', 'stage');
+  play.documents[0].blocks = [
+    newBlock('act', 'ACT I'),
+    newBlock('scene', 'INT. DRESSING ROOM - NIGHT'),
+    newBlock('character', 'MARA'),
+    newBlock('dialogue', 'Five minutes to curtain.'),
+    newBlock('scene', 'EXT. ALLEY - NIGHT'),
+    newBlock('character', 'MARA'),
+    newBlock('dialogue', 'Lock the stage door.')
+  ];
+  const maraId = newId();
+  const s1Block = play.documents[0].blocks[2].id;
+  const s2Block = play.documents[0].blocks[5].id;
+  play = saveCharacter(play, { id: maraId, name: 'Mara', aliases: ['MARA'], role: 'Principal', bio: '', motivation: 'Finish opening night', conflict: 'Missing understudy', source: exactSource(play, play.documents[0], s1Block) });
+  play = saveStoryPoint(play, { id: newId(), kind: 'appearance', title: 'Mara in dressing room', detail: '', participants: [maraId], storyOrder: 1, source: exactSource(play, play.documents[0], s1Block) });
+  play = saveStoryPoint(play, { id: newId(), kind: 'appearance', title: 'Mara in alley', detail: '', participants: [maraId], storyOrder: 2, source: exactSource(play, play.documents[0], s2Block) });
+
+  const { tiles, steps } = projectPulse(play, play.documents[0], new Date('2026-11-18T10:00:00Z'));
+  const stageTile = tiles.find(tile => tile.id === 'story');
+  assert.ok(stageTile, 'Stage canon tile should appear once records exist');
+  assert.equal(stageTile.label, 'Stage canon');
+  assert.equal(stageTile.tone, 'warn');
+  assert.match(stageTile.detail, /1 quick-change/);
+  assert.ok(steps.some(step => step.id === 'story-turnaround' && step.action === 'Open Stage Intelligence'));
+});
+
+

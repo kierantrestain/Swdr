@@ -5,11 +5,12 @@ import { useState } from 'react';
 import type { Asset, Project } from '../model';
 import { resolveCharacterPhoto } from '../story/series-analysis';
 import { getStory } from '../story/series-model';
+import { isStoryProject } from '../story/story-profile';
 import type { Person } from './model';
 import { PHOTO_TYPES, assetUrl, photoAsset } from './photos';
 
 function storyPortraitFor(project: Project, person: Pick<Person, 'name'>): string | undefined {
-  if (project.kind !== 'series') return undefined;
+  if (!isStoryProject(project)) return undefined;
   const needle = person.name.trim().toLocaleLowerCase('en-GB');
   if (!needle) return undefined;
   const characters = getStory(project).draft.characters;

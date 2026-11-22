@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { DocumentModel, Project } from '../model';
 import { sceneList } from '../model';
 import { getStory } from '../story/series-model';
+import { isStoryProject, storyStructure } from '../story/story-profile';
 import { projectNavigation, workspaceTabs } from './navigation';
 import { documentForEpisode, episodeCode, orderedEpisodes } from './routes';
 import type { Route } from './routes';
@@ -58,29 +59,30 @@ export function CommandMenu({ isOpen, onOpenChange, projects, project, document,
             keywords: [`season ${episode.season}`, `episode ${episode.number}`],
             run: () => switchEpisode(episode.id) } });
       }
-      if (project.kind === 'series') {
+      if (isStoryProject(project)) {
         const story = getStory(project);
         const activeStory = story.canon.at(-1)?.data ?? story.draft;
+        const structure = storyStructure(project, document?.id);
         for (const person of activeStory.characters) {
           list.push({
             id: `character-${person.id}`,
             label: `${person.name} · Character dossier`,
             auxiliaryData: {
               group: 'Characters',
-              hint: person.role || 'Series Intelligence',
+              hint: person.role || structure.terms.workspaceTitle,
               keywords: [person.name, person.role, ...person.aliases, 'dossier', 'character'].filter(Boolean),
               run: () => navigate({ view: 'story', projectId: project.id, documentId: document?.id, character: person.id })
             }
           });
         }
         for (const eventPoint of activeStory.points.filter(point => point.kind === 'event').slice(0, 16)) {
-          const ep = orderedEpisodes(project).find(item => item.id === eventPoint.source.episodeId);
+          const code = structure.unitCodeOfSource(eventPoint.source);
           list.push({
             id: `event-${eventPoint.id}`,
             label: eventPoint.title,
             auxiliaryData: {
               group: 'Major events',
-              hint: ep ? `${episodeCode(ep)} · Series event` : 'Series event',
+              hint: `${code} · Story event`,
               keywords: [eventPoint.title, eventPoint.detail, 'event', 'timeline'].filter(Boolean),
               run: () => navigate({ view: 'story', projectId: project.id, documentId: document?.id, tab: 'event-ledger' })
             }

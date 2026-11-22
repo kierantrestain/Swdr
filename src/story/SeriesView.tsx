@@ -2,6 +2,7 @@ import { Badge } from '@astryxdesign/core/Badge';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Button } from '@astryxdesign/core/Button';
 import { Card } from '@astryxdesign/core/Card';
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { CheckboxList, CheckboxListItem } from '@astryxdesign/core/CheckboxList';
 import { Divider } from '@astryxdesign/core/Divider';
 import { Grid } from '@astryxdesign/core/Grid';
@@ -20,7 +21,7 @@ import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import {
   AlertTriangle, ArrowRight, CalendarClock, CheckCircle2, Clapperboard, Download, GitBranch, LayoutGrid,
-  Network, Plus, Sparkles, Trash2, Users
+  Network, Plus, Sparkles, Theater, Trash2, Users
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -35,15 +36,17 @@ import type { DossierPane } from './CharacterDossier';
 import { MajorEventsTimeline } from './MajorEventsTimeline';
 import { RelationshipWeb } from './RelationshipWeb';
 import { StoryMap } from './StoryMap';
-import { downloadText, episodeCode, fields, fileStem, orderedEpisodes, sourceDocument, sourceText } from './source';
+import { downloadText, fields, fileStem, sourceDocument, sourceText } from './source';
 import {
-  canonStates, characterSummaryStats, flashbacks, scanSeriesScripts, storyChecks
+  canonStates, characterSummaryStats, flashbacks, scanProjectScripts, scriptDiscoveryPreview, stageDoublingAnalysis, storyChecks
 } from './series-analysis';
 import {
-  approveCanon, CHARACTER_BILLINGS, CHARACTER_STATUSES, continuityConflicts, getStory, KNOWLEDGE,
-  queryStory, RELATIONSHIPS, relationshipStates, reviewException, saveCharacter, saveStoryPoint, sceneMatrix, sortStory, STORY_KINDS
+  approveCanon, CHARACTER_STATUSES, continuityConflicts, getStory, KNOWLEDGE,
+  queryStory, RELATIONSHIPS, relationshipStates, revealTime, reviewException, saveCharacter, saveStoryPoint, sceneMatrix, sortStory, STORY_KINDS
 } from './series-model';
 import type { Character, CharacterStatus, KnowledgeState, RelationshipState, SceneMatrixRow, StoryKind, StoryPoint, StoryState } from './series-model';
+import { storyBillings, storyStructure } from './story-profile';
+import type { StoryStructure } from './story-profile';
 import { Choice, Empty, FormError, Glyph, initialSource, Pane, SourceButton, SourceFields, Split, StoryDialog } from './StoryControls';
 import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, typeLabels } from './StoryParts';
 import type { CanonLookup } from './StoryParts';
@@ -73,9 +76,10 @@ function CharacterFormDialog({ project, document, character, save, onPhotoUpdate
   save: (character: Character) => boolean;
   onPhotoUpdate: (added: Asset[], removedIds: ReadonlyArray<string | undefined>) => void;
 }) {
+  const billings = storyBillings(project.kind);
   const [name, setName] = useState(character?.name ?? '');
   const [role, setRole] = useState(character?.role ?? '');
-  const [billing, setBilling] = useState(character?.billing ?? 'Series regular');
+  const [billing, setBilling] = useState(character?.billing ?? billings[0]);
   const [status, setStatus] = useState<CharacterStatus>(character?.status ?? 'Active');
   const [bio, setBio] = useState(character?.bio ?? '');
   const [motivation, setMotivation] = useState(character?.motivation ?? '');
@@ -155,12 +159,12 @@ function CharacterFormDialog({ project, document, character, save, onPhotoUpdate
       <VStack as="form" gap={3} onSubmit={submit} style={{ flex: '1 1 22rem', minWidth: 0 }}>
         <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
           <TextInput label="Name" value={name} onChange={setName} isRequired />
-          <TextInput label="Role" value={role} onChange={setRole} placeholder="Producer, Journalist, Detective" />
+          <TextInput label="Role" value={role} onChange={setRole} placeholder="Protagonist, Investigator, Mentor" />
           <Choice
             label="Billing"
             value={billing}
             onChange={setBilling}
-            options={CHARACTER_BILLINGS.map(value => ({ value, label: value }))}
+            options={billings.map(value => ({ value, label: value }))}
           />
           <Choice
             label="Status"
@@ -169,7 +173,7 @@ function CharacterFormDialog({ project, document, character, save, onPhotoUpdate
             options={CHARACTER_STATUSES.map(value => ({ value, label: value }))}
           />
         </Grid>
-        <TextArea label="Character overview" value={bio} onChange={setBio} rows={2} placeholder="One-sentence summary of who they are when the series begins." />
+        <TextArea label="Character overview" value={bio} onChange={setBio} rows={2} placeholder="One-sentence summary of who they are when the story begins." />
         <TextArea label="Core motivation" value={motivation} onChange={setMotivation} rows={2} />
         <TextArea label="Conflict" value={conflict} onChange={setConflict} rows={2} />
         <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
@@ -214,9 +218,8 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
   const [causeId, setCauseId] = useState(point?.causeId ?? '');
   const [error, setError] = useState('');
 
-  const episodes = orderedEpisodes(project);
-  const reveal = episodes.findIndex(episode => episode.id === source?.episodeId);
-  const characterOptions = data.characters.filter(person => episodes.findIndex(episode => episode.id === person.source.episodeId) <= reveal);
+  const reveal = source ? revealTime(project, source) : -1;
+  const characterOptions = data.characters.filter(person => reveal < 0 || revealTime(project, person.source) <= reveal);
   const events = data.points.filter(event => event.kind === 'event' && event.id !== point?.id);
   const minPeople = kind === 'event' ? 0 : kind === 'relationship' || kind === 'interaction' ? 2 : 1;
 
@@ -283,7 +286,7 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
         options={RELATIONSHIPS.map(state => ({ value: state, label: state }))}
       />}
       {kind === 'knowledge' && <Grid columns={{ minWidth: 180, repeat: 'fit' }} gap={3}>
-        <TextInput label="Shared fact key" value={factKey} onChange={setFactKey} placeholder="e.g. timetable-date" isRequired />
+        <TextInput label="Shared fact key" value={factKey} onChange={setFactKey} placeholder="e.g. missing-evidence" isRequired />
         <Choice
           label="State of knowledge"
           value={knowledge}
@@ -306,15 +309,20 @@ function PointFormDialog({ project, document, data, point, save, close }: Editor
   </StoryDialog>;
 }
 
-function ScriptScanDialog({ project, draft, onImport, close }: {
+function ScriptScanDialog({ project, structure, draft, onImport, close }: {
   project: Project;
+  structure: StoryStructure;
   draft: StoryState;
   onImport: (characters: Character[], points: StoryPoint[]) => void;
   close: () => void;
 }) {
-  const scan = useMemo(() => scanSeriesScripts(project, draft), [draft, project]);
-  const [chosenChars, setChosenChars] = useState<string[]>(() => scan.newCharacters.map(item => item.cueName));
-  const [chosenApps, setChosenApps] = useState<string[]>(() => scan.newAppearances.slice(0, 12).map((_, i) => String(i)));
+  const scan = useMemo(() => scanProjectScripts(project, draft, structure.document?.id), [draft, project, structure.document?.id]);
+  const [chosenChars, setChosenChars] = useState<string[]>(() => scan.newCharacters.slice(0, 20).map(item => item.cueName));
+  const [chosenApps, setChosenApps] = useState<string[]>(() => scan.newAppearances.slice(0, 16).map((_, i) => String(i)));
+  const [chosenLinks, setChosenLinks] = useState<string[]>(() =>
+    draft.characters.length === 0 ? scan.suggestedLinks.slice(0, 8).map(item => item.key) : []
+  );
+  const [mapNewCharScenes, setMapNewCharScenes] = useState(true);
 
   function apply() {
     const newCharacters: Character[] = scan.newCharacters
@@ -323,13 +331,23 @@ function ScriptScanDialog({ project, draft, onImport, close }: {
         id: newId(),
         name: item.name,
         role: '',
-        billing: item.episodes >= 3 ? 'Series regular' : 'Recurring',
+        billing: item.suggestedBilling,
         status: 'Active',
         motivation: '',
         conflict: '',
         aliases: item.cueName.toLowerCase() !== item.name.toLowerCase() ? [item.cueName] : [],
         source: item.source
       }));
+
+    // Lookup key -> Character ID across both existing and newly created characters
+    const idByKey = new Map<string, string>();
+    for (const person of [...draft.characters, ...newCharacters]) {
+      idByKey.set(person.name.trim().toLocaleLowerCase('en-GB'), person.id);
+      for (const alias of person.aliases) idByKey.set(alias.trim().toLocaleLowerCase('en-GB'), person.id);
+      const first = person.name.split(/\s+/)[0]?.trim().toLocaleLowerCase('en-GB');
+      if (first && !idByKey.has(first)) idByKey.set(first, person.id);
+    }
+
     const newPoints: StoryPoint[] = scan.newAppearances
       .filter((_, index) => chosenApps.includes(String(index)))
       .map(item => ({
@@ -341,39 +359,100 @@ function ScriptScanDialog({ project, draft, onImport, close }: {
         source: item.source,
         storyOrder: item.storyOrder
       }));
+
+    // Also map scene appearances for newly imported characters in the same pass so Story Map & Scene Matrix populate immediately.
+    if (mapNewCharScenes && newCharacters.length > 0) {
+      const followUp = scanProjectScripts(project, { ...draft, characters: [...draft.characters, ...newCharacters] }, structure.document?.id);
+      const newIds = new Set(newCharacters.map(item => item.id));
+      for (const app of followUp.newAppearances.filter(item => newIds.has(item.characterId)).slice(0, 220)) {
+        newPoints.push({
+          id: newId(),
+          kind: 'appearance',
+          title: app.title,
+          detail: `${app.characterName} speaks in ${app.sceneHeading}.`,
+          participants: [app.characterId],
+          source: app.source,
+          storyOrder: app.storyOrder
+        });
+      }
+    }
+
+    // Seed optional shared-scene relationship links (anchored to their first shared scene) so the Relationship Web lights up immediately.
+    for (const link of scan.suggestedLinks.filter(item => chosenLinks.includes(item.key))) {
+      const aId = idByKey.get(link.aKey);
+      const bId = idByKey.get(link.bKey);
+      if (!aId || !bId || aId === bId) continue;
+      newPoints.push({
+        id: newId(),
+        kind: 'relationship',
+        title: link.title,
+        detail: `Seeded from ${link.sharedScenes} shared scene${link.sharedScenes === 1 ? '' : 's'} in the script. Refine the relationship state as you develop the draft.`,
+        participants: [aId, bId],
+        relationship: 'Trust',
+        source: link.source,
+        storyOrder: link.storyOrder
+      });
+    }
+
     onImport(newCharacters, newPoints);
     close();
   }
 
-  const totalSelected = chosenChars.length + chosenApps.length;
+  const totalSelected = chosenChars.length + chosenApps.length + chosenLinks.length;
+  const isEmpty = !scan.newCharacters.length && !scan.newAppearances.length && !scan.suggestedLinks.length;
 
   return <StoryDialog
     title="Scan scripts for characters & appearances"
-    subtitle="Reads speaking cues from every episode script and anchors each imported record to its exact line in your working draft."
-    width={680}
+    subtitle={`Reads speaking cues across your ${structure.mode === 'episodic' ? 'episode scripts' : 'script scenes'} and anchors every imported record to its exact line in your working draft.`}
+    width={720}
     onClose={close}
   >
-    {!scan.newCharacters.length && !scan.newAppearances.length ? (
+    {isEmpty ? (
       <Empty
         title="Scripts are already in sync"
-        description="Every speaking character and scene appearance found across your episodes is already recorded in Series Intelligence."
+        description={`Every speaking character and scene appearance found in your script is already recorded in ${structure.terms.workspaceTitle}.`}
       />
     ) : <VStack gap={4}>
-      {scan.newCharacters.length > 0 && <CheckboxList
-        label={`Unrecorded speaking characters (${scan.newCharacters.length})`}
+      {scan.newCharacters.length > 0 && <VStack gap={2}>
+        <CheckboxList
+          label={`Unrecorded speaking characters (${scan.newCharacters.length})`}
+          density="compact"
+          value={chosenChars}
+          onChange={setChosenChars}
+        >
+          {scan.newCharacters.slice(0, 24).map(item => (
+            <CheckboxListItem
+              key={item.cueName}
+              value={item.cueName}
+              label={`${item.name} · ${item.suggestedBilling}`}
+              description={`First speaks in ${item.firstEpisodeLabel} · ${item.speeches} speech${item.speeches === 1 ? '' : 'es'} across ${item.scenes} scene${item.scenes === 1 ? '' : 's'}`}
+            />
+          ))}
+        </CheckboxList>
+        <CheckboxInput
+          label="Also record scene appearances for imported characters"
+          description="Populates the Story map, Scene matrix and character presence heatmaps automatically."
+          value={mapNewCharScenes}
+          onChange={setMapNewCharScenes}
+        />
+      </VStack>}
+
+      {scan.suggestedLinks.length > 0 && <CheckboxList
+        label={`Shared-scene character links (${scan.suggestedLinks.length} recurring pairs)`}
         density="compact"
-        value={chosenChars}
-        onChange={setChosenChars}
+        value={chosenLinks}
+        onChange={setChosenLinks}
       >
-        {scan.newCharacters.map(item => (
+        {scan.suggestedLinks.map(item => (
           <CheckboxListItem
-            key={item.cueName}
-            value={item.cueName}
-            label={item.name}
-            description={`First speaks in ${item.firstEpisodeLabel} · ${item.speeches} speech${item.speeches === 1 ? '' : 'es'} across ${item.episodes} episode${item.episodes === 1 ? '' : 's'}`}
+            key={item.key}
+            value={item.key}
+            label={`${item.aName} & ${item.bName}`}
+            description={`${item.title} · first linked in ${item.firstSceneLabel}`}
           />
         ))}
       </CheckboxList>}
+
       {scan.newAppearances.length > 0 && <CheckboxList
         label={`Unrecorded scene appearances (${scan.newAppearances.length})`}
         density="compact"
@@ -389,12 +468,13 @@ function ScriptScanDialog({ project, draft, onImport, close }: {
           />
         ))}
       </CheckboxList>}
+
       <HStack gap={2} justify="end">
         <Button label="Cancel" onClick={close} />
         <Button
           variant="primary"
           icon={<Glyph icon={Sparkles} />}
-          label={`Import ${totalSelected} record${totalSelected === 1 ? '' : 's'} to draft`}
+          label={`Import ${totalSelected} selection${totalSelected === 1 ? '' : 's'} to draft`}
           isDisabled={totalSelected === 0}
           onClick={apply}
         />
@@ -404,8 +484,9 @@ function ScriptScanDialog({ project, draft, onImport, close }: {
 }
 
 /** Dual-axis reveal-order vs. story-time chronology ribbon with explicit fill="none" paths so flashbacks read cleanly. */
-function Chronology({ project, events, flags, activeId, onSelect }: {
+function Chronology({ project, structure, events, flags, activeId, onSelect }: {
   project: Project;
+  structure: StoryStructure;
   events: StoryPoint[];
   flags: Map<string, string>;
   activeId: string;
@@ -414,18 +495,16 @@ function Chronology({ project, events, flags, activeId, onSelect }: {
   if (events.length < 2) return null;
   const reveal = sortStory(project, events, 'reveal');
   const story = sortStory(project, events, 'story');
-  const episodes = orderedEpisodes(project);
-  const epLabel = (point: StoryPoint) => {
-    const ep = episodes.find(item => item.id === point.source.episodeId);
-    return ep ? episodeCode(ep) : '';
-  };
+  const epLabel = (point: StoryPoint) => structure.unitCodeOfSource(point.source);
   const x = (index: number) => 36 + index * (928 / (events.length - 1));
   const storyIndex = new Map(story.map((point, index) => [point.id, index]));
 
   return <Card variant="muted" padding={4}>
     <VStack gap={2}>
       <HStack justify="between" align="center" wrap="wrap">
-        <Text type="label" color="secondary">Reveal order · episode and line</Text>
+        <Text type="label" color="secondary">
+          Reveal order · {structure.mode === 'episodic' ? 'episode and line' : 'script scene and line'}
+        </Text>
         <Text type="supporting" color="secondary" size="xsm">Click any node to highlight its event below</Text>
       </HStack>
       <svg
@@ -528,6 +607,13 @@ interface CharacterTableRow extends Record<string, unknown> {
   character: Character;
 }
 
+interface StageLoadRow extends Record<string, unknown> {
+  id: string;
+  character: Character;
+  totalScenes: number;
+  byAct: Array<{ actNumber: number; actLabel: string; scenes: number }>;
+}
+
 export function SeriesView({
   project,
   document,
@@ -540,18 +626,21 @@ export function SeriesView({
   characterId,
   onCharacterChange
 }: WorkspaceViewProps & {
-  /** The series workspace named in the address, e.g. story-map. */
+  /** The story workspace named in the address, e.g. story-map. */
   tab?: string;
   onTabChange?: (tab: string) => void;
   /** Optional deep-linked character dossier id from the route or command palette. */
   characterId?: string;
   onCharacterChange?: (characterId?: string) => void;
 }) {
-  const episodes = orderedEpisodes(project);
-  const current = episodes.find(item => item.id === document.episodeId);
-  const [season, setSeason] = useState(current?.season ?? 0);
+  const structure = useMemo(() => storyStructure(project, document.id), [project, document.id]);
+  const units = structure.units;
+  const currentUnit = structure.mode === 'episodic'
+    ? units.find(item => item.id === document.episodeId)
+    : undefined;
+  const [group, setGroup] = useState(currentUnit?.groupNumber ?? 0);
   const [exact, setExact] = useState('');
-  const [asOf, setAsOf] = useState(current?.id ?? '');
+  const [asOf, setAsOf] = useState(currentUnit?.id ?? '');
   const [version, setVersion] = useState('');
   const [localView, setLocalView] = useState<View>(() => PANES.find(pane => viewSlug(pane) === tab) ?? 'Relationship web');
   const view = onTabChange ? PANES.find(pane => viewSlug(pane) === tab) ?? 'Relationship web' : localView;
@@ -588,7 +677,12 @@ export function SeriesView({
 
   const store = useMemo(() => getStory(project), [project]);
   const canon = version === 'draft' ? undefined : store.canon.find(item => item.id === version) ?? store.canon.at(-1);
-  const scope = { season: season || undefined, episodeId: exact || undefined, asOfId: asOf || undefined };
+  const scope = {
+    season: group || undefined,
+    episodeId: exact || undefined,
+    asOfId: asOf || undefined,
+    documentId: structure.mode === 'script' ? structure.document?.id : undefined
+  };
   const data = queryStory(project, canon?.data ?? store.draft, scope);
   const editable = !readOnly && !canon;
   const person = data.characters.find(item => item.id === focusedPerson) ?? data.characters[0];
@@ -596,20 +690,25 @@ export function SeriesView({
   const eventRows = sortStory(project, data.points.filter(point => point.kind === 'event'), order);
   const interactions = sortStory(project, data.points.filter(point => point.kind === 'interaction' && point.participants.includes(person?.id ?? '')), 'reveal').reverse();
   const selectPerson = (id: string) => setFocusedPerson(id);
-  const episodeOf = (item: Character) => {
-    const episode = episodes.find(entry => entry.id === item.source.episodeId);
-    return episode ? episodeCode(episode) : 'in script';
-  };
+  const introOf = (item: Character) => structure.unitCodeOfSource(item.source);
   const setEditPoint = editable ? (point: StoryPoint) => setForm({ kind: 'point', item: point }) : undefined;
   const displayDossier = dossier && Boolean(person);
   const canonLookup: CanonLookup = canon ? undefined : canonStates(store);
-  const cutoffIndex = asOf ? episodes.findIndex(item => item.id === asOf) : episodes.length - 1;
-  const scopeEpisodes = episodes.filter(item => (!season || item.season === season) && (!exact || item.id === exact));
-  const revealedEpisodes = scopeEpisodes.filter(item => episodes.indexOf(item) <= cutoffIndex);
+  const cutoffIndex = asOf ? units.findIndex(item => item.id === asOf) : units.length - 1;
+  const scopeUnits = units.filter(item => (!group || item.groupNumber === group) && (!exact || item.id === exact));
+  const revealedUnits = scopeUnits.filter(item => units.indexOf(item) <= cutoffIndex);
   const flashbackFlags = new Map([...flashbacks(project, data.points)].map(id => [id, 'Revealed out of order'] as const));
   const conflicts = continuityConflicts(data.points);
-  const checks = storyChecks(project, data, revealedEpisodes);
+  const checks = storyChecks(project, data, revealedUnits, structure.document?.id);
   const draftCount = canonLookup ? [...canonLookup.values()].filter(state => state !== 'approved').length : 0;
+  const stageReport = useMemo(
+    () => project.kind === 'stage' ? stageDoublingAnalysis(project, data, structure.document?.id) : undefined,
+    [data, project, structure.document?.id]
+  );
+  const discovery = useMemo(
+    () => (store.draft.characters.length === 0 ? scriptDiscoveryPreview(project, structure.document?.id) : undefined),
+    [project, store.draft.characters.length, structure.document?.id]
+  );
 
   function change(action: (p: Project) => Project, message: string): boolean {
     try {
@@ -634,19 +733,21 @@ export function SeriesView({
     onStatus('Visible story records exported.');
   }
 
-  const seasonOptions = [
-    { value: '0', label: 'All seasons' },
-    ...[...new Set(episodes.map(item => item.season))].map(key => ({ value: String(key), label: `Season ${key}` }))
+  const groupOptions = [
+    { value: '0', label: structure.terms.allGroupsLabel },
+    ...structure.groups.map(item => ({ value: String(item.number), label: item.label }))
   ];
   const asOfOptions = [
-    { value: '', label: 'Latest in scope' },
-    ...episodes.filter(item => !season || item.season === season).map(item => ({ value: item.id, label: `As of ${episodeCode(item)}` }))
+    { value: '', label: structure.terms.asOfAllLabel },
+    ...units
+      .filter(item => !group || item.groupNumber === group)
+      .map(item => ({ value: item.id, label: `As of ${item.code}` }))
   ];
-  const episodeFilterOptions = [
-    { value: '', label: 'All visible episodes' },
-    ...episodes
-      .filter((item, index) => (!season || item.season === season) && (!asOf || index <= episodes.findIndex(ep => ep.id === asOf)))
-      .map(item => ({ value: item.id, label: `${episodeCode(item)} · ${item.title}` }))
+  const exactFilterOptions = [
+    { value: '', label: structure.terms.exactAllLabel },
+    ...units
+      .filter((item, index) => (!group || item.groupNumber === group) && (!asOf || index <= units.findIndex(u => u.id === asOf)))
+      .map(item => ({ value: item.id, label: `${item.code} · ${item.title}` }))
   ];
   const versionOptions = [
     { value: 'draft', label: 'Working draft' },
@@ -670,32 +771,42 @@ export function SeriesView({
     return doc ? sceneList(doc).find(scene => scene.id === row.source.sceneId)?.heading : undefined;
   };
 
-  return <VStack gap={5} id="main-content" className="swdr-page" aria-label="Series Intelligence workspace">
+  const activeGroupLabel = group
+    ? structure.groups.find(item => item.number === group)?.label ?? `${structure.terms.groupLabel} ${group}`
+    : structure.mode === 'episodic'
+      ? structure.terms.allGroupsLabel
+      : structure.terms.structureBadge;
+
+  return <VStack gap={5} id="main-content" className="swdr-page" aria-label={`${structure.terms.workspaceTitle} workspace`}>
     <PageHeader
-      eyebrow={`${project.title} — ${season ? `Season ${season}` : 'All seasons'}`}
-      title={displayDossier && person ? person.name : 'Series Intelligence'}
+      eyebrow={`${project.title} — ${activeGroupLabel}`}
+      title={displayDossier && person ? person.name : structure.terms.workspaceTitle}
       subtitle={displayDossier && person
         ? [person.role, 'Character dossier'].filter(Boolean).join(' · ')
         : `${canon ? 'Approved canon' : 'Working draft'} · ${project.title}`}
       actions={<HStack gap={2} align="center" wrap="wrap">
-        <Choice
-          label="Season"
-          isLabelHidden
-          size="sm"
-          width={145}
-          value={String(season)}
-          onChange={value => { setSeason(Number(value)); setExact(''); setAsOf(''); }}
-          options={seasonOptions}
-        />
-        <Choice
-          label="As of episode"
-          isLabelHidden
-          size="sm"
-          width={184}
-          value={asOf}
-          onChange={value => { setAsOf(value); setExact(''); }}
-          options={asOfOptions}
-        />
+        {structure.groups.length > 0 && (
+          <Choice
+            label={structure.terms.groupLabel}
+            isLabelHidden
+            size="sm"
+            width={145}
+            value={String(group)}
+            onChange={value => { setGroup(Number(value)); setExact(''); setAsOf(''); }}
+            options={groupOptions}
+          />
+        )}
+        {units.length > 0 && (
+          <Choice
+            label={structure.terms.asOfLabel}
+            isLabelHidden
+            size="sm"
+            width={184}
+            value={asOf}
+            onChange={value => { setAsOf(value); setExact(''); }}
+            options={asOfOptions}
+          />
+        )}
         {displayDossier && (
           <Button
             size="sm"
@@ -727,6 +838,23 @@ export function SeriesView({
       />
     )}
 
+    {editable && discovery && discovery.speakingRoles > 0 && (
+      <Banner
+        status="info"
+        title={`Found ${discovery.speakingRoles} speaking character${discovery.speakingRoles === 1 ? '' : 's'} across ${discovery.scenes} scene${discovery.scenes === 1 ? '' : 's'} in ${project.title}`}
+        description={`${discovery.groups} ${discovery.groups === 1 ? discovery.groupLabel : `${discovery.groupLabel}s`} detected${discovery.sharedPairs ? ` · ${discovery.sharedPairs} shared-scene pair${discovery.sharedPairs === 1 ? '' : 's'}` : ''}${discovery.topNames.length ? ` (${discovery.topNames.join(', ')})` : ''}. Scan the script to populate your Relationship web, Story map, Character dossiers and Scene matrix in one step.`}
+        endContent={
+          <Button
+            variant="primary"
+            size="sm"
+            label="Scan script & build draft"
+            icon={<Glyph icon={Sparkles} size="xsm" />}
+            onClick={() => setForm({ kind: 'scan' })}
+          />
+        }
+      />
+    )}
+
     <VStack gap={3}>
       {!displayDossier && (
         <TabList value={view} onChange={value => setView(value as View)} hasDivider aria-label="Series workspaces">
@@ -746,15 +874,17 @@ export function SeriesView({
 
       <HStack gap={2} align="center" justify="between" wrap="wrap">
         <HStack gap={2} align="center" wrap="wrap">
-          <Choice
-            label="Episode filter"
-            isLabelHidden
-            size="sm"
-            width={210}
-            value={exact}
-            onChange={setExact}
-            options={episodeFilterOptions}
-          />
+          {units.length > 0 && (
+            <Choice
+              label={structure.terms.exactFilterLabel}
+              isLabelHidden
+              size="sm"
+              width={215}
+              value={exact}
+              onChange={setExact}
+              options={exactFilterOptions}
+            />
+          )}
           <Choice
             label="Canon or draft"
             isLabelHidden
@@ -824,13 +954,16 @@ export function SeriesView({
     {form?.kind === 'scan' && (
       <ScriptScanDialog
         project={project}
+        structure={structure}
         draft={store.draft}
         close={() => setForm(undefined)}
         onImport={(newChars, newPoints) => {
           change(currentProject => {
             let next = currentProject;
             for (const character of newChars) next = saveCharacter(next, character);
-            for (const point of newPoints) next = saveStoryPoint(next, point);
+            for (const point of newPoints) {
+              try { next = saveStoryPoint(next, point); } catch { /* skip invalid out-of-order point */ }
+            }
             return next;
           }, `Imported ${newChars.length + newPoints.length} script records to working draft.`);
         }}
@@ -840,11 +973,12 @@ export function SeriesView({
     {displayDossier && person ? (
       <CharacterDossier
         project={project}
+        structure={structure}
         person={person}
         data={data}
         states={edges}
         active={dossierPane}
-        episodes={revealedEpisodes}
+        units={revealedUnits}
         setActive={setDossierPane}
         onOpen={onOpenSource}
         onEdit={setEditPoint}
@@ -856,6 +990,7 @@ export function SeriesView({
       {view === 'Relationship web' && <VStack gap={5}>
         <RelationshipWeb
           project={project}
+          structure={structure}
           person={person}
           characters={data.characters}
           edges={edges}
@@ -868,6 +1003,7 @@ export function SeriesView({
         />
         <MajorEventsTimeline
           project={project}
+          structure={structure}
           events={eventRows}
           characters={data.characters}
           order={order}
@@ -882,8 +1018,9 @@ export function SeriesView({
       {view === 'Story map' && (
         <StoryMap
           project={project}
+          structure={structure}
           data={data}
-          episodes={scopeEpisodes}
+          units={scopeUnits}
           cutoff={cutoffIndex}
           onOpen={onOpenSource}
           states={canonLookup}
@@ -894,12 +1031,15 @@ export function SeriesView({
       {view === 'Event ledger' && <Pane
         title="Event ledger"
         label="Event ledger"
-        description={`${order === 'reveal' ? 'Ordered by the episode and line where the audience learns each event.' : 'Ordered by when each event happens in the world of the story.'}${flashbackFlags.size > 0 ? ` ${flashbackFlags.size} event${flashbackFlags.size === 1 ? ' is' : 's are'} revealed out of story order.` : ''}`}
+        description={`${order === 'reveal'
+          ? `Ordered by the ${structure.mode === 'episodic' ? 'episode' : 'scene'} and line where the audience learns each event.`
+          : 'Ordered by when each event happens in the world of the story.'}${flashbackFlags.size > 0 ? ` ${flashbackFlags.size} event${flashbackFlags.size === 1 ? ' is' : 's are'} revealed out of story order.` : ''}`}
         actions={orderToggle}
         padding={5}
       >
         <Chronology
           project={project}
+          structure={structure}
           events={eventRows}
           flags={flashbackFlags}
           activeId={highlightedEventId}
@@ -946,7 +1086,7 @@ export function SeriesView({
           characterLayout === 'cards' ? (
             <Grid columns={{ minWidth: 260, repeat: 'fill' }} gap={4}>
               {filteredCharacters.map(item => {
-                const stats = characterSummaryStats(project, data, item.id);
+                const stats = characterSummaryStats(project, data, item.id, structure.document?.id);
                 return <Card role="article" key={item.id} variant="muted" padding={4}>
                   <VStack gap={3} minHeight="100%" justify="between">
                     <VStack gap={2}>
@@ -966,7 +1106,7 @@ export function SeriesView({
                         <Text type="supporting" color="secondary" maxLines={2}>{item.bio || item.motivation}</Text>
                       )}
                       <HStack gap={2} align="center" wrap="wrap">
-                        <Token size="sm" color="blue" label={`Introduced ${episodeOf(item)}`} />
+                        <Token size="sm" color="blue" label={`Introduced ${introOf(item)}`} />
                         <Text type="supporting" color="secondary" size="xsm">
                           {stats.records} record{stats.records === 1 ? '' : 's'} · {stats.relationships} link{stats.relationships === 1 ? '' : 's'}
                         </Text>
@@ -1013,22 +1153,22 @@ export function SeriesView({
                 {
                   key: 'intro',
                   header: 'Introduced',
-                  width: pixel(104),
-                  renderCell: ({ character }) => <EpisodeChip project={project} episodeId={character.source.episodeId} />
+                  width: pixel(120),
+                  renderCell: ({ character }) => <EpisodeChip project={project} episodeId={character.source.episodeId} source={character.source} />
                 },
                 {
                   key: 'records',
                   header: 'Records',
                   width: pixel(84),
                   align: 'end',
-                  renderCell: ({ character }) => <Text weight="semibold">{characterSummaryStats(project, data, character.id).records}</Text>
+                  renderCell: ({ character }) => <Text weight="semibold">{characterSummaryStats(project, data, character.id, structure.document?.id).records}</Text>
                 },
                 {
                   key: 'links',
                   header: 'Links',
                   width: pixel(76),
                   align: 'end',
-                  renderCell: ({ character }) => characterSummaryStats(project, data, character.id).relationships
+                  renderCell: ({ character }) => characterSummaryStats(project, data, character.id, structure.document?.id).relationships
                 },
                 {
                   key: 'actions',
@@ -1045,7 +1185,7 @@ export function SeriesView({
         ) : (
           <Empty
             title={data.characters.length ? 'No matching characters' : 'No characters in this view'}
-            description={data.characters.length ? 'Try a different search term or broaden the episode scope.' : 'Add characters or scan your scripts to populate the cast register.'}
+            description={data.characters.length ? 'Try a different search term or broaden the scope.' : 'Add characters or scan your script to populate the cast register.'}
           />
         )}
       </Pane>}
@@ -1131,13 +1271,101 @@ export function SeriesView({
       {view === 'Arcs and continuity' && <VStack gap={5}>
         <ArcTimeline
           project={project}
+          structure={structure}
           data={data}
-          episodes={revealedEpisodes}
+          units={revealedUnits}
           onOpen={onOpenSource}
           onEdit={setEditPoint}
           onDossier={id => { selectPerson(id); openDossier(id); }}
           states={canonLookup}
         />
+
+        {stageReport && stageReport.loads.length > 0 && (
+          <Pane
+            title="Stage presence & repertory doubling"
+            label="Stage presence and doubling"
+            description="Per-act stage time and non-Principal roles that never share a scene."
+            padding={5}
+          >
+            <Split
+              ratio={[6, 5]}
+              breakpoint={960}
+              main={
+                <Table<StageLoadRow>
+                  density="compact"
+                  hasHover
+                  idKey="id"
+                  data={stageReport.loads.map(row => ({ id: row.character.id, ...row }))}
+                  columns={[
+                    {
+                      key: 'character',
+                      header: 'Role',
+                      width: proportional(2, { minWidth: 160 }),
+                      renderCell: ({ character }) => (
+                        <HStack gap={2} align="center">
+                          <CharacterAvatar project={project} character={character} size={24} decorative />
+                          <VStack gap={0} hAlign="start">
+                            <Link onClick={() => { selectPerson(character.id); openDossier(character.id); }}>
+                              <Text weight="semibold" size="sm">{character.name}</Text>
+                            </Link>
+                            {character.billing && <Text type="supporting" color="secondary" size="xsm">{character.billing}</Text>}
+                          </VStack>
+                        </HStack>
+                      )
+                    },
+                    ...structure.groups.map(act => ({
+                      key: `act-${act.number}`,
+                      header: act.shortLabel,
+                      width: pixel(68),
+                      align: 'end' as const,
+                      renderCell: ({ byAct }: StageLoadRow) => {
+                        const count = byAct.find(item => item.actNumber === act.number)?.scenes ?? 0;
+                        return <Text color={count ? 'primary' : 'disabled'}>{count || '—'}</Text>;
+                      }
+                    })),
+                    {
+                      key: 'total',
+                      header: 'Total',
+                      width: pixel(72),
+                      align: 'end',
+                      renderCell: ({ totalScenes }) => <Text weight="semibold">{totalScenes}</Text>
+                    }
+                  ]}
+                />
+              }
+              side={
+                <VStack gap={3}>
+                  <HStack gap={2} align="center" wrap="wrap">
+                    <Glyph icon={Theater} size="sm" color="accent" />
+                    <Heading level={4}>Doubling candidates</Heading>
+                    <Token size="sm" color="gray" label="Generated · not canon" />
+                  </HStack>
+                  {stageReport.doublingPairs.length > 0 ? (
+                    <VStack as="ul" gap={2} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                      {stageReport.doublingPairs.map(pair => (
+                        <VStack as="li" key={`${pair.a.id}-${pair.b.id}`} gap={0} style={{ listStyle: 'none' }}>
+                          <Card variant="muted" padding={3}>
+                            <VStack gap={1} hAlign="start">
+                              <HStack gap={2} align="center" wrap="wrap">
+                                <Text weight="semibold" size="sm">{pair.a.name} / {pair.b.name}</Text>
+                                <Badge variant="neutral" label={`${pair.combinedScenes} scenes`} />
+                              </HStack>
+                              <Text type="supporting" color="secondary" size="xsm">{pair.note}</Text>
+                            </VStack>
+                          </Card>
+                        </VStack>
+                      ))}
+                    </VStack>
+                  ) : (
+                    <Text type="supporting" color="secondary">
+                      Mark ensemble/featured roles and record scene appearances to surface non-overlapping doubling pairs.
+                    </Text>
+                  )}
+                </VStack>
+              }
+            />
+          </Pane>
+        )}
 
         <Split
           ratio={[5, 6]}
@@ -1221,7 +1449,7 @@ export function SeriesView({
                   </Text>
                   {checks.length > 0 ? <VStack as="ul" gap={2} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                     {checks.map(check => {
-                      const borderTone = check.kind === 'open-thread' ? 'var(--color-warning)'
+                      const borderTone = check.kind === 'open-thread' || check.kind === 'turnaround' || check.kind === 'act-balance' ? 'var(--color-warning)'
                         : check.kind === 'unseen-turn' || check.kind === 'early-appearance' ? 'var(--color-error)'
                         : check.kind === 'source-changed' ? 'var(--color-accent)'
                         : 'var(--color-border-emphasized)';

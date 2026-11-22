@@ -53,7 +53,10 @@ export function sourceLabel(project: Project, source: SourceRef): string {
   const episode = project.episodes.find(item => item.id === source.episodeId);
   const scene = document && sceneList(document).find(item => item.id === source.sceneId);
   const line = document?.blocks.findIndex(block => block.id === source.blockId) ?? -1;
-  return [episode ? episodeCode(episode) : document?.title ?? 'Script', scene && `Scene ${scene.number}`,
+  const docPrefix = episode
+    ? episodeCode(episode)
+    : (project.documents.length > 1 || !scene ? document?.title ?? 'Script' : undefined);
+  return [docPrefix, scene && `Scene ${scene.number}`,
     line >= 0 && `Line ${line + 1}`].filter(Boolean).join(' · ');
 }
 

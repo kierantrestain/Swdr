@@ -1,6 +1,7 @@
 import { newId } from '../model';
 import type { Project, SourceRef } from '../model';
-import { orderedEpisodes, retainSources, upsert, validSource } from './source';
+import { retainSources, sourceDocument, upsert, validSource } from './source';
+import { storyStructure } from './story-profile';
 
 export const STORY_KINDS = ['event', 'appearance', 'interaction', 'relationship', 'knowledge', 'arc'] as const;
 export type StoryKind = (typeof STORY_KINDS)[number];
@@ -70,9 +71,14 @@ export interface StoryStore {
 }
 
 export interface StoryScope {
+  /** Season number (episodic) or Act number (film / stage play). */
   season?: number;
+  /** Exact Episode ID (episodic) or Sequence/Scene unit ID (film / stage play). */
   episodeId?: string;
+  /** Cutoff Episode ID (episodic) or Sequence/Scene unit ID (film / stage play). */
   asOfId?: string;
+  /** Active script document when scoping a non-episodic film or stage play. */
+  documentId?: string;
 }
 
 const emptyState = (): StoryState => ({ characters: [], points: [], exceptions: [] });
@@ -90,8 +96,19 @@ export function withStory(project: Project, store: StoryStore): Project {
   return { ...project, modules: { ...project.modules, story: store } };
 }
 
-function revealTime(project: Project, source: SourceRef): number {
-  return orderedEpisodes(project).findIndex(episode => episode.id === source.episodeId);
+function blockPosition(project: Project, source: SourceRef): number {
+  const doc = sourceDocument(project, source);
+  return doc && source.blockId ? Math.max(0, doc.blocks.findIndex(block => block.id === source.blockId)) : 0;
+}
+
+/** Monotonic reveal position: episode index for series, or (scene index, line index) for films and stage plays. */
+export function revealTime(project: Project, source: SourceRef): number {
+  const structure = storyStructure(project, source.documentId);
+  if (structure.mode === 'episodic') {
+    return structure.unitIndexOfSource(source);
+  }
+  const sceneIdx = structure.sceneIndexOfSource(source);
+  return sceneIdx < 0 ? -1 : sceneIdx * 10_000 + blockPosition(project, source);
 }
 
 export function saveCharacter(project: Project, character: Character): Project {
@@ -107,8 +124,9 @@ export function saveStoryPoint(project: Project, point: StoryPoint): Project {
   }
   const store = getStory(project);
   const linked = [...new Set(point.participants)];
+  const pointTime = revealTime(project, point.source);
   if (linked.some(id => !store.draft.characters.some(person => person.id === id
-    && revealTime(project, person.source) <= revealTime(project, point.source)))) {
+    && revealTime(project, person.source) <= pointTime))) {
     throw new Error('Choose characters already introduced at this reveal point.');
   }
   if ((point.kind === 'relationship' || point.kind === 'interaction') && linked.length !== 2) {
@@ -135,23 +153,51 @@ export function approveCanon(project: Project, label?: string): Project {
 }
 
 export function queryStory(project: Project, data: StoryState, scope: StoryScope): StoryState {
-  const episodes = orderedEpisodes(project);
-  const cutoff = scope.asOfId ? episodes.findIndex(episode => episode.id === scope.asOfId) : episodes.length - 1;
-  const index = new Map(episodes.map((episode, position) => [episode.id, position]));
-  const beforeCutoff = (source: SourceRef) => source.episodeId
-    ? index.has(source.episodeId) && (index.get(source.episodeId) ?? Infinity) <= cutoff
-    : true;
-  const records = data.points.filter(point => {
-    if (!beforeCutoff(point.source)) return false;
-    if (scope.episodeId && point.source.episodeId !== scope.episodeId) return false;
+  const structure = storyStructure(project, scope.documentId);
+  const units = structure.units;
+  const cutoffUnitIdx = scope.asOfId ? units.findIndex(unit => unit.id === scope.asOfId) : units.length - 1;
+  // Also allow scene-level asOfId (e.g. cursor scene inside a long bucketed feature script).
+  const cutoffSceneIdx = scope.asOfId && cutoffUnitIdx < 0
+    ? structure.scenes.findIndex(slot => slot.scene.id === scope.asOfId)
+    : -1;
+
+  const beforeCutoff = (source: SourceRef) => {
+    if (!scope.asOfId) return true;
+    if (cutoffSceneIdx >= 0) {
+      const sIdx = structure.sceneIndexOfSource(source);
+      return sIdx >= 0 && sIdx <= cutoffSceneIdx;
+    }
+    if (cutoffUnitIdx < 0) return true;
+    if (structure.mode === 'episodic') {
+      if (!source.episodeId) return true;
+      const idx = structure.unitIndexOfSource(source);
+      return idx >= 0 && idx <= cutoffUnitIdx;
+    }
+    const idx = structure.unitIndexOfSource(source);
+    return idx >= 0 && idx <= cutoffUnitIdx;
+  };
+
+  const matchesExact = (source: SourceRef) => {
+    if (!scope.episodeId) return true;
+    if (structure.mode === 'episodic') return source.episodeId === scope.episodeId;
+    const unit = structure.unitOfSource(source);
+    return unit?.id === scope.episodeId || source.sceneId === scope.episodeId;
+  };
+
+  const matchesGroup = (source: SourceRef) => {
     if (!scope.season) return true;
-    return episodes.find(episode => episode.id === point.source.episodeId)?.season === scope.season;
-  });
+    const unit = structure.unitOfSource(source);
+    return unit?.groupNumber === scope.season;
+  };
+
+  const records = data.points.filter(point =>
+    beforeCutoff(point.source) && matchesExact(point.source) && matchesGroup(point.source)
+  );
   const scoped = new Set(records.flatMap(record => record.participants));
   const characters = data.characters.filter(character => beforeCutoff(character.source) && (
-    (!scope.season && !scope.episodeId) || scoped.has(character.id)
-    || (scope.episodeId ? character.source.episodeId === scope.episodeId
-      : episodes.find(episode => episode.id === character.source.episodeId)?.season === scope.season)
+    (!scope.season && !scope.episodeId)
+    || scoped.has(character.id)
+    || (scope.episodeId ? matchesExact(character.source) : matchesGroup(character.source))
   ));
   const people = new Set(characters.map(character => character.id));
   const visible = records.filter(point => point.participants.every(id => people.has(id)));
@@ -162,14 +208,16 @@ export function queryStory(project: Project, data: StoryState, scope: StoryScope
 }
 
 export function sortStory(project: Project, points: StoryPoint[], order: 'reveal' | 'story'): StoryPoint[] {
-  const index = new Map(orderedEpisodes(project).map((episode, position) => [episode.id, position]));
+  const structure = storyStructure(project);
   const revisionDocuments = new Map([
     ...project.documents.map(document => [`${document.id}:${document.revisionId}`, document] as const),
     ...project.snapshots.map(({ document }) => [`${document.id}:${document.revisionId}`, document] as const)
   ]);
   const line = (point: StoryPoint) => revisionDocuments.get(`${point.source.documentId}:${point.source.revisionId}`)
     ?.blocks.findIndex(block => block.id === point.source.blockId) ?? -1;
-  const reveal = (point: StoryPoint) => point.source.episodeId ? index.get(point.source.episodeId) ?? -1 : -1;
+  const reveal = (point: StoryPoint) => structure.mode === 'episodic'
+    ? structure.unitIndexOfSource(point.source)
+    : structure.sceneIndexOfSource(point.source);
   return [...points].sort((a, b) => (order === 'story' ? a.storyOrder - b.storyOrder : 0)
     || reveal(a) - reveal(b) || line(a) - line(b) || a.storyOrder - b.storyOrder);
 }

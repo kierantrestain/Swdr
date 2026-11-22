@@ -173,3 +173,180 @@ test('character portraits, arc progression stages, script scanning and spoiler-s
   assert(ep4Context.includes('Elias Crowe'), 'Elias enters AI context once introduced in S1E04');
 });
 
+test('film projects use 3-act sequence bucketing for 91-scene features, film billings, act balance checks and scene-level spoiler safety', async () => {
+  const { isStoryProject, storyStructure } = await import('../src/story/story-profile');
+  const { scanProjectScripts, scriptDiscoveryPreview, storyChecks } = await import('../src/story/series-analysis');
+  const { saveCharacter, saveStoryPoint } = await import('../src/story/series-model');
+  const { aiContext } = await import('../src/ai/context');
+  const { sceneList } = await import('../src/model');
+
+  let film = createProject('The Prediction Engine', 'film');
+  assert.equal(isStoryProject(film), true);
+  const doc = film.documents[0];
+  const blocks = [];
+  for (let i = 1; i <= 91; i += 1) {
+    blocks.push(newBlock('scene', i % 2 === 1 ? `INT. LAB ${i} - DAY` : `EXT. CITY STREET ${i} - NIGHT`));
+    blocks.push(newBlock('action', `Beat ${i} unfolds.`));
+    blocks.push(newBlock('character', 'DR. ARIS'));
+    blocks.push(newBlock('dialogue', `Model run ${i} confirms the anomaly.`));
+    if (i <= 40 || i >= 70) {
+      blocks.push(newBlock('character', 'MAYA'));
+      blocks.push(newBlock('dialogue', `Then we pull the plug on run ${i}.`));
+    }
+    if (i >= 75) {
+      blocks.push(newBlock('character', 'DIRECTOR VANCE'));
+      blocks.push(newBlock('dialogue', `The board authorised phase ${i}.`));
+    }
+  }
+  doc.blocks = blocks;
+
+  const structure = storyStructure(film, doc.id);
+  assert.equal(structure.mode, 'script');
+  assert.equal(structure.terms.workspaceTitle, 'Film Intelligence');
+  assert.equal(structure.terms.canonLabel, 'Film canon');
+  assert.equal(structure.scenes.length, 91);
+  assert.deepEqual(structure.groups.map(g => g.label), ['Act I', 'Act II', 'Act III']);
+  assert.equal(structure.bucketed, true, '91-scene feature should bucket into Sequences rather than 91 columns');
+  assert(structure.units.length >= 9 && structure.units.length <= 18, `expected 9..18 sequences, got ${structure.units.length}`);
+
+  const preview = scriptDiscoveryPreview(film, doc.id);
+  assert.equal(preview.scenes, 91);
+  assert.equal(preview.speakingRoles, 3);
+  assert(preview.sharedPairs >= 2);
+
+  const scan = scanProjectScripts(film, getStory(film).draft, doc.id);
+  assert.equal(scan.newCharacters.length, 3);
+  assert.equal(scan.newCharacters[0].name, 'Dr. Aris');
+  assert.equal(scan.newCharacters[0].suggestedBilling, 'Lead');
+  assert(scan.suggestedLinks.some(link => link.aName === 'Dr. Aris' && link.bName === 'Maya' && link.sharedScenes >= 50));
+
+  // Save Lead (Scene 1) and Act III antagonist (Scene 76) and verify scene-level spoiler safety & Act balance check.
+  const scenes = sceneList(doc);
+  const sc1Block = doc.blocks[scenes[0].index + 2].id;
+  const sc76Block = doc.blocks[scenes[75].index + 4].id;
+  const arisId = newId();
+  const vanceId = newId();
+  film = saveCharacter(film, {
+    id: arisId, name: 'Dr. Aris', aliases: ['ARIS'], role: 'Lead', bio: '', motivation: 'Stop the rogue forecast', conflict: 'Built the model',
+    source: exactSource(film, film.documents[0], sc1Block)
+  });
+  film = saveCharacter(film, {
+    id: vanceId, name: 'Director Vance', aliases: ['VANCE'], role: 'Supporting', bio: '', motivation: 'Keep the engine live', conflict: 'Public oversight',
+    source: exactSource(film, film.documents[0], sc76Block)
+  });
+  // Record 4 events solely in Act I and Act III (leaving Act II empty) to trigger act-balance check.
+  for (const [idx, sIdx] of [0, 3, 75, 85].entries()) {
+    const lineId = film.documents[0].blocks[scenes[sIdx].index + 3].id;
+    film = saveStoryPoint(film, {
+      id: newId(), kind: 'event', title: `Major Beat ${idx + 1}`, detail: '',
+      participants: [arisId], storyOrder: idx + 1,
+      source: exactSource(film, film.documents[0], lineId)
+    });
+  }
+
+  const draft = getStory(film).draft;
+  const earlyView = queryStory(film, draft, { asOfId: scenes[4].id, documentId: doc.id });
+  assert(earlyView.characters.some(c => c.id === arisId));
+  assert(!earlyView.characters.some(c => c.id === vanceId), 'Act III character must stay hidden as of Scene 5');
+
+  const act3Only = queryStory(film, draft, { season: 3, documentId: doc.id });
+  assert(act3Only.characters.some(c => c.id === vanceId));
+
+  const filmChecks = storyChecks(film, draft, storyStructure(film, doc.id).units, doc.id);
+  assert(filmChecks.some(check => check.kind === 'act-balance' && check.title.includes('Act II')), 'should warn when Act II has no recorded major beats');
+
+  const earlyAi = aiContext(film, film.documents[0], { blockId: sc1Block });
+  assert(earlyAi.includes('Film Intelligence — Characters (spoiler-safe as of Act I · Sc 1)'));
+  assert(earlyAi.includes('Dr. Aris'));
+  assert(!earlyAi.includes('Director Vance'), 'Scene 1 AI context must stay spoiler-safe and hide Act III character');
+});
+
+test('stage plays honour explicit Act breaks, flag quick-change turnarounds and identify repertory doubling pairs', async () => {
+  const { storyStructure } = await import('../src/story/story-profile');
+  const { scanProjectScripts, stageDoublingAnalysis, storyChecks } = await import('../src/story/series-analysis');
+  const { saveCharacter, saveStoryPoint } = await import('../src/story/series-model');
+  const { sceneList } = await import('../src/model');
+
+  let play = createProject('The Glass Parlour', 'stage');
+  const doc = play.documents[0];
+  doc.blocks = [
+    newBlock('act', 'ACT I'),
+    newBlock('scene', 'INT. PARLOUR - EVENING'),
+    newBlock('character', 'CLARA'),
+    newBlock('dialogue', 'Light the lamps before the bell.'),
+    newBlock('character', 'PORTER'),
+    newBlock('dialogue', 'The coach is at the gate.'),
+    newBlock('scene', 'EXT. COURTYARD - NIGHT'),
+    newBlock('character', 'CLARA'),
+    newBlock('dialogue', 'Wait in the rain — I heard footsteps.'),
+    newBlock('act', 'INTERMISSION'),
+    newBlock('act', 'ACT II'),
+    newBlock('scene', 'INT. CONSERVATORY - MORNING'),
+    newBlock('character', 'CLARA'),
+    newBlock('dialogue', 'The glass has cracked overnight.'),
+    newBlock('character', 'JUDGE'),
+    newBlock('dialogue', 'We begin the inquiry now.')
+  ];
+
+  const structure = storyStructure(play, doc.id);
+  assert.equal(structure.mode, 'script');
+  assert.equal(structure.explicitActs, true);
+  assert.equal(structure.bucketed, false);
+  assert.equal(structure.terms.workspaceTitle, 'Stage Intelligence');
+  assert.deepEqual(structure.groups.map(g => g.label), ['Act I', 'Act II']);
+  assert.deepEqual(structure.units.map(u => u.code), ['I.1', 'I.2', 'II.1']);
+
+  const scan = scanProjectScripts(play, getStory(play).draft, doc.id);
+  assert.equal(scan.newCharacters[0].name, 'Clara');
+  assert.equal(scan.newCharacters[0].suggestedBilling, 'Principal');
+
+  const scenes = sceneList(doc);
+  const claraId = newId();
+  const porterId = newId();
+  const judgeId = newId();
+  const blockIn = (sceneIdx: number, speaker: string) => {
+    const start = scenes[sceneIdx].index;
+    const end = scenes[sceneIdx + 1]?.index ?? doc.blocks.length;
+    return doc.blocks.slice(start, end).find(b => b.kind === 'character' && b.text === speaker)!.id;
+  };
+
+  play = saveCharacter(play, { id: claraId, name: 'Clara', aliases: ['CLARA'], role: 'Principal', bio: '', motivation: 'Hold the estate together', conflict: 'Hiding the will', source: exactSource(play, play.documents[0], blockIn(0, 'CLARA')) });
+  play = saveCharacter(play, { id: porterId, name: 'Porter', aliases: ['PORTER'], role: 'Ensemble', bio: '', motivation: 'Keep watch at the gate', conflict: 'Bribed by the heirs', source: exactSource(play, play.documents[0], blockIn(0, 'PORTER')) });
+  play = saveCharacter(play, { id: judgeId, name: 'Judge', aliases: ['JUDGE'], role: 'Featured', bio: '', motivation: 'Settle the estate', conflict: 'Old debt to Clara', source: exactSource(play, play.documents[0], blockIn(2, 'JUDGE')) });
+
+  // Clara appears in I.1 (Parlour), I.2 (Courtyard -> same-act location jump!), and II.1 (Conservatory -> across intermission).
+  play = saveStoryPoint(play, { id: newId(), kind: 'appearance', title: 'Clara in Parlour', detail: '', participants: [claraId], storyOrder: 1, source: exactSource(play, play.documents[0], blockIn(0, 'CLARA')) });
+  play = saveStoryPoint(play, { id: newId(), kind: 'appearance', title: 'Clara in Courtyard', detail: '', participants: [claraId], storyOrder: 2, source: exactSource(play, play.documents[0], blockIn(1, 'CLARA')) });
+  play = saveStoryPoint(play, { id: newId(), kind: 'appearance', title: 'Clara in Conservatory', detail: '', participants: [claraId], storyOrder: 3, source: exactSource(play, play.documents[0], blockIn(2, 'CLARA')) });
+  play = saveStoryPoint(play, { id: newId(), kind: 'appearance', title: 'Porter in Parlour', detail: '', participants: [porterId], storyOrder: 1, source: exactSource(play, play.documents[0], blockIn(0, 'PORTER')) });
+  play = saveStoryPoint(play, { id: newId(), kind: 'appearance', title: 'Judge in Conservatory', detail: '', participants: [judgeId], storyOrder: 3, source: exactSource(play, play.documents[0], blockIn(2, 'JUDGE')) });
+
+  const draft = getStory(play).draft;
+  const playChecks = storyChecks(play, draft, storyStructure(play, doc.id).units, doc.id);
+  const turnarounds = playChecks.filter(check => check.kind === 'turnaround');
+  assert.equal(turnarounds.length, 1, 'should flag exactly 1 same-act quick-change (I.1 -> I.2) and ignore intermission break (I.2 -> II.1)');
+  assert(turnarounds[0].title.includes('Clara'));
+
+  const doubling = stageDoublingAnalysis(play, draft, doc.id);
+  assert.equal(doubling.loads.find(l => l.character.id === claraId)?.totalScenes, 3);
+  assert(doubling.doublingPairs.some(pair =>
+    (pair.a.id === porterId && pair.b.id === judgeId) || (pair.a.id === judgeId && pair.b.id === porterId)
+  ), 'Porter (Act I only) and Judge (Act II only) should be recommended as a clean repertory doubling pair');
+});
+
+test('documentary projects expose Story Intelligence alongside Editorial in both episodic and single-film modes', async () => {
+  const { sectionsFor, storyLabel } = await import('../src/shell/routes');
+  const { storyStructure } = await import('../src/story/story-profile');
+
+  assert.equal(sectionsFor(factual).story, true);
+  assert.equal(sectionsFor(factual).editorial, true);
+  assert.equal(storyLabel(factual), 'Story Intelligence');
+  assert.equal(storyStructure(factual).mode, 'episodic');
+
+  const featureDoc = createProject('Ice Core', 'documentary');
+  featureDoc.documents[0].blocks = Array.from({ length: 8 }, (_, idx) => newBlock('scene', `EXT. GLACIER ${idx + 1} - DAY`));
+  assert.equal(storyStructure(featureDoc).mode, 'script');
+  assert.equal(storyStructure(featureDoc).groups.length, 3);
+});
+
+

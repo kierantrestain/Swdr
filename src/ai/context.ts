@@ -4,7 +4,8 @@
  */
 import type { Block, DocumentModel, Project } from '../model';
 import { getStory, knowledgeStates, queryStory, relationshipStates, sortStory } from '../story/series-model';
-import { episodeCode, orderedEpisodes } from '../story/source';
+import { episodeCode, exactSource } from '../story/source';
+import { isStoryProject, storyStructure } from '../story/story-profile';
 import { scriptReport } from '../writing/script-insights';
 
 const LIMIT = 50_000;
@@ -40,38 +41,52 @@ export function aiContext(project: Project, document: DocumentModel | undefined,
   if (pitch?.comps) parts.push(`Comparable titles: ${pitch.comps}`);
   const episode = document?.episodeId && project.episodes.find(item => item.id === document.episodeId);
   if (episode) parts.push(`Current episode: S${episode.season}E${episode.number} "${episode.title}"${episode.synopsis ? ` — ${episode.synopsis}` : ''}`);
-  if (project.kind === 'series') {
+  if (isStoryProject(project)) {
     const store = getStory(project);
     const activeData = store.canon.at(-1)?.data ?? store.draft;
-    const scoped = queryStory(project, activeData, { asOfId: document?.episodeId });
-    const allEpisodes = orderedEpisodes(project);
-    const epTag = (id?: string) => {
-      const ep = allEpisodes.find(item => item.id === id);
-      return ep ? episodeCode(ep) : '';
+    const structure = storyStructure(project, document?.id);
+    const activeSceneId = structure.mode === 'script' && document && options.blockId
+      ? exactSource(project, document, options.blockId).sceneId
+      : undefined;
+    const activeSlot = activeSceneId
+      ? structure.scenes.find(slot => slot.scene.id === activeSceneId)
+      : undefined;
+    const asOfId = structure.mode === 'episodic' ? document?.episodeId : activeSlot?.scene.id;
+    const asOfLabel = structure.mode === 'episodic'
+      ? (episode ? ` as of ${episodeCode(episode)}` : '')
+      : (activeSlot ? ` as of ${activeSlot.actLabel} · Sc ${activeSlot.scene.number}` : '');
+    const scoped = queryStory(project, activeData, { asOfId, documentId: document?.id });
+    const title = structure.terms.workspaceTitle;
+    const tagOf = (source: Parameters<typeof structure.unitCodeOfSource>[0]) => {
+      const code = structure.unitCodeOfSource(source);
+      return code === 'Script' ? '' : code;
     };
     if (scoped.characters.length) {
-      parts.push(`Series Intelligence — Characters (spoiler-safe${episode ? ` as of ${episodeCode(episode)}` : ''}):\n${scoped.characters.slice(0, 12).map(person =>
+      parts.push(`${title} — Characters (spoiler-safe${asOfLabel}):\n${scoped.characters.slice(0, 12).map(person =>
         `- ${person.name}${person.role ? ` (${person.role})` : ''}${person.motivation ? ` — Motivation: ${person.motivation}` : ''}${person.conflict ? ` | Conflict: ${person.conflict}` : ''}`
       ).join('\n')}`);
     }
     const rels = relationshipStates(project, scoped.points);
     if (rels.length) {
       const nameOf = (id: string) => scoped.characters.find(person => person.id === id)?.name ?? 'Character';
-      parts.push(`Series Intelligence — Current relationships:\n${rels.slice(0, 16).map(edge =>
-        `- ${edge.participants.map(nameOf).join(' & ')}: ${edge.relationship} (${edge.title}${epTag(edge.source.episodeId) ? `, ${epTag(edge.source.episodeId)}` : ''})`
-      ).join('\n')}`);
+      parts.push(`${title} — Current relationships:\n${rels.slice(0, 16).map(edge => {
+        const tag = tagOf(edge.source);
+        return `- ${edge.participants.map(nameOf).join(' & ')}: ${edge.relationship} (${edge.title}${tag ? `, ${tag}` : ''})`;
+      }).join('\n')}`);
     }
     const openThreads = knowledgeStates(project, scoped.points).filter(item => item.knowledge === 'Unresolved' || item.knowledge === 'Believes');
     if (openThreads.length) {
-      parts.push(`Series Intelligence — Open story questions:\n${openThreads.slice(0, 8).map(item =>
-        `- [${item.knowledge}] ${item.title}${epTag(item.source.episodeId) ? ` (${epTag(item.source.episodeId)})` : ''}`
-      ).join('\n')}`);
+      parts.push(`${title} — Open story questions:\n${openThreads.slice(0, 8).map(item => {
+        const tag = tagOf(item.source);
+        return `- [${item.knowledge}] ${item.title}${tag ? ` (${tag})` : ''}`;
+      }).join('\n')}`);
     }
     const recentEvents = sortStory(project, scoped.points.filter(point => point.kind === 'event'), 'reveal').slice(-8);
     if (recentEvents.length) {
-      parts.push(`Series Intelligence — Major events so far:\n${recentEvents.map(item =>
-        `- ${epTag(item.source.episodeId) ? `${epTag(item.source.episodeId)}: ` : ''}${item.title}${item.detail ? ` — ${item.detail}` : ''}`
-      ).join('\n')}`);
+      parts.push(`${title} — Major events so far:\n${recentEvents.map(item => {
+        const tag = tagOf(item.source);
+        return `- ${tag ? `${tag}: ` : ''}${item.title}${item.detail ? ` — ${item.detail}` : ''}`;
+      }).join('\n')}`);
     }
   }
   if (document && document.kind !== 'av' && document.blocks.length) {

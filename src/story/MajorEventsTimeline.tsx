@@ -13,24 +13,25 @@ import { ArrowRight, CalendarClock } from 'lucide-react';
 import { useState } from 'react';
 import type { Project, WorkspaceViewProps } from '../model';
 import type { Character, StoryPoint } from './series-model';
-import { episodeCode, orderedEpisodes } from './source';
+import type { StoryStructure } from './story-profile';
 import { Glyph, Pane, SourceButton } from './StoryControls';
 import { CanonBadge, CharacterAvatar } from './StoryParts';
-import type { CanonLookup, TokenColor } from './StoryParts';
+import type { CanonLookup } from './StoryParts';
 
-const BEAT_TONES: Array<{ dot: string; token: TokenColor }> = [
-  { dot: 'var(--color-accent)', token: 'blue' },
-  { dot: 'var(--color-success)', token: 'green' },
-  { dot: 'var(--color-warning)', token: 'orange' },
-  { dot: 'var(--color-error)', token: 'red' }
+const DOT_PALETTE = [
+  { color: 'var(--color-accent)', token: 'blue' as const },
+  { color: 'var(--color-success)', token: 'green' as const },
+  { color: 'var(--color-warning)', token: 'yellow' as const },
+  { color: 'var(--color-error)', token: 'red' as const }
 ];
 
 /**
- * Connected series timeline beneath the Relationship Web: lets writers scan major story beats
- * in reveal order or story time, filter by character, and jump straight to the cited script line.
+ * Connected horizontal timeline strip sitting beneath the Relationship Web:
+ * lets writers filter major story events/beats by character and jump straight to the cited script line.
  */
 export function MajorEventsTimeline({
   project,
+  structure,
   events,
   characters,
   order,
@@ -41,6 +42,7 @@ export function MajorEventsTimeline({
   onOpenLedger
 }: {
   project: Project;
+  structure: StoryStructure;
   events: StoryPoint[];
   characters: Character[];
   order: 'reveal' | 'story';
@@ -51,8 +53,6 @@ export function MajorEventsTimeline({
   onOpenLedger: () => void;
 }) {
   const [filterPersonId, setFilterPersonId] = useState('');
-  const episodes = orderedEpisodes(project);
-  const episodeMap = new Map(episodes.map(item => [item.id, item]));
   const personMap = new Map(characters.map(item => [item.id, item]));
 
   const filtered = filterPersonId
@@ -64,7 +64,7 @@ export function MajorEventsTimeline({
     <HStack gap={3} justify="between" align="center" wrap="wrap">
       <HStack gap={2} align="center">
         <Glyph icon={CalendarClock} color="accent" />
-        <Heading level={2}>Major events — Series timeline</Heading>
+        <Heading level={2}>{structure.terms.timelineTitle}</Heading>
         <Badge variant="neutral" label={String(filtered.length)} />
       </HStack>
       <HStack gap={2} align="center" wrap="wrap">
@@ -83,13 +83,13 @@ export function MajorEventsTimeline({
               size="sm"
               label={person.name.split(' ')[0]}
               isPressed={filterPersonId === person.id}
-              onPressedChange={() => setFilterPersonId(filterPersonId === person.id ? '' : person.id)}
+              onPressedChange={pressed => setFilterPersonId(pressed ? person.id : '')}
             >
               {person.name.split(' ')[0]}
             </ToggleButton>
           ))}
         </HStack>
-        <SegmentedControl label="Event order" size="sm" value={order} onChange={value => onOrderChange(value as 'reveal' | 'story')}>
+        <SegmentedControl label="Timeline order" size="sm" value={order} onChange={value => onOrderChange(value as 'reveal' | 'story')}>
           <SegmentedControlItem value="reveal" label="Reveal order" />
           <SegmentedControlItem value="story" label="Story time" />
         </SegmentedControl>
@@ -97,64 +97,60 @@ export function MajorEventsTimeline({
     </HStack>
 
     {visible.length > 0 ? <VStack gap={3}>
+      {/* Connected horizontal timeline rail */}
       {visible.length > 1 && <svg
-        viewBox={`0 0 ${visible.length * 120} 24`}
+        viewBox={`0 0 ${visible.length * 100} 20`}
         preserveAspectRatio="none"
         aria-hidden="true"
-        style={{ width: '100%', height: '24px', display: 'block' }}
+        style={{ width: '100%', height: '20px', display: 'block' }}
       >
         <line
-          x1="60"
-          y1="12"
-          x2={visible.length * 120 - 60}
-          y2="12"
+          x1="50"
+          y1="10"
+          x2={visible.length * 100 - 50}
+          y2="10"
           stroke="var(--color-border-emphasized)"
           strokeWidth="2"
           vectorEffect="non-scaling-stroke"
         />
-        {visible.map((point, index) => {
-          const isFlashback = flashbackFlags.has(point.id);
-          const color = isFlashback ? 'var(--color-warning)' : BEAT_TONES[index % BEAT_TONES.length].dot;
+        {visible.map((point, idx) => {
+          const swatch = DOT_PALETTE[idx % DOT_PALETTE.length];
           return <circle
             key={point.id}
-            cx={index * 120 + 60}
-            cy="12"
-            r="6"
-            fill={color}
+            cx={idx * 100 + 50}
+            cy="10"
+            r="5.5"
+            fill={swatch.color}
             stroke="var(--color-background-surface)"
             strokeWidth="2.5"
-            vectorEffect="non-scaling-stroke"
           />;
         })}
       </svg>}
 
-      <Grid columns={{ minWidth: 215, repeat: 'fit' }} gap={3}>
-        {visible.map((point, index) => {
-          const episode = point.source.episodeId ? episodeMap.get(point.source.episodeId) : undefined;
-          const isFlashback = flashbackFlags.has(point.id);
-          const tone = isFlashback ? { dot: 'var(--color-warning)', token: 'yellow' as TokenColor } : BEAT_TONES[index % BEAT_TONES.length];
+      <Grid columns={{ minWidth: 210, repeat: 'fit' }} gap={3}>
+        {visible.map((point, idx) => {
+          const swatch = DOT_PALETTE[idx % DOT_PALETTE.length];
+          const unitLabel = structure.unitCodeOfSource(point.source);
           const participants = point.participants
             .map(id => personMap.get(id))
             .filter((item): item is Character => Boolean(item));
-          return <Card role="article" key={point.id} variant="muted" padding={3}>
-            <VStack gap={2} minHeight="100%" justify="between">
-              <VStack gap={1.5} hAlign="start">
-                <HStack gap={1.5} align="center" wrap="wrap">
-                  <Token size="sm" color={tone.token} label={episode ? episodeCode(episode) : 'Script'} />
-                  {isFlashback && <Token size="sm" color="yellow" label="Revealed out of order" />}
-                  <CanonBadge id={point.id} states={states} />
-                </HStack>
-                <Heading level={4}>{point.title}</Heading>
-                {point.detail && <Text type="supporting" color="secondary" maxLines={2}>{point.detail}</Text>}
-              </VStack>
-
-              <VStack gap={1.5} hAlign="start">
+          const isFlashback = flashbackFlags.has(point.id);
+          return <Card key={point.id} variant="muted" padding={3} role="article">
+            <VStack gap={2} hAlign="start" style={{ height: '100%' }}>
+              <HStack gap={1.5} align="center" wrap="wrap">
+                <Token size="sm" color={swatch.token} label={unitLabel} />
+                {isFlashback && <Token size="sm" color="yellow" label="Revealed out of order" />}
+                <CanonBadge id={point.id} states={states} />
+              </HStack>
+              <Text weight="semibold" size="sm">{point.title}</Text>
+              {point.detail && <Text type="supporting" color="secondary" size="xsm" maxLines={2}>{point.detail}</Text>}
+              <VStack gap={1.5} hAlign="start" style={{ marginTop: 'auto', paddingTop: 'var(--spacing-1)' }}>
                 {participants.length > 0 && <HStack gap={1} align="center">
                   {participants.slice(0, 3).map(person => (
                     <CharacterAvatar key={person.id} project={project} character={person} size={24} decorative />
                   ))}
-                  <Text type="supporting" color="secondary" size="xsm">
-                    {participants.map(person => person.name.split(' ')[0]).join(', ')}
+                  <Text type="supporting" color="secondary" size="xsm" maxLines={1}>
+                    {participants.map(p => p.name.split(' ')[0]).join(', ')}
                   </Text>
                 </HStack>}
                 <SourceButton project={project} source={point.source} onOpen={onOpen} />
@@ -173,6 +169,10 @@ export function MajorEventsTimeline({
           onClick={onOpenLedger}
         />
       </HStack>}
-    </VStack> : <Text type="supporting" color="secondary">No events in this view.</Text>}
+    </VStack> : (
+      <Text type="supporting" color="secondary">
+        {filterPersonId ? 'No major events involve this character in the visible scope.' : 'Record major story beats or events to populate the timeline.'}
+      </Text>
+    )}
   </Pane>;
 }

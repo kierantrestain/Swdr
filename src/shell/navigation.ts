@@ -2,7 +2,7 @@ import { BookOpen, CalendarRange, Camera, ClipboardList, Clapperboard, FileStack
 import type { ComponentType, SVGProps } from 'react';
 import type { DocumentModel, Project } from '../model';
 import { getProductionPlan, scheduleConflicts } from '../production/model';
-import { PRODUCTION_TABS, scriptView, sectionsFor } from './routes';
+import { PRODUCTION_TABS, scriptView, sectionsFor, storyLabel } from './routes';
 import type { Destination, Route } from './routes';
 
 export type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
@@ -37,7 +37,7 @@ export function projectNavigation(project: Project, document: DocumentModel | un
   ];
   const development: NavEntry[] = [
     ...(sections.creator ? [{ id: 'creator', label: 'Creator studio', key: 'y', icon: icon(Video), route: { ...base, view: 'creator' as Destination }, count: Array.isArray((project.modules.creator as { pieces?: unknown[] } | undefined)?.pieces) ? (project.modules.creator as { pieces: unknown[] }).pieces.length || undefined : undefined }] : []),
-    ...(sections.series ? [{ id: 'story', label: 'Series Intelligence', key: 'i', icon: icon(BookOpen), route: { ...base, view: 'story' as Destination } }] : []),
+    ...(sections.story ? [{ id: 'story', label: storyLabel(project), key: 'i', icon: icon(BookOpen), route: { ...base, view: 'story' as Destination } }] : []),
     ...(sections.editorial ? [{ id: 'editorial', label: project.kind === 'commercial' ? 'Brief & editorial' : 'Editorial', key: 'e', icon: icon(Mic), route: { ...base, view: 'editorial' as Destination } }] : [])
   ];
   const productionIcons: Record<string, IconComponent> = {
@@ -72,16 +72,17 @@ export function isCurrent(entry: NavEntry, route: Route): boolean {
   return entry.route.tab === current;
 }
 
-const SERIES_TABS = ['Relationship web', 'Story map', 'Event ledger', 'Characters', 'Scene matrix', 'Arcs and continuity'];
+const STORY_TABS = ['Relationship web', 'Story map', 'Event ledger', 'Characters', 'Scene matrix', 'Arcs and continuity'];
 const EDITORIAL_TABS = ['Segments', 'Sources', 'Claims', 'Host guide', 'Producer rundown', 'Graphics', 'Issues', 'Branded brief'];
 const tabSlug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
-/** Workspace tabs inside Series Intelligence and Editorial, for the command palette. */
+/** Workspace tabs inside Story/Series Intelligence and Editorial, for the command palette. */
 export function workspaceTabs(project: Project, document: DocumentModel | undefined): NavEntry[] {
   const base = { projectId: project.id, documentId: document?.id };
   const sections = sectionsFor(project);
+  const title = storyLabel(project);
   return [
-    ...(sections.series ? SERIES_TABS.map(label => ({ id: `story-${tabSlug(label)}`, label: `Series Intelligence · ${label}`, icon: icon(BookOpen),
+    ...(sections.story ? STORY_TABS.map(label => ({ id: `story-${tabSlug(label)}`, label: `${title} · ${label}`, icon: icon(BookOpen),
       route: { ...base, view: 'story' as Destination, tab: tabSlug(label) } })) : []),
     ...(sections.editorial ? EDITORIAL_TABS.map(label => ({ id: `editorial-${tabSlug(label)}`, label: `Editorial · ${label}`, icon: icon(Mic),
       route: { ...base, view: 'editorial' as Destination, tab: tabSlug(label) } })) : [])

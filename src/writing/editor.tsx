@@ -18,6 +18,7 @@ import type { Block, BlockKind, DocumentModel, ScriptComment, SourceRef, Workspa
 import { geometryFor, paginateDocument } from './layout';
 import { pairDialogue } from './keyboard';
 import { StoryDrawer } from './StoryDrawer';
+import { isStoryProject, storyWorkspaceTitle } from '../story/story-profile';
 import { WritingContext } from './writing-context';
 import { useScriptPrint } from './print';
 import { blocksToDoc, docToBlocks } from './pm/convert';
@@ -644,8 +645,8 @@ export function WritingView(props: WritingProps) {
         <IconButton label="Find and replace" tooltip="Find and replace (Ctrl+F)" icon={<Search size={16} />} variant="ghost" size="sm"
           onClick={() => { setFinder(previous => ({ ...previous, open: !previous.open })); requestAnimationFrame(() => globalThis.document.querySelector<HTMLInputElement>('#swdr-find-input')?.focus()); }} />
         <Button label="Scenes" variant={drawer === 'scenes' ? 'secondary' : 'ghost'} size="sm" icon={<List size={16} />} onClick={() => setDrawer(previous => previous === 'scenes' ? null : 'scenes')} />
-        {props.project.kind === 'series' && (
-          <IconButton label="Story bible" tooltip="Series Intelligence (characters & open questions)" variant={drawer === 'story' ? 'secondary' : 'ghost'} size="sm" icon={<BookOpen size={16} />}
+        {isStoryProject(props.project) && (
+          <IconButton label="Story bible" tooltip={`${storyWorkspaceTitle(props.project.kind)} (characters & open questions)`} variant={drawer === 'story' ? 'secondary' : 'ghost'} size="sm" icon={<BookOpen size={16} />}
             onClick={() => setDrawer(previous => previous === 'story' ? null : 'story')} />
         )}
         <IconButton label="Notes" tooltip="Draft notes, title page and revisions" variant={drawer === 'notes' ? 'secondary' : 'ghost'} size="sm" icon={<NotebookPen size={16} />} onClick={() => { setNotesSection(undefined); setDrawer(previous => previous === 'notes' ? null : 'notes'); }} />
@@ -729,10 +730,11 @@ export function WritingView(props: WritingProps) {
           </div>
         </li>)}</ol>
       </aside>}
-      {!focused && drawer === 'story' && props.project.kind === 'series' && (
+      {!focused && drawer === 'story' && isStoryProject(props.project) && (
         <StoryDrawer
           project={props.project}
           document={document}
+          activeBlockId={active.id}
           onOpenSource={props.onOpenSource}
           onOpenSeries={props.onOpenSeries}
           onClose={() => setDrawer(null)}

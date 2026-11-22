@@ -33,8 +33,9 @@ import type { ColorMode } from './shell/Shell';
 import { ShortcutsDialog } from './shell/ShortcutsDialog';
 import { useGlobalShortcuts } from './shell/shortcuts';
 import { projectNavigation } from './shell/navigation';
-import { documentForEpisode, encodeRoute, orderedEpisodes, parentRoute, parseRoute, scriptView } from './shell/routes';
+import { documentForEpisode, encodeRoute, orderedEpisodes, parentRoute, parseRoute, scriptView, storyLabel } from './shell/routes';
 import type { Destination, Route } from './shell/routes';
+import { isStoryProject } from './story/story-profile';
 import './shell/shell.css';
 import './shell/system.css';
 
@@ -335,7 +336,7 @@ export function App() {
   else if (route.view === 'write' && shared && hasRequestedRevision) page = <div className="script-stage" id="main-content">
     <WritingView key={shared.document.id} {...shared} saveLabel={deviceLabels[status]} target={target} onFocusChange={setFocus}
       onOpenOutline={() => openProject(shared.project, 'outline', shared.document)}
-      onOpenSeries={shared.project.kind === 'series' ? (characterId?: string) => go({ view: 'story', projectId: shared.project.id, documentId: shared.document.id, character: characterId }) : undefined}
+      onOpenSeries={isStoryProject(shared.project) ? (characterId?: string) => go({ view: 'story', projectId: shared.project.id, documentId: shared.document.id, character: characterId }) : undefined}
       toolbarEnd={<><AiPartner {...shared} mode="continue" /><ScriptTools {...shared} /><ExportActions {...shared} /></>} />
   </div>;
   else if (route.view === 'outline' && shared) page = <OutlineView key={shared.project.id} {...shared} onSelectDocument={selectDocument} toolbarEnd={<AiPartner {...shared} mode="outline" />} />;
@@ -390,10 +391,10 @@ function TeamDocument({ view }: { view: TeamRenderProps }) {
   return <>
     <nav className="team-workspaces-nav" aria-label="Project workspaces">
       {teamDestinations.filter((destination, index) => (fullScope || index < 2) && (destination.id !== 'creator' || ['creator', 'commercial'].includes(view.project.kind))
-        && (destination.id !== 'production' || !['creator', 'commercial'].includes(view.project.kind)) && (destination.id !== 'story' || view.project.kind === 'series')
+        && (destination.id !== 'production' || !['creator', 'commercial'].includes(view.project.kind)) && (destination.id !== 'story' || isStoryProject(view.project))
         && (destination.id !== 'editorial' || ['documentary', 'commercial'].includes(view.project.kind))).map(destination =>
         <button key={destination.id} type="button" aria-pressed={destination.id === currentMode} className="selectable"
-          onClick={() => setMode(destination.id)}>{destination.label}</button>)}
+          onClick={() => setMode(destination.id)}>{destination.id === 'story' ? storyLabel(view.project) : destination.label}</button>)}
       <PresenceBar peers={peers} documentTitle={id => view.project.documents.find(item => item.id === id)?.title}
         onFollow={peer => {
           const doc = view.project.documents.find(item => item.id === peer.documentId);
@@ -411,7 +412,8 @@ function TeamDocument({ view }: { view: TeamRenderProps }) {
       : currentMode === 'media' ? <MediaLibrary {...props} />
       : view.document.kind === 'av' ? <AVView key={view.document.id} {...props} target={view.selectedSource} toolbarEnd={exporter} />
       : <div className="team-script-stage" id="main-content" ref={stage}><WritingView key={view.document.id} {...props}
-        target={view.selectedSource} toolbarEnd={exporter} onOpenOutline={() => setMode('outline')} />
+        target={view.selectedSource} toolbarEnd={exporter} onOpenOutline={() => setMode('outline')}
+        onOpenSeries={fullScope && isStoryProject(view.project) ? () => setMode('story') : undefined} />
         <RemoteCursors peers={peers} documentId={view.document.id} root={stage} /></div>}
   </>;
 }

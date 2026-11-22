@@ -16,12 +16,12 @@ import {
   ArrowRight, Clapperboard, Compass, Download, FileText, Flame, HelpCircle, MessageSquare, Sparkles, Target, Users
 } from 'lucide-react';
 import { useState } from 'react';
-import type { Episode, Project, WorkspaceViewProps } from '../model';
-import { episodeCode, orderedEpisodes } from './source';
+import type { Project, WorkspaceViewProps } from '../model';
 import { cellKey, characterArcStages, characterSummaryStats, findCastMatch, relationshipHistory, storyMap } from './series-analysis';
 import type { ArcStageNode } from './series-analysis';
 import { knowledgeStates, sortStory } from './series-model';
 import type { Character, StoryPoint, StoryState } from './series-model';
+import type { StoryStructure, StoryUnit } from './story-profile';
 import { Glyph, Pane, PaneHeading, SourceButton, Split } from './StoryControls';
 import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, stateTag } from './StoryParts';
 import type { CanonLookup } from './StoryParts';
@@ -149,6 +149,7 @@ function CharacterArcChart({ project, nodes, selectedId, onSelect, onOpen }: {
 
 export function CharacterDossier({
   project,
+  structure,
   person,
   data,
   states,
@@ -158,15 +159,16 @@ export function CharacterDossier({
   onEdit,
   onEditCharacter,
   onSelectPerson,
-  episodes,
+  units,
   canon
 }: {
   project: Project;
+  structure: StoryStructure;
   person: Character;
   data: StoryState;
   states: StoryPoint[];
   active: DossierPane;
-  episodes: Episode[];
+  units: StoryUnit[];
   setActive: (value: DossierPane) => void;
   onOpen: WorkspaceViewProps['onOpenSource'];
   onEdit?: (point: StoryPoint) => void;
@@ -177,12 +179,11 @@ export function CharacterDossier({
   const [selectedArcId, setSelectedArcId] = useState('');
   const points = sortStory(project, data.points.filter(point => point.participants.includes(person.id)), 'reveal');
   const history = [...relationshipHistory(project, data.points).entries()].filter(([key]) => key.split('/').includes(person.id));
-  const cells = storyMap(project, { ...data, points });
-  const stats = characterSummaryStats(project, data, person.id);
+  const cells = storyMap(project, { ...data, points }, structure.document?.id);
+  const stats = characterSummaryStats(project, data, person.id, structure.document?.id);
   const castLink = findCastMatch(project, person);
-  const allEpisodes = orderedEpisodes(project);
-  const introEpisode = allEpisodes.find(item => item.id === person.source.episodeId);
-  const arcNodes = characterArcStages(project, points);
+  const introLabel = structure.unitCodeOfSource(person.source);
+  const arcNodes = characterArcStages(project, points, structure.document?.id);
   const arc = points.filter(point => point.kind === 'arc');
   const interactions = points.filter(point => point.kind === 'interaction').reverse();
   const knowledge = knowledgeStates(project, points);
@@ -193,10 +194,7 @@ export function CharacterDossier({
 
   const nameOf = (id: string) => data.characters.find(item => item.id === id)?.name ?? 'Character';
   const charOf = (id: string) => data.characters.find(item => item.id === id);
-  const codeOf = (point: StoryPoint) => {
-    const episode = allEpisodes.find(item => item.id === point.source.episodeId);
-    return episode ? episodeCode(episode) : 'Script';
-  };
+  const codeOf = (point: StoryPoint) => structure.unitCodeOfSource(point.source);
   const canonStatus = canon?.get(person.id);
 
   const sections: [DossierPane, string, StoryPoint[]][] = [
@@ -229,11 +227,11 @@ export function CharacterDossier({
                 ? <CanonBadge id={person.id} states={canon} />
                 : <Token size="sm" color="blue" label="Approved canon" />}
             </HStack>
-            <Text color="secondary">{person.bio || person.motivation || 'Character profile in the series register.'}</Text>
+            <Text color="secondary">{person.bio || person.motivation || 'Character profile in the story register.'}</Text>
             <HStack gap={4} align="center" wrap="wrap">
               <HStack gap={1} align="center">
                 <Text type="supporting" color="secondary">Introduced</Text>
-                <Token size="sm" color="blue" label={introEpisode ? episodeCode(introEpisode) : 'Script'} />
+                <Token size="sm" color="blue" label={introLabel} />
               </HStack>
               <Text type="supporting" color="secondary">{stats.records} record{stats.records === 1 ? '' : 's'}</Text>
               <Text type="supporting" color="secondary">{stats.relationships} relationship{stats.relationships === 1 ? '' : 's'}</Text>
@@ -294,32 +292,32 @@ export function CharacterDossier({
           <Divider />
 
           <VStack gap={2}>
-            <Heading level={3}>Episode presence</Heading>
+            <Heading level={3}>{structure.terms.presenceTitle}</Heading>
             <Grid
-              columns={Math.min(12, Math.max(4, episodes.length))}
+              columns={Math.min(12, Math.max(4, units.length))}
               gap={1}
               role="list"
-              aria-label={`${person.name} by episode`}
+              aria-label={`${person.name} by ${structure.terms.unitSingular}`}
             >
-              {episodes.map(episode => {
-                const count = cells.get(cellKey(person.id, episode.id))?.length ?? 0;
+              {units.map(unit => {
+                const count = cells.get(cellKey(person.id, unit.id))?.length ?? 0;
                 const level = Math.min(4, count === 0 ? 0 : count === 1 ? 1 : count <= 3 ? 2 : count <= 5 ? 3 : 4);
                 return <Card
-                  key={episode.id}
+                  key={unit.id}
                   role="listitem"
                   padding={0}
-                  aria-label={`${episodeCode(episode)}: ${count} record${count === 1 ? '' : 's'}`}
+                  aria-label={`${unit.code}: ${count} record${count === 1 ? '' : 's'}`}
                   style={{
                     height: '18px',
                     background: HEAT_BG[level],
                     borderRadius: 'var(--radius-inner)',
-                    borderLeft: episode.number === 1 ? '2px solid var(--color-text-primary)' : undefined
+                    borderLeft: unit.isGroupStart ? '2px solid var(--color-text-primary)' : undefined
                   }}
                 />;
               })}
             </Grid>
             <Text type="supporting" color="secondary" size="xsm">
-              Active in {stats.episodes} of {episodes.length} visible episode{episodes.length === 1 ? '' : 's'}
+              Active in {stats.episodes} of {units.length} visible {units.length === 1 ? structure.terms.unitSingular : structure.terms.unitPlural}
             </Text>
           </VStack>
         </Pane>
@@ -329,7 +327,7 @@ export function CharacterDossier({
           {active === 'Overview' && <Pane padding={5}>
             <PaneHeading
               title="Character arc"
-              description={arc.length ? `${arc.length} milestone${arc.length === 1 ? '' : 's'} charted across visible episodes` : 'Record an arc milestone to build this timeline.'}
+              description={arc.length ? `${arc.length} milestone${arc.length === 1 ? '' : 's'} charted across visible ${structure.terms.unitPlural}` : 'Record an arc milestone to build this timeline.'}
               level={2}
             />
             <Grid columns={{ minWidth: 260, repeat: 'fit' }} gap={4} align="start">
@@ -350,7 +348,7 @@ export function CharacterDossier({
                     {idx > 0 && <Divider />}
                     <Item
                       density="compact"
-                      startContent={<EpisodeChip project={project} episodeId={point.source.episodeId} color="purple" />}
+                      startContent={<EpisodeChip project={project} episodeId={point.source.episodeId} source={point.source} color="purple" />}
                       label={<HStack gap={1.5} align="center" wrap="wrap">
                         <Text weight="semibold" size="sm">{point.title}</Text>
                         <CanonBadge id={point.id} states={canon} />

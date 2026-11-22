@@ -14,7 +14,7 @@ import type { TeamAccount } from '../workspace/team-contract';
 import type { DocumentModel, Episode, Project } from '../model';
 import { PROJECT_LABELS } from '../Home';
 import { isCurrent, projectNavigation } from './navigation';
-import { documentForEpisode, encodeRoute, episodeCode, orderedEpisodes, PRODUCTION_TABS, SECTION_LABELS } from './routes';
+import { documentForEpisode, encodeRoute, episodeCode, orderedEpisodes, PRODUCTION_TABS, SECTION_LABELS, storyLabel } from './routes';
 import type { Route } from './routes';
 
 export type ColorMode = 'light' | 'dark';
@@ -60,11 +60,12 @@ export function linkProps(route: Route, navigate: (route: Route) => void) {
   };
 }
 
-function sectionLabel(route: Route): string {
+function sectionLabel(route: Route, project?: Project): string {
   if (route.view === 'production') {
     const tab = PRODUCTION_TABS.find(item => item.slug === (route.tab ?? 'schedule'));
     return tab ? `Production · ${tab.label}` : 'Production';
   }
+  if (route.view === 'story') return storyLabel(project);
   return SECTION_LABELS[route.view];
 }
 
@@ -107,7 +108,7 @@ export function Shell(props: ShellProps) {
     <Breadcrumbs label="You are here" separator={<ChevronRight size={14} aria-hidden="true" />}>
       <BreadcrumbItem {...linkProps({ view: 'home' }, navigate)} isCurrent={false}>Projects</BreadcrumbItem>
       {project && <BreadcrumbItem isCurrent={false} onClick={() => navigate({ view: 'project', projectId: project.id, documentId: document?.id })}>{project.title}</BreadcrumbItem>}
-      {(route.view !== 'project' || !project) && <BreadcrumbItem isCurrent={!showEpisodes && !showDocuments}>{sectionLabel(route)}</BreadcrumbItem>}
+      {(route.view !== 'project' || !project) && <BreadcrumbItem isCurrent={!showEpisodes && !showDocuments}>{sectionLabel(route, project)}</BreadcrumbItem>}
       {showDocuments && project && <BreadcrumbItem isCurrent menu={project.documents.map(item => ({
         id: item.id, label: item.title, endContent: item.id === document?.id ? 'Current' : undefined,
         onClick: () => navigate({ view: route.view === 'write' || route.view === 'av' ? (item.kind === 'av' ? 'av' : 'write') : route.view,

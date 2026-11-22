@@ -6,11 +6,10 @@ import { HStack } from '@astryxdesign/core/HStack';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
 import { useState } from 'react';
-import type { Episode, Project, WorkspaceViewProps } from '../model';
-import { episodeCode } from './source';
-import { episodePositions } from './series-analysis';
+import type { Project, WorkspaceViewProps } from '../model';
 import { sortStory } from './series-model';
 import type { StoryPoint, StoryState } from './series-model';
+import type { StoryStructure, StoryUnit } from './story-profile';
 import { Pane, PaneHeading } from './StoryControls';
 import { CharacterAvatar, PointRows } from './StoryParts';
 import type { CanonLookup } from './StoryParts';
@@ -32,20 +31,24 @@ const LANE_COLORS = [
   'var(--color-icon-purple)'
 ];
 
-export function ArcTimeline({ project, data, episodes, onOpen, onEdit, onDossier, states }: {
+export function ArcTimeline({ project, structure, data, units, onOpen, onEdit, onDossier, states }: {
   project: Project;
+  structure: StoryStructure;
   data: StoryState;
-  episodes: Episode[];
+  units: StoryUnit[];
   onOpen: WorkspaceViewProps['onOpenSource'];
   onEdit?: (point: StoryPoint) => void;
   onDossier?: (characterId: string) => void;
   states: CanonLookup;
 }) {
   const [selected, setSelected] = useState<{ title: string; records: StoryPoint[] }>();
-  const positions = episodePositions(project);
-  const column = new Map(episodes.map((episode, index) => [positions.get(episode.id) ?? -1, index]));
-  const columnOf = (point: StoryPoint) => column.get(positions.get(point.source.episodeId ?? '') ?? -2);
-  const count = episodes.length;
+  const columnByUnitId = new Map(units.map((unit, index) => [unit.id, index]));
+  const columnOf = (point: StoryPoint) => {
+    const unit = structure.unitOfSource(point.source);
+    return unit ? columnByUnitId.get(unit.id) : undefined;
+  };
+  const groupShortOf = (num: number) => structure.groups.find(g => g.number === num)?.shortLabel ?? `${structure.terms.groupLabel[0]}${num}`;
+  const count = units.length;
 
   const rows = data.characters.map(person => {
     const own = sortStory(project, data.points.filter(point => point.participants.includes(person.id)), 'reveal');
@@ -88,7 +91,7 @@ export function ArcTimeline({ project, data, episodes, onOpen, onEdit, onDossier
   return <Pane label="Arc timeline" padding={5}>
     <PaneHeading
       title="Arc timeline"
-      description={`Arc milestones and story questions by reveal episode · ${openCount} question${openCount === 1 ? '' : 's'} still open`}
+      description={`Arc milestones and story questions by reveal ${structure.terms.unitSingular} · ${openCount} question${openCount === 1 ? '' : 's'} still open`}
       level={2}
       actions={<HStack gap={4} align="center" wrap="wrap">
         <HStack as="span" gap={1.5} align="center">
@@ -107,25 +110,25 @@ export function ArcTimeline({ project, data, episodes, onOpen, onEdit, onDossier
     />
 
     {lanes.length > 0 && count > 0 ? <VStack style={{ overflowX: 'auto' }}>
-      <VStack gap={0} style={{ minWidth: `${Math.max(700, 196 + count * 32)}px` }}>
-        {/* Episode axis */}
+      <VStack gap={0} style={{ minWidth: `${Math.max(700, 196 + count * (structure.bucketed ? 54 : 32))}px` }}>
+        {/* Narrative unit axis */}
         <Grid columns={1} style={{ gridTemplateColumns: '196px minmax(0, 1fr)', alignItems: 'end', paddingBottom: 'var(--spacing-2)' }}>
           <Text type="supporting" color="secondary" size="xsm" weight="semibold">Character</Text>
           <Grid columns={count} gap={0} style={{ gridTemplateColumns: colTemplate }} aria-hidden="true">
-            {episodes.map(episode => (
+            {units.map(unit => (
               <VStack
-                key={episode.id}
+                key={unit.id}
                 gap={0}
                 hAlign="center"
                 style={{
-                  borderLeft: episode.number === 1 ? '2px solid var(--color-border-emphasized)' : undefined,
+                  borderLeft: unit.isGroupStart ? '2px solid var(--color-border-emphasized)' : undefined,
                   paddingTop: 'var(--spacing-0-5)'
                 }}
               >
-                <Text size="xsm" weight="semibold" color={episode.number === 1 ? 'primary' : 'secondary'}>
-                  {episode.number === 1 ? `S${episode.season}` : '\u00a0'}
+                <Text size="xsm" weight="semibold" color={unit.isGroupStart ? 'primary' : 'secondary'}>
+                  {unit.isGroupStart ? groupShortOf(unit.groupNumber) : '\u00a0'}
                 </Text>
-                <Text size="xsm" color="secondary">{episode.number}</Text>
+                <Text size="xsm" color="secondary">{unit.shortAxis}</Text>
               </VStack>
             ))}
           </Grid>
@@ -165,38 +168,43 @@ export function ArcTimeline({ project, data, episodes, onOpen, onEdit, onDossier
               </HStack>
 
               <VStack gap={1.5}>
-                {/* Connected episode presence & arc curve rail */}
-                <svg
-                  viewBox={`0 0 ${count * 40} 18`}
-                  preserveAspectRatio="none"
-                  aria-hidden="true"
-                  style={{ width: '100%', height: '18px', display: 'block' }}
-                >
-                  <line x1="20" y1="9" x2={count * 40 - 20} y2="9" stroke="var(--color-border)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-                  {presentIndices.length > 1 && (
-                    <polyline
-                      fill="none"
-                      stroke={laneStroke}
-                      strokeWidth="2"
-                      opacity="0.55"
-                      vectorEffect="non-scaling-stroke"
-                      points={presentIndices.map(idx => `${idx * 40 + 20},9`).join(' ')}
-                    />
-                  )}
-                  {episodes.map((episode, idx) => {
-                    const isMilestone = milestones.some(point => columnOf(point) === idx);
-                    const isPresent = present.has(idx);
-                    return <circle
-                      key={episode.id}
-                      cx={idx * 40 + 20}
-                      cy={9}
-                      r={isMilestone ? 4.5 : isPresent ? 3.2 : 1.6}
-                      fill={isMilestone ? laneStroke : isPresent ? 'var(--color-accent)' : 'var(--color-border-emphasized)'}
-                      stroke={isMilestone ? 'var(--color-background-surface)' : 'none'}
-                      strokeWidth={isMilestone ? 1.5 : 0}
-                    />;
-                  })}
-                </svg>
+                {/* Connected presence & arc curve rail */}
+                <HStack style={{ position: 'relative', width: '100%', height: '18px' }} aria-hidden="true">
+                  <svg
+                    viewBox={`0 0 ${count * 40} 18`}
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '18px', display: 'block' }}
+                  >
+                    <line x1="20" y1="9" x2={count * 40 - 20} y2="9" stroke="var(--color-border)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                    {presentIndices.length > 1 && (
+                      <polyline
+                        fill="none"
+                        stroke={laneStroke}
+                        strokeWidth="2"
+                        opacity="0.55"
+                        vectorEffect="non-scaling-stroke"
+                        points={presentIndices.map(idx => `${idx * 40 + 20},9`).join(' ')}
+                      />
+                    )}
+                  </svg>
+                  <Grid columns={count} gap={0} style={{ gridTemplateColumns: colTemplate, position: 'relative', width: '100%', height: '18px', alignItems: 'center', justifyItems: 'center' }}>
+                    {units.map((unit, idx) => {
+                      const isMilestone = milestones.some(point => columnOf(point) === idx);
+                      const isPresent = present.has(idx);
+                      return <svg key={unit.id} width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" style={{ display: 'block' }}>
+                        <circle
+                          cx="6"
+                          cy="6"
+                          r={isMilestone ? 4.6 : isPresent ? 3.3 : 1.7}
+                          fill={isMilestone ? laneStroke : isPresent ? 'var(--color-accent)' : 'var(--color-border-emphasized)'}
+                          stroke={isMilestone ? 'var(--color-background-surface)' : 'none'}
+                          strokeWidth={isMilestone ? 1.5 : 0}
+                        />
+                      </svg>;
+                    })}
+                  </Grid>
+                </HStack>
 
                 {/* Story question span bars & milestone pills */}
                 <Grid columns={count} gap={1} style={{ gridTemplateColumns: colTemplate, gridAutoFlow: 'row dense', rowGap: 'var(--spacing-1-5)' }}>
@@ -205,7 +213,7 @@ export function ArcTimeline({ project, data, episodes, onOpen, onEdit, onDossier
                       type="button"
                       key={thread.id}
                       title={thread.title}
-                      aria-label={`${thread.open ? 'Open question' : 'Answered question'}: ${thread.title}, from ${episodeCode(episodes[thread.start])}${thread.open ? '' : ` to ${episodeCode(episodes[thread.end])}`}`}
+                      aria-label={`${thread.open ? 'Open question' : 'Answered question'}: ${thread.title}, from ${units[thread.start].code}${thread.open ? '' : ` to ${units[thread.end].code}`}`}
                       onClick={() => setSelected({ title: thread.title, records: thread.records })}
                       style={{
                         gridColumn: `${thread.start + 1} / ${thread.end + 2}`,
@@ -245,7 +253,7 @@ export function ArcTimeline({ project, data, episodes, onOpen, onEdit, onDossier
                       type="button"
                       key={point.id}
                       title={point.title}
-                      aria-label={`${person.name} arc milestone in ${episodeCode(episodes[start])}: ${point.title}`}
+                      aria-label={`${person.name} arc milestone in ${units[start].code}: ${point.title}`}
                       onClick={() => setSelected({ title: `${person.name} · ${point.title}`, records: [point] })}
                       style={{
                         gridColumn: columns,
@@ -298,9 +306,18 @@ export function ArcTimeline({ project, data, episodes, onOpen, onEdit, onDossier
     {selected && <>
       <Divider />
       <Card variant="muted" padding={4} role="region" aria-label="Selected arc detail" aria-live="polite">
-        <VStack gap={2}>
+        <VStack gap={3}>
           <Heading level={3}>{selected.title}</Heading>
-          <PointRows rows={selected.records} project={project} onOpen={onOpen} onEdit={onEdit} showKind states={states} empty="No records." />
+          <PointRows
+            rows={selected.records}
+            project={project}
+            onOpen={onOpen}
+            onEdit={onEdit}
+            states={states}
+            showKind
+            people={data.characters}
+            empty="No linked records."
+          />
         </VStack>
       </Card>
     </>}
