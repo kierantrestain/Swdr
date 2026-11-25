@@ -623,8 +623,8 @@
 .swdr-popover-suggest li[role=option] { font-family: 'Courier Prime', 'Courier New', monospace; font-size: 13px; }
 .swdr-popover .swdr-popover-on { background: var(--color-background-blue, #e4ecf2); color: var(--color-text-accent, #173a55); }
 .swdr-popover kbd { font: 11px/1.6 system-ui, sans-serif; color: var(--swdr-w-muted); }
-.swdr-popover-head, .swdr-popover-foot { cursor: default !important; padding: 5px 9px 3px !important; font-size: 11px; color: var(--swdr-w-muted); letter-spacing: .02em; }
-.swdr-popover-head { text-transform: uppercase; font-weight: 650; }
+.swdr-popover-head, .swdr-popover-foot { cursor: default !important; padding: 5px 9px 3px !important; font-size: 11px; color: var(--swdr-w-muted); }
+.swdr-popover-head { font-weight: 600; }
 .swdr-popover-foot { border-top: 1px solid var(--color-border, #ece8df); margin-top: 3px; border-radius: 0 !important; }
 
 /* Find and replace bar. */

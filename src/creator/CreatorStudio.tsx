@@ -3,7 +3,7 @@ import { Button } from '@astryxdesign/core/Button';
 import { Tab, TabList } from '@astryxdesign/core/TabList';
 import {
   ArrowDown, ArrowLeft, ArrowUp, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, CircleAlert, Clapperboard, Copy, Download, FileVideo,
-  Kanban, Lightbulb, MonitorPlay, Pause, Play, Plus, Scissors, Smartphone, Sparkles, Trash2, TriangleAlert, X
+  Kanban, Lightbulb, MonitorPlay, Pause, Play, Plus, Scissors, Smartphone, Trash2, TriangleAlert, X
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
@@ -290,7 +290,7 @@ function BeatList({ piece, patch, patchBeat, readOnly, onCut, playback }: {
         <input className="creator-beat-label" aria-label="Beat name" value={item.label} readOnly={readOnly} onChange={event => patchBeat(item.id, { label: event.target.value })} />
         <button type="button" className="creator-time" onClick={() => playback.setTime(item.start)} title="Preview from here">{clock(item.start)}–{clock(item.end)}</button>
         {!readOnly && <span className="creator-beat-tools">
-          {item.kind === 'hook' && <button type="button" aria-pressed={hooks} onClick={() => setHooks(value => !value)}><Sparkles size={14} /> Hook ideas</button>}
+          {item.kind === 'hook' && <button type="button" aria-pressed={hooks} onClick={() => setHooks(value => !value)}><Lightbulb size={14} /> Hook ideas</button>}
           {form === 'long' && item.kind === 'chapter' && <button type="button" onClick={() => onCut(item.id)} aria-label={`Cut a short from ${item.label}`}><Scissors size={14} /> Cut a short</button>}
           <button type="button" aria-label={`Move ${item.label} up`} disabled={index === 0} onClick={() => move(index, -1)}><ArrowUp size={14} /></button>
           <button type="button" aria-label={`Move ${item.label} down`} disabled={index === timed.length - 1} onClick={() => move(index, 1)}><ArrowDown size={14} /></button>

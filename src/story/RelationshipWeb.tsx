@@ -12,11 +12,10 @@ import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/Segme
 import { StatusDot } from '@astryxdesign/core/StatusDot';
 import { Text } from '@astryxdesign/core/Text';
 import { ToggleButton } from '@astryxdesign/core/ToggleButton';
-import { Token } from '@astryxdesign/core/Token';
 import { useMediaQuery } from '@astryxdesign/core/hooks';
 import { VStack } from '@astryxdesign/core/VStack';
 import {
-  ArrowLeftRight, ArrowRight, BookOpen, Clapperboard, Compass, Flame, Flag, MessageSquare, Plus, Sparkles, Target, Users, X
+  ArrowLeftRight, ArrowRight, BookOpen, Clapperboard, Compass, Flame, Flag, MessageSquare, Plus, Target, Users, X
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Project, WorkspaceViewProps } from '../model';
@@ -1106,7 +1105,7 @@ export function RelationshipWeb({
             {personStats && personStats.openQuestions > 0 && <>
               <Divider />
               <HStack gap={2} align="center">
-                <Glyph icon={Sparkles} size="xsm" color="warning" />
+                <Glyph icon={Flag} size="xsm" color="warning" />
                 <Text type="supporting" color="secondary">{personStats.openQuestions} open story question{personStats.openQuestions === 1 ? '' : 's'} tracked.</Text>
               </HStack>
             </>}
@@ -1139,7 +1138,7 @@ export function RelationshipWeb({
             {person.aliases.length > 0 && <VStack gap={1}>
               <Heading level={4}>Aliases</Heading>
               <HStack gap={1} wrap="wrap">
-                {person.aliases.map(alias => <Token key={alias} size="sm" label={alias} />)}
+                {person.aliases.map(alias => <QuietDotTag key={alias} label={alias} />)}
               </HStack>
             </VStack>}
             {person.notes && <VStack gap={1}>

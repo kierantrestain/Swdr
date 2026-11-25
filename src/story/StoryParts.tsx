@@ -4,7 +4,6 @@ import { Divider } from '@astryxdesign/core/Divider';
 import { HStack } from '@astryxdesign/core/HStack';
 import { Item } from '@astryxdesign/core/Item';
 import { Text } from '@astryxdesign/core/Text';
-import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import type { Project, WorkspaceViewProps } from '../model';
 import { resolveCharacterPhoto } from './series-analysis';
@@ -133,9 +132,8 @@ export function CharacterAvatar({ project, character, size = 40, shape = 'circle
 export function CanonBadge({ id, states }: { id: string; states: CanonLookup }) {
   const state = states?.get(id);
   if (!state || state === 'approved') return null;
-  return <Token
-    size="sm"
-    color={state === 'draft' ? 'orange' : 'blue'}
+  return <QuietDotTag
+    dotColor={state === 'draft' ? 'var(--color-warning)' : 'var(--color-accent)'}
     label={state === 'draft' ? 'Draft · not in canon' : 'Changed since canon'}
   />;
 }
@@ -253,7 +251,7 @@ export function PointRows({ rows, project, onOpen, onEdit, empty, showKind = fal
           label={<VStack gap={1} hAlign="start">
             {(tag || flag || hasCanonBadge) && <HStack gap={1} align="center" wrap="wrap">
               {tag}
-              {flag && <Token size="sm" color="yellow" label={flag} />}
+              {flag && <QuietDotTag dotColor="var(--color-warning)" label={flag} />}
               <CanonBadge id={point.id} states={states} />
             </HStack>}
             <Text weight="semibold">{point.title}</Text>

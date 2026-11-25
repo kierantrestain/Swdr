@@ -7,7 +7,7 @@ import { Tab, TabList } from '@astryxdesign/core/TabList';
 import { Text } from '@astryxdesign/core/Text';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { VStack } from '@astryxdesign/core/VStack';
-import { BookOpen, Download, FileCheck2, GitCompareArrows, Sparkles } from 'lucide-react';
+import { BookOpen, Download, FileCheck2, GitCompareArrows, ScanSearch } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { sourceFor } from '../model';
@@ -238,7 +238,7 @@ function ProductionDocument({ project, document, readOnly, onProjectChange, onOp
           endContent={paneProps.changes.length > 0 ? <Badge variant="purple" label={String(paneProps.changes.length)} aria-hidden="true" /> : undefined} />}
       </HStack>
       {synced && <BreakdownBanner summary={synced} onDismiss={() => setSynced(undefined)} />}
-      {!synced && !readOnly && needsBreakdown && <Banner status="info" icon={<Glyph icon={Sparkles} />} title="Build the breakdown from the script"
+      {!synced && !readOnly && needsBreakdown && <Banner status="info" icon={<Glyph icon={ScanSearch} />} title="Build the breakdown from the script"
         aria-label="Build breakdown from script"
         description={`Read every speaking role, location and scene length from ${snapshot?.label} so the stripboard, cast list and call sheets start filled in.`}
         endContent={<Button label="Build breakdown from script" variant="primary" onClick={() => paneProps.syncScript?.()} />} />}

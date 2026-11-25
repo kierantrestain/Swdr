@@ -3,7 +3,7 @@
 
 .shell-brand { display: inline-flex; align-items: center; gap: var(--spacing-0-5); }
 .shell-wordmark {
-  font-family: var(--font-family-heading); font-size: 22px; letter-spacing: .28em; line-height: 1;
+  font-family: var(--font-family-heading); font-size: 22px; letter-spacing: .14em; line-height: 1;
   color: var(--color-text-primary); padding-inline: var(--spacing-2) var(--spacing-1);
 }
 .shell-crumbs { display: inline-flex; align-items: center; gap: var(--spacing-1); min-width: 0; }

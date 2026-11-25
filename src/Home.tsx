@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } f
 import { Text } from '@astryxdesign/core/Text';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { TextInput } from '@astryxdesign/core/TextInput';
-import { ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Clapperboard, FileText, FolderOpen, Layers, Mic, Plus, Search, ShieldCheck, Sparkles, Theater, Tv, Video } from 'lucide-react';
+import { ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Clapperboard, FileText, FolderOpen, Layers, Mic, Plus, Search, ShieldCheck, Theater, Tv, Video } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { PROJECT_KINDS } from './model';
@@ -266,7 +266,7 @@ export function Home({ projects, recent, open, resume, create, importScript, upl
       </div> : <div className="empty-frame">
         <EmptyState icon={<FolderOpen size={28} aria-hidden="true" />} title={query ? 'No matching projects' : 'Your workspace is ready'}
           description={query ? 'Try another title or format.' : 'Create a project, import a script or explore four demo projects.'}
-          actions={!query && <Button label="Load demo projects" icon={<Sparkles size={15} aria-hidden="true" />} onClick={loadDemo} />} />
+          actions={!query && <Button label="Load demo projects" icon={<BookOpen size={15} aria-hidden="true" />} onClick={loadDemo} />} />
       </div>}
     </section>
     <footer className="home-footer">

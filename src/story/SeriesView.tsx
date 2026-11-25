@@ -18,7 +18,6 @@ import { Table, pixel, proportional } from '@astryxdesign/core/Table';
 import { Text } from '@astryxdesign/core/Text';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { TextInput } from '@astryxdesign/core/TextInput';
-import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import {
   AlertTriangle, ArrowLeftRight, ArrowRight, CalendarClock, CheckCircle2, Clapperboard, Download, GitBranch, LayoutGrid,
@@ -750,7 +749,7 @@ function Chronology({ project, structure, events, flags, activeId, onSelect }: {
       </svg>
       <HStack gap={2} align="center" wrap="wrap">
         <Text type="label" color="secondary">Story time · chronology</Text>
-        {flags.size > 0 && <Token size="sm" color="yellow" label="Dashed amber lines cross back in time" />}
+        {flags.size > 0 && <QuietDotTag dotColor="var(--color-warning)" label="Dashed amber lines cross back in time" />}
       </HStack>
     </VStack>
   </Card>;
@@ -1520,15 +1519,15 @@ export function SeriesView({
                         badges.push({
                           key: summary.pairKey,
                           label: `${summary.a.name.split(' ')[0]}–${summary.b.name.split(' ')[0]}: ${state}`,
-                          color: relationshipStyle[state].tokenColor
+                          color: relationshipStyle[state].stroke
                         });
                       }
                     }
                   }
                   return <VStack gap={1} hAlign="start">
-                    <Token size="sm" color="blue" label={`${row.appearances.length} together`} />
+                    <QuietDotTag dotColor="var(--color-accent)" label={`${row.appearances.length} together`} />
                     {badges.slice(0, 2).map(badge => (
-                      <Token key={badge.key} size="sm" color={badge.color as 'blue'} label={badge.label} />
+                      <QuietDotTag key={badge.key} dotColor={badge.color} label={badge.label} />
                     ))}
                   </VStack>;
                 }
@@ -1642,7 +1641,7 @@ export function SeriesView({
                   <HStack gap={2} align="center" wrap="wrap">
                     <Glyph icon={Theater} size="sm" color="accent" />
                     <Heading level={4}>Doubling candidates</Heading>
-                    <Token size="sm" color="gray" label="Generated · not canon" />
+                    <QuietDotTag label="Generated · not canon" />
                   </HStack>
                   {stageReport.doublingPairs.length > 0 ? (
                     <VStack as="ul" gap={2} style={{ margin: 0, padding: 0, listStyle: 'none' }}>
@@ -1713,7 +1712,7 @@ export function SeriesView({
                             <Glyph icon={AlertTriangle} color={exception ? 'secondary' : 'warning'} />
                             <Heading level={4}>{problem.title}</Heading>
                           </HStack>
-                          {exception && <Badge variant="success" label="Reviewed exception" />}
+                          {exception && <QuietDotTag dotColor="var(--color-success)" label="Reviewed exception" />}
                         </HStack>
                         <VStack gap={1.5}>
                           {problem.records.map(point => (
@@ -1746,7 +1745,7 @@ export function SeriesView({
                 <VStack gap={2}>
                   <HStack gap={2} align="center" wrap="wrap">
                     <Heading level={3}>Suggested checks</Heading>
-                    <Token size="sm" color="gray" label="Generated · not canon" />
+                    <QuietDotTag label="Generated · not canon" />
                   </HStack>
                   <Text type="supporting" color="secondary">
                     Prompts computed from the records in this view. They never change a record or approved canon.

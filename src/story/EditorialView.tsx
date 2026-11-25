@@ -15,7 +15,6 @@ import { Tab, TabList } from '@astryxdesign/core/TabList';
 import { Table, pixel, proportional } from '@astryxdesign/core/Table';
 import { Text } from '@astryxdesign/core/Text';
 import { ToggleButton } from '@astryxdesign/core/ToggleButton';
-import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import { useMediaQuery } from '@astryxdesign/core/hooks';
 import { ArrowDown, ArrowUp, ClipboardCheck, Download, Expand, Plus, Trash2 } from 'lucide-react';
@@ -32,6 +31,7 @@ import {
 import type { Claim, EditorialIssue, Evidence, Output, Segment, SourceVersion, VisualCue } from './editorial-model';
 import { ClaimBoard } from './ClaimBoard';
 import { Choice, Empty, FormError, Glyph, Pane, PaneHeading, SourceButton, Split } from './StoryControls';
+import { QuietDotTag } from './StoryParts';
 import { downloadText, episodeCode, fileStem, orderedEpisodes, upsert } from './source';
 
 const PANES = ['Segments', 'Sources', 'Claims', 'Host guide', 'Producer rundown', 'Graphics', 'Issues', 'Branded brief'] as const;
@@ -44,6 +44,11 @@ type FormState = { kind: 'segment'; segment?: Segment }
 
 const OUTPUT_KEYS = Object.keys(OUTPUT_LABELS) as Output[];
 const paneSlug = (pane: PaneName) => pane.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+const statusDot = (status: string) =>
+  status === 'Verified' || status === 'Approved' ? 'var(--color-success)'
+    : status === 'Contested' ? 'var(--color-error)'
+      : status === 'In review' || status === 'Unverified' || status === 'Needs check' ? 'var(--color-warning)'
+        : 'var(--color-text-secondary)';
 
 function Bullets({ title, entries }: { title: string; entries: string[] }) {
   if (!entries.length) return null;
@@ -72,7 +77,7 @@ function SourceCard({ item, edit }: { item: SourceVersion; edit?: () => void }) 
     <VStack gap={1.5} hAlign="start">
       <HStack gap={2} align="center" wrap="wrap">
         <Text weight="semibold">{item.title}</Text>
-        <Token size="sm" color={item.status === 'Verified' ? 'green' : item.status === 'Contested' ? 'red' : 'yellow'} label={item.status} />
+        <QuietDotTag dotColor={statusDot(item.status)} label={item.status} />
       </HStack>
       {item.locator && <Text type="supporting" color="secondary" size="xsm">{item.locator}</Text>}
       {item.notes && <Text type="supporting" color="secondary">{item.notes}</Text>}
@@ -366,7 +371,7 @@ export function EditorialView({ project, document, onProjectChange, onOpenSource
                   {activeClaims.map(claim => (
                     <VStack as="li" key={claim.id} gap={0} style={{ display: 'list-item' }}>
                       <HStack gap={2} align="center" wrap="wrap">
-                        <Token size="sm" color={claim.version.status === 'Verified' ? 'green' : claim.version.status === 'Contested' ? 'red' : 'yellow'} label={claim.version.status} />
+                        <QuietDotTag dotColor={statusDot(claim.version.status)} label={claim.version.status} />
                         <Text>{claim.version.text}</Text>
                       </HStack>
                     </VStack>
@@ -495,7 +500,7 @@ export function EditorialView({ project, document, onProjectChange, onOpenSource
                   <VStack gap={2} hAlign="start">
                     <Text weight="semibold">{version.text}</Text>
                     <HStack gap={2} align="center" wrap="wrap">
-                      <Token size="sm" color={version.status === 'Verified' ? 'green' : version.status === 'Contested' ? 'red' : 'yellow'} label={version.status} />
+                      <QuietDotTag dotColor={statusDot(version.status)} label={version.status} />
                       <Text type="supporting" color="secondary" size="xsm">
                         {linked.map(source => source.versions.at(-1)?.title).filter(Boolean).join(', ') || 'No linked evidence'}
                       </Text>
@@ -585,12 +590,12 @@ export function EditorialView({ project, document, onProjectChange, onOpenSource
                 </VStack>
               },
               { key: 'segment', header: 'Segment', width: proportional(2), renderCell: ({ segment }) => segment.title },
-              { key: 'type', header: 'Type', width: pixel(110), renderCell: ({ cue }) => <Token size="sm" label={cue.type} /> },
+              { key: 'type', header: 'Type', width: pixel(110), renderCell: ({ cue }) => <QuietDotTag label={cue.type} /> },
               {
                 key: 'status',
                 header: 'Approval',
-                width: pixel(110),
-                renderCell: ({ cue }) => <Badge variant={cue.status === 'Approved' ? 'success' : cue.status === 'In review' ? 'warning' : 'neutral'} label={cue.status} />
+                width: pixel(120),
+                renderCell: ({ cue }) => <QuietDotTag dotColor={statusDot(cue.status)} label={cue.status} />
               },
               {
                 key: 'asset',

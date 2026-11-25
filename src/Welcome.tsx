@@ -1,5 +1,5 @@
 import { Button } from '@astryxdesign/core/Button';
-import { ArrowLeft, ArrowRight, Clapperboard, Crown, FileText, Rocket, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, Clapperboard, FileText, PenLine, Users, X } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -10,11 +10,11 @@ export function welcomeSeen(): boolean {
 }
 
 const STEPS: Array<{ icon: ReactNode; title: string; body: string }> = [
-  { icon: <Rocket size={22} aria-hidden="true" />, title: 'Welcome to SWDR', body: 'Write, plan, shoot and publish in one place — film, TV, stage, documentary, commercials and creator video. It works offline, and your projects stay on this device unless you share them.' },
-  { icon: <FileText size={22} aria-hidden="true" />, title: 'Start a project', body: 'Choose New project for a blank script, Import script to bring in Final Draft, Celtx, Fade In, Fountain, Word or PDF, or Load demo projects to explore a finished series, documentary, commercial and creator channel.' },
-  { icon: <Sparkles size={22} aria-hidden="true" />, title: 'Write without fiddling', body: 'Enter and Tab move between scene headings, action, characters and dialogue for you. Press Ctrl/⌘+K to jump anywhere or search every line, and open Script tools for reports, formatting checks, a voiced table read and writing goals.' },
-  { icon: <Clapperboard size={22} aria-hidden="true" />, title: 'From page to shoot to post', body: 'Each project gets a breakdown, stripboard, call sheets, sides and a budget built from the script, plus Creator studio for Shorts, Reels, TikTok and YouTube. The Overview shows what needs doing next.' },
-  { icon: <Crown size={22} aria-hidden="true" />, title: 'Collaborate and get help', body: 'Sign in to share a project and co-write live with cursors, and to use the AI partner for ideas, structure, drafts and notes. SWDR is free forever on your device; Pro is one payment, for life.' }
+  { icon: <BookOpen size={20} aria-hidden="true" />, title: 'Welcome to SWDR', body: 'Write, plan, shoot and publish in one place — film, TV, stage, documentary, commercials and creator video. It works offline, and your projects stay on this device unless you share them.' },
+  { icon: <FileText size={20} aria-hidden="true" />, title: 'Start a project', body: 'Choose New project for a blank script, Import script to bring in Final Draft, Celtx, Fade In, Fountain, Word or PDF, or Load demo projects to explore a finished series, documentary, commercial and creator channel.' },
+  { icon: <PenLine size={20} aria-hidden="true" />, title: 'Write without fiddling', body: 'Enter and Tab move between scene headings, action, characters and dialogue for you. Press Ctrl/⌘+K to jump anywhere or search every line, and open Script tools for reports, formatting checks, a voiced table read and writing goals.' },
+  { icon: <Clapperboard size={20} aria-hidden="true" />, title: 'From page to shoot to post', body: 'Each project gets a breakdown, stripboard, call sheets, sides and a budget built from the script, plus Creator studio for Shorts, Reels, TikTok and YouTube. The Overview shows what needs doing next.' },
+  { icon: <Users size={20} aria-hidden="true" />, title: 'Collaborate and get help', body: 'Sign in to share a project and co-write live with cursors, and to use the AI partner for ideas, structure, drafts and notes. SWDR is free forever on your device; Pro is one payment, for life.' }
 ];
 
 /** First-run tour: an inline card on Home that never blocks the page. */

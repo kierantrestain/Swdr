@@ -1,7 +1,7 @@
 import { Button } from '@astryxdesign/core/Button';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
 import { Layout, LayoutContent } from '@astryxdesign/core/Layout';
-import { Copy, Database, KeyRound, Link2, LogIn, Send, Sparkles, Square, TextCursorInput } from 'lucide-react';
+import { Copy, Database, KeyRound, Link2, LogIn, MessageSquare, Send, Square, TextCursorInput } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { decodeFountain } from '../interchange/screenplay';
 import type { DocumentModel, Project, WorkspaceViewProps } from '../model';
@@ -58,7 +58,7 @@ export function AiPartner({ project, document, onDocumentChange, onStatus, readO
   const caret = useRef<{ blockId?: string; selection?: string }>({});
   return <>
     <button type="button" className="swdr-w-button ai-trigger" onMouseDown={() => { caret.current = editorCaret(); }} onClick={() => setOpen(true)}>
-      <Sparkles size={15} aria-hidden="true" /> {label}
+      <MessageSquare size={15} aria-hidden="true" /> {label}
     </button>
     {open && <AiDialog project={project} document={document} onDocumentChange={readOnly ? undefined : onDocumentChange} onStatus={onStatus}
       initial={initial} caret={caret.current} extraContext={extraContext} onClose={() => setOpen(false)} />}
@@ -198,7 +198,7 @@ function AiDialog({ project, document, onDocumentChange, onStatus, initial, care
               placeholder={mode === 'ask' ? 'Ask about your story…' : 'Tell it what you need (optional) — “a twist for act two”, “Nora should lie here”, “funnier”…'}
               onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void run(); } }} />
             {busy ? <Button label="Stop" variant="secondary" icon={<Square size={14} aria-hidden="true" />} onClick={() => abort.current?.abort()} />
-              : <Button label="Generate" variant="primary" type="submit" icon={<Sparkles size={14} aria-hidden="true" />} isDisabled={models !== undefined && !models.length} />}
+              : <Button label="Generate" variant="primary" type="submit" icon={<Send size={14} aria-hidden="true" />} isDisabled={models !== undefined && !models.length} />}
           </form>
           {problem && <div className="ai-problem" role="alert">
             <span>{problem.status === 401 ? 'Sign in to use the AI partner. It runs on the hosted workspace so your keys stay on the server.' : problem.message}</span>
