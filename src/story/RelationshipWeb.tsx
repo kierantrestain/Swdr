@@ -28,11 +28,11 @@ import { RELATIONSHIPS, sortStory } from './series-model';
 import type { Character, RelationshipState, StoryPoint } from './series-model';
 import type { StoryStructure } from './story-profile';
 import { Choice, Glyph, Pane, PaneHeading, SourceButton, Split } from './StoryControls';
-import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, relationshipStyle, stateTag } from './StoryParts';
+import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, QuietDotTag, relationshipStyle, stateTag } from './StoryParts';
 import type { CanonLookup, PointPrefill } from './StoryParts';
 
 const WIDTH = 960;
-const HEIGHT = 580;
+const HEIGHT = 600;
 
 interface Placed {
   person: Character;
@@ -78,10 +78,10 @@ function focusRing(people: Character[]): Placed[] {
     : people.length === 3 ? -Math.PI / 2
     : people.length === 6 ? -Math.PI * (2 / 3)
     : -Math.PI * 0.75;
-  return ring(people, 365, 206, offset).map(item => ({
+  return ring(people, 384, 224, offset).map(item => ({
     ...item,
-    x: Math.min(WIDTH - 118, Math.max(118, item.x)),
-    y: Math.min(HEIGHT - 92, Math.max(82, item.y))
+    x: Math.min(WIDTH - 112, Math.max(112, item.x)),
+    y: Math.min(HEIGHT - 86, Math.max(76, item.y))
   }));
 }
 
@@ -436,16 +436,16 @@ export function RelationshipWeb({
 
     {person ? <>
       <Card
-        variant="muted"
+        className="swdr-story-canvas"
         padding={0}
         role="group"
         aria-label={mode === 'focus' ? `Relationship web for ${person.name}` : 'Relationship web for the whole cast'}
         style={{
           position: 'relative',
           aspectRatio: isWideGraph ? `${WIDTH} / ${HEIGHT}` : '4 / 4.2',
-          minHeight: isWideGraph ? '430px' : '370px',
+          minHeight: isWideGraph ? '470px' : '380px',
           overflow: 'hidden',
-          background: 'radial-gradient(circle at 50% 48%, var(--color-background-surface) 0%, var(--color-background-muted) 100%)'
+          border: '1px solid var(--color-border)'
         }}
       >
         <svg
@@ -476,7 +476,7 @@ export function RelationshipWeb({
             const style = edge.state ? relationshipStyle[edge.state] : undefined;
             const stroke = style ? style.stroke : 'var(--color-border-emphasized)';
             const dash = style ? style.dash : '4 5';
-            const strokeWidth = style ? style.width : 1.8;
+            const strokeWidth = style ? Math.min(2.2, style.width) : 1.5;
             const isSelected = pair === edge.pairKey;
             const focused = isActiveEdge(edge);
             const markerUrl = edge.state ? `url(#swdr-arrow-${edge.state.toLowerCase()})` : undefined;
@@ -486,10 +486,10 @@ export function RelationshipWeb({
                 fill="none"
                 stroke={stroke}
                 strokeDasharray={dash}
-                strokeWidth={strokeWidth + (isSelected ? 1.8 : 0)}
+                strokeWidth={strokeWidth + (isSelected ? 1.4 : 0)}
                 strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
-                opacity={focused || isSelected ? 0.92 : 0.22}
+                opacity={focused || isSelected ? 0.88 : 0.14}
                 markerStart={edge.kind === 'mutual' ? markerUrl : undefined}
                 markerEnd={edge.kind === 'mutual' || edge.kind === 'directed' ? markerUrl : undefined}
                 style={{ transition: 'opacity var(--duration-fast) ease', pointerEvents: 'none' }}
@@ -542,21 +542,24 @@ export function RelationshipWeb({
               zIndex: isSelected ? 6 : 5,
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 'var(--spacing-1)',
+              gap: '5px',
               minHeight: 0,
-              padding: isWideGraph ? 'var(--spacing-1) var(--spacing-2)' : '2px 6px',
-              borderRadius: 'var(--radius-full)',
-              border: `1px ${edge.kind === 'interaction' ? 'dashed' : 'solid'} ${isSelected && style ? style.stroke : 'var(--color-border-emphasized)'}`,
+              padding: isWideGraph ? '3px 8px' : '2px 6px',
+              borderRadius: 'var(--radius-sm)',
+              border: `1px ${edge.kind === 'interaction' ? 'dashed' : 'solid'} ${isSelected && style ? style.stroke : 'var(--color-border)'}`,
               background: isSelected && style ? style.tint : 'var(--color-background-surface)',
-              color: style ? style.ink : 'var(--color-text-secondary)',
+              color: isSelected && style ? style.ink : 'var(--color-text-primary)',
               fontSize: 'var(--font-size-xs)',
-              fontWeight: 600,
-              lineHeight: 1.2,
+              fontWeight: 500,
+              fontVariantNumeric: 'tabular-nums',
+              lineHeight: 1.25,
               whiteSpace: 'nowrap',
-              boxShadow: isSelected ? 'var(--shadow-med)' : 'var(--shadow-low)',
               cursor: 'pointer'
             }}
           >
+            {style && <svg width="6" height="6" viewBox="0 0 6 6" aria-hidden="true" style={{ flexShrink: 0 }}>
+              <circle cx="3" cy="3" r="3" fill={style.stroke} />
+            </svg>}
             {pillText}
           </button>;
         })}
@@ -566,7 +569,7 @@ export function RelationshipWeb({
           const isSelected = item.id === person.id;
           const links = linkCount(item.id);
           const avatarSize = isWideGraph
-            ? (isCentre ? 64 : mode === 'focus' ? 60 : 48)
+            ? (isCentre ? 72 : mode === 'focus' ? 60 : 48)
             : (isCentre ? 48 : 36);
           return <button
             type="button"
@@ -589,15 +592,14 @@ export function RelationshipWeb({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: 'var(--spacing-1)',
-              padding: isWideGraph ? 'var(--spacing-1) var(--spacing-1-5)' : 'var(--spacing-0-5)',
+              gap: '6px',
+              padding: '4px',
               minHeight: 0,
               border: 'none',
-              borderRadius: 'var(--radius-container)',
               background: 'transparent',
               textAlign: 'center',
               cursor: 'pointer',
-              maxWidth: isWideGraph ? (mode === 'cast' ? '152px' : '180px') : '116px'
+              maxWidth: isWideGraph ? (mode === 'cast' ? '148px' : '172px') : '114px'
             }}
           >
             <CharacterAvatar
@@ -611,15 +613,13 @@ export function RelationshipWeb({
               gap={0}
               hAlign="center"
               style={{
-                padding: isWideGraph ? 'var(--spacing-0-5) var(--spacing-2)' : '2px 6px',
-                borderRadius: 'var(--radius-element)',
-                background: 'color-mix(in srgb, var(--color-background-surface) 94%, transparent)',
-                boxShadow: 'var(--shadow-low)',
-                border: isSelected ? '1px solid var(--color-accent)' : '1px solid var(--color-border)'
+                padding: '2px 8px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'color-mix(in srgb, var(--color-background-surface) 92%, transparent)'
               }}
             >
               <Text weight="semibold" size={isWideGraph ? (isCentre ? 'base' : 'sm') : 'xsm'} style={{ whiteSpace: 'nowrap' }}>{item.name}</Text>
-              <Text type="supporting" color="secondary" size="xsm" style={{ whiteSpace: 'nowrap' }}>
+              <Text type="supporting" color="secondary" size="xsm" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                 {item.role || 'Character'}{mode === 'cast' ? ` · ${links} link${links === 1 ? '' : 's'}` : ''}
               </Text>
               <CanonBadge id={item.id} states={states} />
@@ -750,40 +750,36 @@ export function RelationshipWeb({
           </HStack>
         </HStack>
 
-        {/* Show BOTH directions clearly */}
-        <HStack gap={1} align="center" wrap="wrap">
+        {/* Show BOTH directions clearly with restrained semantic dots */}
+        <HStack gap={1.5} align="center" wrap="wrap">
           {isMutualOnly && conn.mutual?.relationship && (
-            <Token
-              size="sm"
-              color={relationshipStyle[conn.mutual.relationship].tokenColor}
+            <QuietDotTag
+              dotColor={relationshipStyle[conn.mutual.relationship].stroke}
               label={`↔ ${conn.mutual.relationship}${conn.bond ? ` · ${conn.bond}` : ''}`}
             />
           )}
           {conn.asymmetric && person && <>
             {conn.outgoing?.relationship && (
-              <Token
-                size="sm"
-                color={relationshipStyle[conn.outgoing.relationship].tokenColor}
+              <QuietDotTag
+                dotColor={relationshipStyle[conn.outgoing.relationship].stroke}
                 label={`${shortName(person.name)} → ${shortName(conn.other.name)}: ${conn.outgoing.relationship}`}
               />
             )}
             {conn.incoming?.relationship && (
-              <Token
-                size="sm"
-                color={relationshipStyle[conn.incoming.relationship].tokenColor}
+              <QuietDotTag
+                dotColor={relationshipStyle[conn.incoming.relationship].stroke}
                 label={`${shortName(conn.other.name)} → ${shortName(person.name)}: ${conn.incoming.relationship}`}
               />
             )}
             {conn.mutual?.relationship && !conn.outgoing && !conn.incoming && (
-              <Token
-                size="sm"
-                color={relationshipStyle[conn.mutual.relationship].tokenColor}
+              <QuietDotTag
+                dotColor={relationshipStyle[conn.mutual.relationship].stroke}
                 label={`↔ ${conn.mutual.relationship}`}
               />
             )}
           </>}
           {!conn.primaryState && (
-            <Token size="sm" color="gray" label="Relationship type not set" />
+            <QuietDotTag label="Relationship type not set" />
           )}
         </HStack>
       </VStack>
@@ -801,8 +797,8 @@ export function RelationshipWeb({
             <VStack gap={0.5}>
               <Heading level={2}>{pairPeople.map(item => shortName(item.name)).join(' & ')}</Heading>
               <HStack gap={1.5} align="center" wrap="wrap">
-                {selectedSummary.bond && <Token size="sm" color="purple" label={selectedSummary.bond} />}
-                <Text type="supporting" color="secondary" size="xsm">
+                {selectedSummary.bond && <QuietDotTag label={selectedSummary.bond} />}
+                <Text type="supporting" color="secondary" size="xsm" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {selectedTurns.length > 0
                     ? `${selectedTurns.length} turn${selectedTurns.length === 1 ? '' : 's'}`
                     : 'No formal relationship yet'}
@@ -818,7 +814,7 @@ export function RelationshipWeb({
         <Card variant="muted" padding={3}>
           <VStack gap={2}>
             <HStack gap={1.5} align="center">
-              <Glyph icon={ArrowLeftRight} size="xsm" color="accent" />
+              <Glyph icon={ArrowLeftRight} size="xsm" color="secondary" />
               <Text type="label" color="secondary">Both sides of this relationship</Text>
             </HStack>
             {selectedSummary.asymmetric ? (
@@ -826,7 +822,7 @@ export function RelationshipWeb({
                 <HStack gap={2} align="center" justify="between" wrap="wrap">
                   <Text size="sm" weight="medium">{shortName(selectedSummary.a.name)} → {shortName(selectedSummary.b.name)}</Text>
                   {selectedSummary.aToB?.relationship ? (
-                    <Token size="sm" color={relationshipStyle[selectedSummary.aToB.relationship].tokenColor} label={selectedSummary.aToB.relationship} />
+                    <QuietDotTag dotColor={relationshipStyle[selectedSummary.aToB.relationship].stroke} label={selectedSummary.aToB.relationship} />
                   ) : onCreatePoint ? (
                     <Button size="sm" variant="ghost" label="Set stance" onClick={() => onCreatePoint({
                       kind: 'relationship',
@@ -840,7 +836,7 @@ export function RelationshipWeb({
                 <HStack gap={2} align="center" justify="between" wrap="wrap">
                   <Text size="sm" weight="medium">{shortName(selectedSummary.b.name)} → {shortName(selectedSummary.a.name)}</Text>
                   {selectedSummary.bToA?.relationship ? (
-                    <Token size="sm" color={relationshipStyle[selectedSummary.bToA.relationship].tokenColor} label={selectedSummary.bToA.relationship} />
+                    <QuietDotTag dotColor={relationshipStyle[selectedSummary.bToA.relationship].stroke} label={selectedSummary.bToA.relationship} />
                   ) : onCreatePoint ? (
                     <Button size="sm" variant="ghost" label="Set reverse" onClick={() => onCreatePoint({
                       kind: 'relationship',
@@ -857,7 +853,7 @@ export function RelationshipWeb({
                 <Text size="sm" weight="medium">
                   {shortName(selectedSummary.a.name)} ↔ {shortName(selectedSummary.b.name)} (Mutual)
                 </Text>
-                <Token size="sm" color={relationshipStyle[selectedSummary.mutual.relationship].tokenColor} label={selectedSummary.mutual.relationship} />
+                <QuietDotTag dotColor={relationshipStyle[selectedSummary.mutual.relationship].stroke} label={selectedSummary.mutual.relationship} />
               </HStack>
             ) : (
               <Text type="supporting" color="secondary" size="xsm">
@@ -983,12 +979,9 @@ export function RelationshipWeb({
             <HStack gap={3} align="center" style={{ minWidth: 0 }}>
               <CharacterAvatar project={project} character={person} size={64} shape="rounded" decorative />
               <VStack gap={0.5} style={{ minWidth: 0 }}>
-                <HStack gap={2} align="center" wrap="wrap">
-                  <Heading level={2}>{person.name}</Heading>
-                  {person.status && <Badge variant={person.status === 'Active' ? 'success' : 'neutral'} label={person.status} />}
-                </HStack>
+                <Heading level={2}>{person.name}</Heading>
                 <Text type="supporting" color="secondary">
-                  {[person.role || 'Character', person.billing].filter((value, idx, list) => Boolean(value) && list.indexOf(value) === idx).join(' · ')}
+                  {[person.role || 'Character', person.billing, person.status && person.status !== 'Active' ? person.status : undefined].filter((value, idx, list) => Boolean(value) && list.indexOf(value) === idx).join(' · ')}
                 </Text>
               </VStack>
             </HStack>

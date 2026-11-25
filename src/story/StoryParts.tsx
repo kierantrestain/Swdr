@@ -150,20 +150,61 @@ export interface PointPrefill {
   title?: string;
 }
 
+export const knowledgeDotColor: Record<KnowledgeState, string> = {
+  Confirmed: 'var(--color-success)',
+  Unresolved: 'var(--color-warning)',
+  Believes: 'var(--color-accent)',
+  Refuted: 'var(--color-error)'
+};
+
+/** Quiet editorial tag: hairline border, neutral surface, and a single 6px semantic dot instead of rainbow pastel pills. */
+export function QuietDotTag({ label, dotColor, mono = false }: {
+  label: string;
+  dotColor?: string;
+  mono?: boolean;
+}) {
+  return <HStack
+    as="span"
+    gap={1.5}
+    align="center"
+    style={{
+      display: 'inline-flex',
+      padding: '2px 8px',
+      borderRadius: 'var(--radius-sm)',
+      border: '1px solid var(--color-border)',
+      background: 'var(--color-background-surface)',
+      color: 'var(--color-text-primary)',
+      fontSize: 'var(--font-size-xs)',
+      fontWeight: 500,
+      lineHeight: 1.35,
+      fontFamily: mono ? 'var(--font-family-mono, ui-monospace, SFMono-Regular, monospace)' : undefined,
+      fontVariantNumeric: 'tabular-nums',
+      whiteSpace: 'nowrap'
+    }}
+  >
+    {dotColor && <svg width="6" height="6" viewBox="0 0 6 6" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <circle cx="3" cy="3" r="3" fill={dotColor} />
+    </svg>}
+    {label}
+  </HStack>;
+}
+
 /** Semantic tag for a story point's knowledge state, relationship state (with optional bond/direction), or record kind. */
 export function stateTag(point: StoryPoint, showKind = false) {
-  if (point.knowledge) return <Token size="sm" color={knowledgeTokenColor[point.knowledge]} label={point.knowledge} />;
+  if (point.knowledge) {
+    return <QuietDotTag label={point.knowledge} dotColor={knowledgeDotColor[point.knowledge]} />;
+  }
   if (point.relationship) {
     const dirSymbol = point.direction === 'directed' ? '→ ' : '↔ ';
     const label = point.bond ? `${dirSymbol}${point.relationship} · ${point.bond}` : `${dirSymbol}${point.relationship}`;
-    return <Token size="sm" color={relationshipStyle[point.relationship].tokenColor} label={label} />;
+    return <QuietDotTag label={label} dotColor={relationshipStyle[point.relationship].stroke} />;
   }
-  if (showKind) return <Token size="sm" color={kindTokenColor[point.kind]} label={typeLabels[point.kind]} />;
+  if (showKind) return <QuietDotTag label={typeLabels[point.kind]} />;
   return null;
 }
 
-/** Compact narrative unit chip (e.g. S1E04 for series, Act I · Sc 4 for film, I.2 for stage play). */
-export function EpisodeChip({ project, episodeId, source, color = 'blue' }: {
+/** Compact monospace narrative unit chip (e.g. S1E04 for series, Act I · Sc 4 for film, I.2 for stage play). */
+export function EpisodeChip({ project, episodeId, source }: {
   project: Project;
   episodeId?: string;
   source?: import('../model').SourceRef;
@@ -175,7 +216,7 @@ export function EpisodeChip({ project, episodeId, source, color = 'blue' }: {
     : source
       ? storyStructure(project, source.documentId).unitCodeOfSource(source)
       : 'Script';
-  return <Token size="sm" color={color} label={label} />;
+  return <QuietDotTag label={label} mono />;
 }
 
 /** Dense structured list of story records using Astryx Item rows and Dividers (never card-wrapped lists). */

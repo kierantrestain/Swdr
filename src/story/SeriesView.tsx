@@ -22,7 +22,7 @@ import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import {
   AlertTriangle, ArrowLeftRight, ArrowRight, CalendarClock, CheckCircle2, Clapperboard, Download, GitBranch, LayoutGrid,
-  Network, Plus, Sparkles, Theater, Trash2, Users
+  Network, Plus, ScanSearch, Theater, Trash2, Users
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -54,7 +54,7 @@ import type {
 import { storyBillings, storyStructure } from './story-profile';
 import type { StoryStructure } from './story-profile';
 import { Choice, Empty, FormError, Glyph, initialSource, Pane, SourceButton, SourceFields, Split, StoryDialog } from './StoryControls';
-import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, relationshipStyle, typeLabels } from './StoryParts';
+import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, QuietDotTag, relationshipStyle, typeLabels } from './StoryParts';
 import type { CanonLookup, PointPrefill } from './StoryParts';
 
 const PANES = ['Relationship web', 'Story map', 'Event ledger', 'Characters', 'Scene matrix', 'Arcs and continuity'] as const;
@@ -561,7 +561,7 @@ function ScriptScanDialog({ project, structure, draft, onImport, close }: {
           <Button
             type="submit"
             variant="primary"
-            icon={<Glyph icon={Sparkles} />}
+            icon={<Glyph icon={ScanSearch} />}
             label={`Import ${totalSelected} selection${totalSelected === 1 ? '' : 's'} to draft`}
             isDisabled={totalSelected === 0}
           />
@@ -989,9 +989,14 @@ export function SeriesView({
       ? structure.terms.allGroupsLabel
       : structure.terms.structureBadge;
 
+  const openThreadCount = useMemo(
+    () => checks.filter(check => check.kind === 'open-thread').length,
+    [checks]
+  );
+
   return <VStack gap={5} id="main-content" className="swdr-page" aria-label={`${structure.terms.workspaceTitle} workspace`}>
     <PageHeader
-      eyebrow={`${project.title} — ${activeGroupLabel}`}
+      eyebrow={`${project.title} · ${activeGroupLabel}`}
       title={displayDossier && person ? person.name : structure.terms.workspaceTitle}
       subtitle={displayDossier && person
         ? [person.role, 'Character dossier'].filter(Boolean).join(' · ')
@@ -1030,6 +1035,43 @@ export function SeriesView({
       </HStack>}
     />
 
+    {!displayDossier && data.characters.length > 0 && (
+      <Card padding={0} style={{ background: 'var(--color-background-surface)', border: '1px solid var(--color-border)' }}>
+        <Grid columns={{ minWidth: 140, repeat: 'fit' }} gap={0}>
+          {[
+            { label: 'Cast in scope', value: String(data.characters.length), meta: `${structure.groups.length} ${structure.terms.groupLabel.toLowerCase()}${structure.groups.length === 1 ? '' : 's'}` },
+            { label: 'Relationships', value: String(pairSummaryMap.size), meta: `${edges.length} active state${edges.length === 1 ? '' : 's'}` },
+            { label: structure.mode === 'episodic' ? 'Episodes' : 'Scenes mapped', value: String(revealedUnits.length), meta: `of ${units.length} visible` },
+            { label: conflicts.length ? 'Canon conflicts' : 'Open threads', value: String(conflicts.length || openThreadCount), meta: conflicts.length ? 'Needs review' : openThreadCount ? 'Awaiting payoff' : 'All resolved', highlight: conflicts.length > 0 }
+          ].map((stat, idx) => (
+            <VStack
+              key={stat.label}
+              gap={0.5}
+              style={{
+                padding: 'var(--spacing-3) var(--spacing-4)',
+                borderLeft: idx > 0 ? '1px solid var(--color-border)' : undefined
+              }}
+            >
+              <Text type="supporting" color="secondary" size="xsm">{stat.label}</Text>
+              <HStack gap={2} align="end">
+                <Text
+                  size="lg"
+                  weight="semibold"
+                  style={{
+                    fontVariantNumeric: 'tabular-nums',
+                    color: stat.highlight ? 'var(--color-text-error)' : 'var(--color-text-primary)'
+                  }}
+                >
+                  {stat.value}
+                </Text>
+                <Text type="supporting" color="secondary" size="xsm" style={{ fontVariantNumeric: 'tabular-nums' }}>{stat.meta}</Text>
+              </HStack>
+            </VStack>
+          ))}
+        </Grid>
+      </Card>
+    )}
+
     {!canon && draftCount > 0 && (
       <Banner
         status="warning"
@@ -1060,7 +1102,7 @@ export function SeriesView({
             variant="primary"
             size="sm"
             label="Scan script & build draft"
-            icon={<Glyph icon={Sparkles} size="xsm" />}
+            icon={<Glyph icon={ScanSearch} size="xsm" />}
             onClick={() => setForm({ kind: 'scan' })}
           />
         }
@@ -1110,7 +1152,7 @@ export function SeriesView({
         </HStack>
 
         {editable && <HStack gap={2} align="center" wrap="wrap">
-          <Button size="sm" label="Scan scripts" icon={<Glyph icon={Sparkles} size="xsm" />} onClick={() => setForm({ kind: 'scan' })} />
+          <Button size="sm" label="Scan scripts" icon={<Glyph icon={ScanSearch} size="xsm" />} onClick={() => setForm({ kind: 'scan' })} />
           <Button
             size="sm"
             label={displayDossier ? 'Edit character' : 'Add character'}
@@ -1323,7 +1365,7 @@ export function SeriesView({
                         <VStack gap={0.5} style={{ minWidth: 0, flex: 1 }}>
                           <HStack gap={1.5} align="center" wrap="wrap">
                             <Heading level={3}>{item.name}</Heading>
-                            {item.status && <Badge variant={item.status === 'Active' ? 'success' : 'neutral'} label={item.status} />}
+                            {item.status && item.status !== 'Active' && <QuietDotTag label={item.status} />}
                           </HStack>
                           <Text type="supporting" color="secondary" size="sm">
                             {[item.role || 'Character', item.billing].filter(Boolean).join(' · ')}
@@ -1334,7 +1376,7 @@ export function SeriesView({
                         <Text type="supporting" color="secondary" maxLines={2}>{item.bio || item.motivation}</Text>
                       )}
                       <HStack gap={2} align="center" wrap="wrap">
-                        <Token size="sm" color="blue" label={`Introduced ${introOf(item)}`} />
+                        <QuietDotTag label={`Introduced ${introOf(item)}`} mono />
                         <Text type="supporting" color="secondary" size="xsm">
                           {stats?.records ?? 0} record{(stats?.records ?? 0) === 1 ? '' : 's'} · {connCount} connection{connCount === 1 ? '' : 's'}
                         </Text>

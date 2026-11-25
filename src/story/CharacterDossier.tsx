@@ -10,10 +10,9 @@ import { Link } from '@astryxdesign/core/Link';
 import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList';
 import { Tab, TabList } from '@astryxdesign/core/TabList';
 import { Text } from '@astryxdesign/core/Text';
-import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import {
-  ArrowRight, Clapperboard, Compass, Download, FileText, Flame, HelpCircle, MessageSquare, Plus, Sparkles, Target, Users
+  ArrowRight, Clapperboard, Compass, Download, FileText, Flame, HelpCircle, MessageSquare, Plus, Target, User, Users
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Project, WorkspaceViewProps } from '../model';
@@ -25,7 +24,7 @@ import { knowledgeStates, sortStory } from './series-model';
 import type { Character, StoryPoint, StoryState } from './series-model';
 import type { StoryStructure, StoryUnit } from './story-profile';
 import { Glyph, Pane, PaneHeading, SourceButton, Split } from './StoryControls';
-import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, relationshipStyle, stateTag } from './StoryParts';
+import { CanonBadge, CharacterAvatar, EpisodeChip, PointRows, QuietDotTag, relationshipStyle, stateTag } from './StoryParts';
 import type { CanonLookup, PointPrefill } from './StoryParts';
 
 export const DOSSIER_PANES = ['Overview', 'Interactions', 'Knowledge', 'Relationships', 'Scenes', 'Notes & files'] as const;
@@ -141,7 +140,7 @@ function CharacterArcChart({ project, nodes, selectedId, onSelect, onOpen }: {
     </Card>
     {activeNode && <HStack gap={2} justify="between" align="center" wrap="wrap">
       <HStack gap={2} align="center" wrap="wrap">
-        <Token size="sm" color="purple" label={activeNode.episodeLabel} />
+        <QuietDotTag label={activeNode.episodeLabel} mono />
         <Text weight="semibold" size="sm">{activeNode.point.title}</Text>
       </HStack>
       <SourceButton project={project} source={activeNode.point.source} onOpen={onOpen} />
@@ -219,8 +218,8 @@ export function CharacterDossier({
     ['Scenes', 'Recorded appearances', scenes]
   ];
 
-  const tabIcons: Record<DossierPane, typeof Sparkles> = {
-    Overview: Sparkles,
+  const tabIcons: Record<DossierPane, typeof User> = {
+    Overview: User,
     Interactions: MessageSquare,
     Knowledge: HelpCircle,
     Relationships: Users,
@@ -237,21 +236,21 @@ export function CharacterDossier({
           <VStack gap={2} style={{ flex: '1 1 18rem', minWidth: 0 }}>
             <HStack gap={2} align="center" wrap="wrap">
               <Text type="label" color="accent">{[person.role || 'Character', person.billing || 'Character dossier'].join(' · ')}</Text>
-              <Badge variant={person.status === 'Departed' || person.status === 'Archived' ? 'neutral' : 'success'} label={person.status ?? 'Active'} />
+              {person.status && person.status !== 'Active' && <QuietDotTag label={person.status} />}
               {canonStatus && canonStatus !== 'approved'
                 ? <CanonBadge id={person.id} states={canon} />
-                : <Token size="sm" color="blue" label="Approved canon" />}
+                : <QuietDotTag dotColor="var(--color-accent)" label="Approved canon" />}
             </HStack>
             <Text color="secondary">{person.bio || person.motivation || 'Character profile in the story register.'}</Text>
             <HStack gap={4} align="center" wrap="wrap">
-              <HStack gap={1} align="center">
+              <HStack gap={1.5} align="center">
                 <Text type="supporting" color="secondary">Introduced</Text>
-                <Token size="sm" color="blue" label={introLabel} />
+                <QuietDotTag label={introLabel} mono />
               </HStack>
               <Text type="supporting" color="secondary">{stats.records} record{stats.records === 1 ? '' : 's'}</Text>
               <Text type="supporting" color="secondary">{connections.length} connection{connections.length === 1 ? '' : 's'}</Text>
               <Text type="supporting" color="secondary">{stats.arcMilestones} arc beat{stats.arcMilestones === 1 ? '' : 's'}</Text>
-              {stats.openQuestions > 0 && <Token size="sm" color="yellow" label={`${stats.openQuestions} open thread${stats.openQuestions === 1 ? '' : 's'}`} />}
+              {stats.openQuestions > 0 && <QuietDotTag dotColor="var(--color-warning)" label={`${stats.openQuestions} open thread${stats.openQuestions === 1 ? '' : 's'}`} />}
             </HStack>
           </VStack>
         </HStack>
@@ -409,16 +408,16 @@ export function CharacterDossier({
                     </HStack>
                     <HStack gap={1} wrap="wrap">
                       {!conn.asymmetric && conn.mutual?.relationship && (
-                        <Token size="sm" color={relationshipStyle[conn.mutual.relationship].tokenColor} label={`↔ ${conn.mutual.relationship}`} />
+                        <QuietDotTag dotColor={relationshipStyle[conn.mutual.relationship].stroke} label={`↔ ${conn.mutual.relationship}`} />
                       )}
                       {conn.outgoing?.relationship && (
-                        <Token size="sm" color={relationshipStyle[conn.outgoing.relationship].tokenColor} label={`→ ${conn.outgoing.relationship}`} />
+                        <QuietDotTag dotColor={relationshipStyle[conn.outgoing.relationship].stroke} label={`→ ${conn.outgoing.relationship}`} />
                       )}
                       {conn.incoming?.relationship && (
-                        <Token size="sm" color={relationshipStyle[conn.incoming.relationship].tokenColor} label={`← ${conn.incoming.relationship}`} />
+                        <QuietDotTag dotColor={relationshipStyle[conn.incoming.relationship].stroke} label={`← ${conn.incoming.relationship}`} />
                       )}
                       {!conn.primaryState && (
-                        <Token size="sm" color="gray" label={conn.sharedScenes ? `${conn.sharedScenes} shared scenes` : `${conn.interactions.length} interactions`} />
+                        <QuietDotTag label={conn.sharedScenes ? `${conn.sharedScenes} shared scenes` : `${conn.interactions.length} interactions`} />
                       )}
                     </HStack>
                   </VStack>
@@ -466,7 +465,7 @@ export function CharacterDossier({
                                   <Link onClick={() => onSelectPerson(conn.other.id)}>
                                     <Text weight="semibold">{conn.other.name}</Text>
                                   </Link>
-                                  {conn.bond && <Token size="sm" color="purple" label={conn.bond} />}
+                                  {conn.bond && <QuietDotTag label={conn.bond} />}
                                 </HStack>
                                 <Text type="supporting" color="secondary" size="xsm">{metaParts.join(' · ') || 'Connected character'}</Text>
                               </VStack>
@@ -494,16 +493,14 @@ export function CharacterDossier({
                           {conn.asymmetric && (
                             <HStack gap={2} align="center" wrap="wrap">
                               {conn.outgoing?.relationship && (
-                                <Token
-                                  size="sm"
-                                  color={relationshipStyle[conn.outgoing.relationship].tokenColor}
+                                <QuietDotTag
+                                  dotColor={relationshipStyle[conn.outgoing.relationship].stroke}
                                   label={`${firstName(person.name)} → ${firstName(conn.other.name)}: ${conn.outgoing.relationship}`}
                                 />
                               )}
                               {conn.incoming?.relationship && (
-                                <Token
-                                  size="sm"
-                                  color={relationshipStyle[conn.incoming.relationship].tokenColor}
+                                <QuietDotTag
+                                  dotColor={relationshipStyle[conn.incoming.relationship].stroke}
                                   label={`${firstName(conn.other.name)} → ${firstName(person.name)}: ${conn.incoming.relationship}`}
                                 />
                               )}

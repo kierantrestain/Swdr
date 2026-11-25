@@ -44,10 +44,15 @@
 }
 .app .page-heading .page-eyebrow {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-2xs, 11px);
-  font-weight: 600;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.app .swdr-story-canvas {
+  background-color: var(--color-background-surface);
+  background-image: radial-gradient(color-mix(in srgb, var(--color-text-primary) 9%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 .app .page-heading .page-subtitle {
   display: inline-flex;

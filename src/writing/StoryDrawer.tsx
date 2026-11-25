@@ -8,9 +8,8 @@ import { IconButton } from '@astryxdesign/core/IconButton';
 import { Link } from '@astryxdesign/core/Link';
 import { Text } from '@astryxdesign/core/Text';
 import { TextInput } from '@astryxdesign/core/TextInput';
-import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
-import { ArrowUpRight, BookOpen, HelpCircle, Sparkles, Users, X } from 'lucide-react';
+import { ArrowUpRight, BookOpen, HelpCircle, ScanSearch, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { DocumentModel, Project, SourceRef } from '../model';
 import { characterConnections, scriptDiscoveryPreview } from '../story/series-analysis';
@@ -18,7 +17,7 @@ import { getStory, knowledgeStates, queryStory, sortStory } from '../story/serie
 import { episodeCode, exactSource, orderedEpisodes } from '../story/source';
 import { storyStructure } from '../story/story-profile';
 import { Glyph } from '../story/StoryControls';
-import { CharacterAvatar, EpisodeChip, relationshipStyle } from '../story/StoryParts';
+import { CharacterAvatar, EpisodeChip, QuietDotTag, relationshipStyle } from '../story/StoryParts';
 
 /**
  * Spoiler-safe Story Intelligence companion sidebar across the script editor, outline,
@@ -192,7 +191,7 @@ export function StoryDrawer({ project, document, activeBlockId, docked = false, 
                       <Text type="supporting" color="secondary" size="xsm" maxLines={1}>{subtitle}</Text>
                     </VStack>
                   </HStack>
-                  {inCurrent.has(person.id) && <Token size="sm" color="blue" label={currentBadgeLabel} />}
+                  {inCurrent.has(person.id) && <QuietDotTag dotColor="var(--color-accent)" label={currentBadgeLabel} />}
                 </HStack>
                 {person.motivation && <Text type="supporting" color="secondary" size="xsm" maxLines={2}>{person.motivation}</Text>}
                 {shownConns.length > 0 && <VStack gap={1} hAlign="start" style={{ width: '100%' }}>
@@ -203,25 +202,21 @@ export function StoryDrawer({ project, document, activeBlockId, docked = false, 
                         const outLabel = conn.outgoing?.relationship ? `→ ${conn.outgoing.relationship}` : '';
                         const inLabel = conn.incoming?.relationship ? `← ${conn.incoming.relationship}` : '';
                         const state = conn.outgoing?.relationship ?? conn.incoming?.relationship ?? 'Trust';
-                        return <Token
+                        return <QuietDotTag
                           key={conn.pairKey}
-                          size="sm"
-                          color={relationshipStyle[state].tokenColor}
+                          dotColor={relationshipStyle[state].stroke}
                           label={`${otherShort}${conn.bond ? ` (${conn.bond})` : ''} ${[outLabel, inLabel].filter(Boolean).join(' / ')}`}
                         />;
                       }
                       if (conn.mutual?.relationship) {
-                        return <Token
+                        return <QuietDotTag
                           key={conn.pairKey}
-                          size="sm"
-                          color={relationshipStyle[conn.mutual.relationship].tokenColor}
+                          dotColor={relationshipStyle[conn.mutual.relationship].stroke}
                           label={`↔ ${conn.mutual.relationship}${conn.bond ? ` · ${conn.bond}` : ''} · ${otherShort}`}
                         />;
                       }
-                      return <Token
+                      return <QuietDotTag
                         key={conn.pairKey}
-                        size="sm"
-                        color="gray"
                         label={`${otherShort} · ${conn.interactions.length ? `${conn.interactions.length} int.` : `${conn.sharedScenes} sc.`}`}
                       />;
                     })}
@@ -243,7 +238,7 @@ export function StoryDrawer({ project, document, activeBlockId, docked = false, 
           <Card variant="muted" padding={3}>
             <VStack gap={2} hAlign="start">
               <HStack gap={1.5} align="center">
-                <Glyph icon={Sparkles} size="xsm" color="accent" />
+                <Glyph icon={ScanSearch} size="xsm" color="accent" />
                 <Text weight="semibold" size="sm">
                   {discovery.speakingRoles} speaking {discovery.speakingRoles === 1 ? 'role' : 'roles'} in this script
                 </Text>

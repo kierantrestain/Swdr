@@ -7,27 +7,20 @@ import { HStack } from '@astryxdesign/core/HStack';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { Text } from '@astryxdesign/core/Text';
 import { ToggleButton } from '@astryxdesign/core/ToggleButton';
-import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import { ArrowRight, CalendarClock } from 'lucide-react';
 import { useState } from 'react';
 import type { Project, WorkspaceViewProps } from '../model';
 import type { Character, StoryPoint } from './series-model';
 import type { StoryStructure } from './story-profile';
-import { Glyph, Choice, Pane, SourceButton } from './StoryControls';
-import { CanonBadge, CharacterAvatar } from './StoryParts';
+import { Choice, Glyph, Pane, SourceButton } from './StoryControls';
+import { CanonBadge, CharacterAvatar, QuietDotTag } from './StoryParts';
 import type { CanonLookup } from './StoryParts';
 
-const DOT_PALETTE = [
-  { color: 'var(--color-accent)', token: 'blue' as const },
-  { color: 'var(--color-success)', token: 'green' as const },
-  { color: 'var(--color-warning)', token: 'yellow' as const },
-  { color: 'var(--color-error)', token: 'red' as const }
-];
-
 /**
- * Connected horizontal timeline strip sitting beneath the Relationship Web:
- * lets writers filter major story events/beats by character and jump straight to the cited script line.
+ * Editorial Story Beat Rail sitting beneath the Relationship Web:
+ * neutral timeline track with tabular unit codes, highlighting only flashbacks in amber
+ * so the writer's eye goes straight to chronology and narrative turns.
  */
 export function MajorEventsTimeline({
   project,
@@ -65,7 +58,7 @@ export function MajorEventsTimeline({
   return <Pane label="Major events timeline" padding={5}>
     <HStack gap={3} justify="between" align="center" wrap="wrap">
       <HStack gap={2} align="center">
-        <Glyph icon={CalendarClock} color="accent" />
+        <Glyph icon={CalendarClock} color="secondary" />
         <Heading level={2}>{structure.terms.timelineTitle}</Heading>
         <Badge variant="neutral" label={String(filtered.length)} />
       </HStack>
@@ -110,55 +103,54 @@ export function MajorEventsTimeline({
     </HStack>
 
     {visible.length > 0 ? <VStack gap={3}>
-      {/* Connected horizontal timeline rail */}
+      {/* Calm editorial timeline rail: neutral markers, amber only on out-of-order flashbacks */}
       {visible.length > 1 && <svg
-        viewBox={`0 0 ${visible.length * 100} 20`}
+        viewBox={`0 0 ${visible.length * 100} 18`}
         preserveAspectRatio="none"
         aria-hidden="true"
-        style={{ width: '100%', height: '20px', display: 'block' }}
+        style={{ width: '100%', height: '18px', display: 'block' }}
       >
         <line
           x1="50"
-          y1="10"
+          y1="9"
           x2={visible.length * 100 - 50}
-          y2="10"
-          stroke="var(--color-border-emphasized)"
-          strokeWidth="2"
+          y2="9"
+          stroke="var(--color-border)"
+          strokeWidth="1.5"
           vectorEffect="non-scaling-stroke"
         />
         {visible.map((point, idx) => {
-          const swatch = DOT_PALETTE[idx % DOT_PALETTE.length];
+          const isFlashback = flashbackFlags.has(point.id);
           return <circle
             key={point.id}
             cx={idx * 100 + 50}
-            cy="10"
-            r="5.5"
-            fill={swatch.color}
+            cy="9"
+            r={isFlashback ? '5' : '4'}
+            fill={isFlashback ? 'var(--color-warning)' : 'var(--color-text-primary)'}
             stroke="var(--color-background-surface)"
-            strokeWidth="2.5"
+            strokeWidth="2"
           />;
         })}
       </svg>}
 
-      <Grid columns={{ minWidth: 210, repeat: 'fit' }} gap={3}>
-        {visible.map((point, idx) => {
-          const swatch = DOT_PALETTE[idx % DOT_PALETTE.length];
+      <Grid columns={{ minWidth: 220, repeat: 'fit' }} gap={3}>
+        {visible.map(point => {
           const unitLabel = structure.unitCodeOfSource(point.source);
           const participants = point.participants
             .map(id => personMap.get(id))
             .filter((item): item is Character => Boolean(item));
           const isFlashback = flashbackFlags.has(point.id);
-          return <Card key={point.id} variant="muted" padding={3} role="article">
+          return <Card key={point.id} padding={3} role="article" style={{ background: 'var(--color-background-surface)', border: '1px solid var(--color-border)' }}>
             <VStack gap={2} hAlign="start" style={{ height: '100%' }}>
               <HStack gap={1.5} align="center" wrap="wrap">
-                <Token size="sm" color={swatch.token} label={unitLabel} />
-                {isFlashback && <Token size="sm" color="yellow" label="Revealed out of order" />}
+                <QuietDotTag label={unitLabel} mono />
+                {isFlashback && <QuietDotTag label="Flashback" dotColor="var(--color-warning)" />}
                 <CanonBadge id={point.id} states={states} />
               </HStack>
               <Text weight="semibold" size="sm">{point.title}</Text>
               {point.detail && <Text type="supporting" color="secondary" size="xsm" maxLines={2}>{point.detail}</Text>}
               <VStack gap={1.5} hAlign="start" style={{ marginTop: 'auto', paddingTop: 'var(--spacing-1)', width: '100%' }}>
-                {participants.length > 0 && <HStack gap={1} align="center">
+                {participants.length > 0 && <HStack gap={1.5} align="center">
                   {participants.slice(0, 3).map(person => (
                     <CharacterAvatar key={person.id} project={project} character={person} size={24} decorative />
                   ))}
